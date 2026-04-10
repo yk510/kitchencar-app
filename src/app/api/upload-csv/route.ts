@@ -26,20 +26,23 @@ export async function POST(req: NextRequest) {
       errors,
     }
 
-    // 2. 既存の product_master を取得（新商品検出用）
-    const { data: existingProducts } = await supabase
+    // 2. 既存商品取得
+    const { data: existingProducts } = await (supabase as any)
       .from('product_master')
       .select('product_name')
-    const knownProducts = new Set((existingProducts ?? []).map(p => p.product_name))
+
+    const knownProducts = new Set(
+      ((existingProducts ?? []) as any[]).map((p: any) => p.product_name)
+    )
+
     const newProductNames = new Set<string>()
 
-    // 3. 取引ごとに upsert
+    // 3. 取引ごと処理
     for (const txn of transactions) {
-      // transactions テーブルへ upsert
-      const { error: txnErr, data: txnData } = await supabase
+      const { error: txnErr, data: txnData } = await (supabase as any)
         .from('transactions')
         .upsert(
-          {
+          [{
             txn_no:         txn.txn_no,
             txn_date:       txn.txn_date,
             txn_time:       txn.txn_time,
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
             tax_amount:     txn.tax_amount,
             discount_total: txn.discount_total,
             payment_method: txn.payment_method,
-          },
+          }],
           { onConflict: 'txn_no' }
         )
         .select('id')
@@ -63,25 +66,23 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      // 既存か新規かを判定（upsert後に取引が存在していたか確認）
-      // Supabase upsert は既存の場合も data を返すが区別のため事前確認
-      const wasNew = !txnData  // 簡易判定（実際は upsert の戻り値で確認）
+      const wasNew = !txnData
       if (wasNew) result.inserted++
       else result.updated++
 
-      // product_sales テーブルへ upsert（商品行）
+      // 商品行
       for (const item of txn.items) {
-        const { error: itemErr } = await supabase
+        const { error: itemErr } = await (supabase as any)
           .from('product_sales')
           .upsert(
-            {
+            [{
               txn_no:       txn.txn_no,
               txn_date:     txn.txn_date,
               product_name: item.product_name,
               unit_price:   item.unit_price,
               quantity:     item.quantity,
               subtotal:     item.subtotal,
-            },
+            }],
             { onConflict: 'txn_no,product_name' }
           )
 
@@ -89,30 +90,34 @@ export async function POST(req: NextRequest) {
           result.errors.push(`商品行 ${item.product_name}: ${itemErr.message}`)
         }
 
-        // 新商品検出
         if (!knownProducts.has(item.product_name)) {
           newProductNames.add(item.product_name)
-          knownProducts.add(item.product_name) // 同一CSV内の重複検出を防ぐ
+          knownProducts.add(item.product_name)
         }
       }
     }
 
-    // 4. 新商品を product_master に登録（cost = NULL）
+    // 4. 新商品登録
     if (newProductNames.size > 0) {
-      const inserts = [...newProductNames].map(name => ({ product_name: name }))
-      const { error: pmErr } = await supabase
+      const inserts = Array.from(newProductNames).map(name => ({
+        product_name: name,
+      }))
+
+      const { error: pmErr } = await (supabase as any)
         .from('product_master')
-        .upsert(inserts, { onConflict: 'product_name', ignoreDuplicates: true })
+        .upsert(inserts, {
+          onConflict: 'product_name',
+          ignoreDuplicates: true,
+        })
 
       if (!pmErr) {
-        result.newProducts = [...newProductNames]
+        result.newProducts = Array.from(newProductNames)
       }
     }
 
-    // 5. inserted / updated を再集計（upsert の簡易判定を補正）
-    // シンプルに: transactions 総数 - errors でカウント
+    // 5. 再集計
     const total = transactions.length - result.skipped
-    result.inserted = total  // MVP では挿入/更新の厳密区別は省略
+    result.inserted = total
     result.updated  = 0
 
     return NextResponse.json(result)

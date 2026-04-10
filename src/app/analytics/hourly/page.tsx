@@ -35,9 +35,15 @@ export default function HourlyAnalyticsPage() {
   const maxHeat = Math.max(...heatmap.flatMap((d: any) => d.hours.map((h: any) => h.sales)), 1)
 
   // 表示する時間帯（全heatmapから売上ある時間を抽出）
-  const activeHours = [...new Set(
-    heatmap.flatMap((d: any) => d.hours.filter((h: any) => h.sales > 0).map((h: any) => h.hour))
-  )].sort((a, b) => a - b) as number[]
+  const activeHours = Array.from(
+  new Set(
+    heatmap.flatMap((d: any) =>
+      d.hours
+        .filter((h: any) => h.sales > 0)
+        .map((h: any) => h.hour)
+    )
+  )
+).sort((a, b) => a - b) as number[]
 
   const peakHour = hourly.reduce((best, h) => h.total_sales > (best?.total_sales ?? 0) ? h : best, null as any)
 

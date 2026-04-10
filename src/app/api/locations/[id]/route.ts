@@ -7,7 +7,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   const { name, address } = await req.json()
-  const { error } = await supabase
+
+  const { error } = await (supabase as any)
     .from('locations')
     .update({ name, address })
     .eq('id', params.id)
@@ -21,7 +22,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from('locations')
     .delete()
     .eq('id', params.id)

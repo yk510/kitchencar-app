@@ -32,7 +32,7 @@ export async function GET() {
 
   // 原価マップ
   const costMap = new Map<string, number>()
-  for (const c of costs ?? []) {
+  for (const c of ((costs ?? []) as any[])) {
     if (c.cost_amount != null) {
       costMap.set(c.product_name, c.cost_amount)
     } else if (c.cost_rate != null) {
@@ -49,7 +49,7 @@ export async function GET() {
     weather_counts: Record<string, number>
   }>()
 
-  for (const loc of locations ?? []) {
+  for (const loc of ((locations ?? []) as any[])) {
     locMap.set(loc.id, {
       name:           loc.name,
       total_sales:    0,
@@ -59,7 +59,7 @@ export async function GET() {
     })
   }
 
-  for (const t of txns ?? []) {
+  for (const t of ((txns ?? []) as any[])) {
     if (!t.location_id) continue
     const entry = locMap.get(t.location_id)
     if (!entry) continue
@@ -67,7 +67,7 @@ export async function GET() {
     entry.days.add(t.txn_date)
   }
 
-  for (const s of sales ?? []) {
+  for (const s of ((sales ?? []) as any[])) {
     if (!s.location_id) continue
     const entry = locMap.get(s.location_id)
     if (!entry) continue
@@ -77,7 +77,7 @@ export async function GET() {
     }
   }
 
-  for (const w of weather ?? []) {
+  for (const w of ((weather ?? []) as any[])) {
     if (!w.location_id) continue
     const entry = locMap.get(w.location_id)
     if (!entry) continue
@@ -85,7 +85,7 @@ export async function GET() {
   }
 
   // パフォーマンス評価（平均売上の上位30% / 下位30%）
-  const rows = [...locMap.entries()].map(([id, e]) => {
+  const rows = Array.from(locMap.entries()).map(([id, e]) => {
     const count = e.days.size
     const avg   = count > 0 ? Math.round(e.total_sales / count) : 0
     const profit = e.total_sales - e.total_cost
