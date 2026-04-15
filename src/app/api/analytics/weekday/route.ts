@@ -1,18 +1,22 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 
 // 0=月 〜 6=日
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
 
-export async function GET() {
-  const { data: txns, error } = await supabase
+export async function GET(req: NextRequest) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
+  const { data: txns, error } = await (supabase as any)
     .from('transactions')
     .select('day_of_week, txn_date, total_amount')
     .eq('is_return', false)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: sales } = await supabase
+  const { data: sales } = await (supabase as any)
     .from('product_sales')
     .select('txn_no, product_name, subtotal, quantity')
 

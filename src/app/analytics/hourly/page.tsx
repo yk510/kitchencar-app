@@ -1,6 +1,6 @@
-import { supabase } from '@/lib/supabase'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
+import { requireServerSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +15,7 @@ function hourLabel(hour: number) {
 }
 
 async function getHourlyAnalytics(
+  supabase: any,
   scope: AnalyticsScope,
   start?: string,
   end?: string
@@ -149,11 +150,12 @@ export default async function HourlyAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const scope = normalizeScope(searchParams?.scope)
   const start = searchParams?.start
   const end = searchParams?.end
 
-  const data = await getHourlyAnalytics(scope, start, end)
+  const data = await getHourlyAnalytics(supabase, scope, start, end)
 
   const scopeLabel =
     scope === 'normal' ? '通常出店のみ' : scope === 'event' ? 'イベント出店のみ' : '全体'

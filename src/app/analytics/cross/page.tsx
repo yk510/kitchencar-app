@@ -1,9 +1,12 @@
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import CrossAnalyticsClient from '@/components/CrossAnalyticsClient'
+import { requireServerSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export default function CrossAnalyticsPage() {
+export default async function CrossAnalyticsPage() {
+  await requireServerSession()
+
   return (
     <div>
       <AnalyticsPageHeader

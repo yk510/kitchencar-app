@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
 
 type NavGroup = {
   label: string
@@ -49,11 +50,17 @@ function isActivePath(pathname: string, href: string) {
 
 export default function HeaderNav() {
   const pathname = usePathname()
+  const { supabase, user } = useAuth()
   const activeItem =
     pathname === '/'
       ? { href: '/', label: 'ダッシュボード' }
       : navGroups.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href)) ??
         null
+
+  async function handleSignOut() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+  }
 
   return (
     <div className="space-y-2">
@@ -71,16 +78,28 @@ export default function HeaderNav() {
             )}
           </div>
         </div>
-        <Link
-          href="/"
-          className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ring-1 transition ${
-            pathname === '/'
-              ? 'bg-[var(--accent-blue)] text-white ring-[var(--accent-blue)] shadow-sm'
-              : 'bg-white/90 text-[#616b7c] ring-[#ebe7df] hover:bg-[var(--accent-blue-soft)] hover:text-[var(--accent-blue)]'
-          }`}
-        >
-          ホーム
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="hidden rounded-full bg-white/90 px-3 py-1.5 text-xs text-[#616b7c] ring-1 ring-[#ebe7df] sm:block">
+            {user?.email ?? 'ログイン中'}
+          </div>
+          <Link
+            href="/"
+            className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ring-1 transition ${
+              pathname === '/'
+                ? 'bg-[var(--accent-blue)] text-white ring-[var(--accent-blue)] shadow-sm'
+                : 'bg-white/90 text-[#616b7c] ring-[#ebe7df] hover:bg-[var(--accent-blue-soft)] hover:text-[var(--accent-blue)]'
+            }`}
+          >
+            ホーム
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="rounded-full bg-white/90 px-3 py-1.5 text-sm font-medium text-[#616b7c] ring-1 ring-[#ebe7df] transition hover:bg-[#f8fbff] hover:text-[var(--accent-blue)]"
+          >
+            ログアウト
+          </button>
+        </div>
       </div>
 
       <div className="top-nav-group overflow-x-auto px-2 py-2">

@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic'
 
-import { supabase } from '@/lib/supabase'
 import DashboardClient from '@/components/DashboardClient'
+import { requireServerSession } from '@/lib/auth'
 
 type TaskTone = 'danger' | 'warn'
 
-async function getDashboardData() {
+async function getDashboardData(supabase: any) {
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Tokyo',
     year: 'numeric',
@@ -239,6 +239,7 @@ async function getDashboardData() {
 }
 
 export default async function DashboardPage() {
-  const data = await getDashboardData()
+  const { supabase } = await requireServerSession()
+  const data = await getDashboardData(supabase)
   return <DashboardClient data={data} />
 }

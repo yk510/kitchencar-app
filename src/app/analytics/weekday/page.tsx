@@ -1,6 +1,6 @@
-import { supabase } from '@/lib/supabase'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
+import { requireServerSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +16,7 @@ function weekdayLabel(day: number) {
 }
 
 async function getWeekdayAnalytics(
+  supabase: any,
   scope: AnalyticsScope,
   start?: string,
   end?: string
@@ -146,11 +147,12 @@ export default async function WeekdayAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const scope = normalizeScope(searchParams?.scope)
   const start = searchParams?.start
   const end = searchParams?.end
 
-  const data = await getWeekdayAnalytics(scope, start, end)
+  const data = await getWeekdayAnalytics(supabase, scope, start, end)
 
   const scopeLabel =
     scope === 'normal' ? '通常出店のみ' : scope === 'event' ? 'イベント出店のみ' : '全体'

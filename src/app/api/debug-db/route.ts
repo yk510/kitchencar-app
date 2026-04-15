@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
   const { count: txnCount, error: txnErr } = await (supabase as any)
     .from('transactions')
     .select('*', { count: 'exact', head: true })

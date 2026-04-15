@@ -1,6 +1,6 @@
-import { supabase } from '@/lib/supabase'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
+import { requireServerSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +11,7 @@ function normalizeScope(scope?: string): AnalyticsScope {
 }
 
 async function getProductAnalytics(
+  supabase: any,
   scope: AnalyticsScope,
   start?: string,
   end?: string
@@ -114,11 +115,12 @@ export default async function ProductAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const scope = normalizeScope(searchParams?.scope)
   const start = searchParams?.start
   const end = searchParams?.end
 
-  const data = await getProductAnalytics(scope, start, end)
+  const data = await getProductAnalytics(supabase, scope, start, end)
 
   const scopeLabel =
     scope === 'normal'

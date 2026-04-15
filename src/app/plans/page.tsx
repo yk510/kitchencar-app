@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { requireServerSession } from '@/lib/auth'
 import { getHolidayFlagTone } from '@/lib/calendar'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +25,7 @@ export default async function PlansPage({
 }: {
   searchParams?: { plan?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const { data: plans } = await (supabase as any)
     .from('operation_plans')
     .select('*')

@@ -75,6 +75,7 @@ export interface Database {
 
 export interface Location {
   id: string
+  user_id: string
   name: string
   address: string
   latitude: number | null
@@ -85,6 +86,7 @@ export interface Location {
 
 export interface Event {
   id: string
+  user_id: string
   event_name: string
   event_date: string
   location_id: string | null
@@ -93,6 +95,7 @@ export interface Event {
 
 export interface Transaction {
   id: string
+  user_id: string
   txn_no: string
   txn_date: string          // YYYY-MM-DD
   txn_time: string          // HH:MM:SS
@@ -112,6 +115,7 @@ export interface Transaction {
 
 export interface ProductMaster {
   id: string
+  user_id: string
   product_name: string
   cost_amount: number | null    // 原価額（円）
   cost_rate: number | null      // 原価率（%）
@@ -121,6 +125,7 @@ export interface ProductMaster {
 
 export interface CostHistory {
   id: string
+  user_id: string
   product_name: string
   cost_amount: number | null
   cost_rate: number | null
@@ -129,6 +134,7 @@ export interface CostHistory {
 
 export interface ProductSale {
   id: string
+  user_id: string
   txn_no: string
   txn_date: string
   product_name: string
@@ -143,6 +149,7 @@ export interface ProductSale {
 
 export interface StallLog {
   id: string
+  user_id: string
   log_date: string
   location_id: string
   event_id: string | null
@@ -152,6 +159,7 @@ export interface StallLog {
 
 export interface WeatherLog {
   id: string
+  user_id: string
   log_date: string
   location_id: string
   weather_type: '晴れ' | '曇り' | '雨' | '雪'
@@ -163,6 +171,7 @@ export interface WeatherLog {
 
 export interface OperationPlan {
   id: string
+  user_id: string
   plan_month: string
   title: string | null
   source_image_name: string | null
@@ -173,6 +182,7 @@ export interface OperationPlan {
 
 export interface OperationPlanDay {
   id: string
+  user_id: string
   plan_id: string
   plan_date: string
   operation_type: string
@@ -192,6 +202,7 @@ export interface OperationPlanDay {
 
 export interface WeatherForecast {
   id: string
+  user_id: string
   plan_day_id: string
   forecast_date: string
   location_id: string | null
@@ -207,6 +218,7 @@ export interface WeatherForecast {
 
 export interface SalesForecast {
   id: string
+  user_id: string
   plan_day_id: string
   forecast_date: string
   predicted_sales: number

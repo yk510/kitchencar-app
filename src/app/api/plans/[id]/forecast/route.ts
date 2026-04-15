@@ -1,13 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 import { createForecastForPlanDay } from '@/lib/forecast'
 
 export async function POST(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase } = auth.session
+
     const { data: days, error } = await (supabase as any)
       .from('operation_plan_days')
       .select('*')
@@ -18,7 +22,8 @@ export async function POST(
     }
 
     for (const day of (days ?? []) as any[]) {
-      await createForecastForPlanDay({
+      await createForecastForPlanDay(supabase, {
+        user_id: day.user_id,
         plan_day_id: day.id,
         plan_date: day.plan_date,
         operation_type: day.operation_type,

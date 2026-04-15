@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 import { fetchWeather } from '@/lib/weather'
 
-async function getUnmatchedDates() {
+async function getUnmatchedDates(supabase: any) {
   const [{ data: txnDates, error: txnError }, { data: logDates, error: logError }] =
     await Promise.all([
       (supabase as any)
@@ -24,9 +24,12 @@ async function getUnmatchedDates() {
     .sort()
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const unmatchedDates = await getUnmatchedDates()
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase } = auth.session
+    const unmatchedDates = await getUnmatchedDates(supabase)
 
     return NextResponse.json({
       unmatched_dates: unmatchedDates,
@@ -40,6 +43,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase, user } = auth.session
+
     const { log_date, location_id, event_name } = await req.json()
 
     if (!log_date || !location_id) {
@@ -55,12 +62,13 @@ export async function POST(req: NextRequest) {
         .upsert(
           [
             {
+              user_id: user.id,
               event_name: trimmedEventName,
               event_date: log_date,
               location_id,
             },
           ],
-          { onConflict: 'event_name,event_date,location_id' }
+          { onConflict: 'user_id,event_name,event_date,location_id' }
         )
         .select('id')
         .single()
@@ -77,12 +85,13 @@ export async function POST(req: NextRequest) {
       .upsert(
         [
           {
+            user_id: user.id,
             log_date,
             location_id,
             event_id: eventId,
           },
         ],
-        { onConflict: 'log_date' }
+        { onConflict: 'user_id,log_date' }
       )
       .select()
       .single()
@@ -139,6 +148,7 @@ export async function POST(req: NextRequest) {
           .upsert(
             [
               {
+                user_id: user.id,
                 log_date,
                 location_id,
                 weather_type: weather.weather_type,
@@ -147,7 +157,7 @@ export async function POST(req: NextRequest) {
                 temperature_min: weather.temperature_min,
               },
             ],
-            { onConflict: 'log_date,location_id' }
+            { onConflict: 'user_id,log_date,location_id' }
           )
 
         if (weatherError) {

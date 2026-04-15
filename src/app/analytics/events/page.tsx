@@ -1,9 +1,9 @@
-import { supabase } from '@/lib/supabase'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import { requireServerSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-async function getEventAnalytics(start?: string, end?: string) {
+async function getEventAnalytics(supabase: any, start?: string, end?: string) {
   let eventsQuery = (supabase as any)
     .from('events')
     .select('id, event_name, event_date, location_id')
@@ -127,10 +127,11 @@ export default async function EventAnalyticsPage({
 }: {
   searchParams?: { start?: string; end?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const start = searchParams?.start
   const end = searchParams?.end
 
-  const data = await getEventAnalytics(start, end)
+  const data = await getEventAnalytics(supabase, start, end)
 
   return (
     <div>

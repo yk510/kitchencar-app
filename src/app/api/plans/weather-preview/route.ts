@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 import { geocodeAddress } from '@/lib/geocode'
 import { fetchWeather } from '@/lib/weather'
 
@@ -10,6 +11,9 @@ type PreviewInput = {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+
     const { days } = await req.json()
 
     if (!Array.isArray(days)) {

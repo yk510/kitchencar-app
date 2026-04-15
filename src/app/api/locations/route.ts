@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 import { geocodeAddress } from '@/lib/geocode'
 
 function normalizeMunicipality(address: string) {
@@ -13,7 +13,11 @@ function normalizeMunicipality(address: string) {
 }
 
 // GET: 場所一覧
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
   const { data, error } = await (supabase as any)
     .from('locations')
     .select('*')
@@ -29,6 +33,10 @@ export async function GET() {
 // POST: 新規場所登録
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase, user } = auth.session
+
     const { name, address } = await req.json()
 
     if (!name || !address) {
@@ -55,13 +63,14 @@ export async function POST(req: NextRequest) {
       .upsert(
         [
           {
+            user_id: user.id,
             name: trimmedName,
             address: normalizedAddress,
             latitude: geo.latitude,
             longitude: geo.longitude,
           },
         ],
-        { onConflict: 'name,address' }
+        { onConflict: 'user_id,name,address' }
       )
       .select()
       .single()

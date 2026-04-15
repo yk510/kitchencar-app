@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/supabase'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import { requireServerSession } from '@/lib/auth'
 import { getDefaultHolidayFlag, getHolidayFlagTone, getWeekdayLabel, getWeekdayIndex } from '@/lib/calendar'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +33,7 @@ function getMonthRange(baseDate?: string) {
   }
 }
 
-async function getDailyAnalytics(start: string, end: string) {
+async function getDailyAnalytics(supabase: any, start: string, end: string) {
   const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }, { data: stallLogs, error: stallLogError }, { data: events, error: eventError }] =
     await Promise.all([
       (supabase as any)
@@ -203,10 +203,11 @@ export default async function DailyAnalyticsPage({
 }: {
   searchParams?: { start?: string; end?: string; month?: string }
 }) {
+  const { supabase } = await requireServerSession()
   const range = getMonthRange(searchParams?.month)
   const start = searchParams?.start ?? range.start
   const end = searchParams?.end ?? range.end
-  const rows = await getDailyAnalytics(start, end)
+  const rows = await getDailyAnalytics(supabase, start, end)
 
   return (
     <div>

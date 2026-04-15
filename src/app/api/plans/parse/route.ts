@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 import { parseCalendarImageToDraft } from '@/lib/openai'
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+
     const { imageDataUrl, knownLocations } = await req.json()
 
     if (!imageDataUrl || typeof imageDataUrl !== 'string') {

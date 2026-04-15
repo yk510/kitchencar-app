@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 import { parseCsvString, groupTransactions } from '@/lib/csvParser'
 import type { CsvUploadResult } from '@/types/database'
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase, user } = auth.session
+
     const { csvText } = await req.json()
     if (!csvText || typeof csvText !== 'string') {
       return NextResponse.json({ error: 'CSVテキストが空です' }, { status: 400 })
@@ -43,6 +47,7 @@ export async function POST(req: NextRequest) {
         .from('transactions')
         .upsert(
           [{
+            user_id:         user.id,
             txn_no:         txn.txn_no,
             txn_date:       txn.txn_date,
             txn_time:       txn.txn_time,
@@ -55,7 +60,7 @@ export async function POST(req: NextRequest) {
             discount_total: txn.discount_total,
             payment_method: txn.payment_method,
           }],
-          { onConflict: 'txn_no' }
+          { onConflict: 'user_id,txn_no' }
         )
         .select('id')
         .single()
@@ -76,6 +81,7 @@ export async function POST(req: NextRequest) {
           .from('product_sales')
           .upsert(
             [{
+              user_id:      user.id,
               txn_no:       txn.txn_no,
               txn_date:     txn.txn_date,
               product_name: item.product_name,
@@ -83,7 +89,7 @@ export async function POST(req: NextRequest) {
               quantity:     item.quantity,
               subtotal:     item.subtotal,
             }],
-            { onConflict: 'txn_no,product_name' }
+            { onConflict: 'user_id,txn_no,product_name' }
           )
 
         if (itemErr) {
@@ -100,13 +106,14 @@ export async function POST(req: NextRequest) {
     // 4. 新商品登録
     if (newProductNames.size > 0) {
       const inserts = Array.from(newProductNames).map(name => ({
+        user_id: user.id,
         product_name: name,
       }))
 
       const { error: pmErr } = await (supabase as any)
         .from('product_master')
         .upsert(inserts, {
-          onConflict: 'product_name',
+          onConflict: 'user_id,product_name',
           ignoreDuplicates: true,
         })
 

@@ -1,8 +1,8 @@
-import { supabase } from '@/lib/supabase'
 import { geocodeAddress } from '@/lib/geocode'
 import { fetchWeather } from '@/lib/weather'
 
 export interface PlanForecastInput {
+  user_id: string
   plan_day_id: string
   plan_date: string
   operation_type: string
@@ -26,10 +26,11 @@ function weatherBonus(a: string | null, b: string | null) {
   return a === b ? 1 : 0
 }
 
-export async function createForecastForPlanDay(input: PlanForecastInput) {
+export async function createForecastForPlanDay(supabase: any, input: PlanForecastInput) {
   if (input.operation_type === 'closed') {
     await (supabase as any).from('sales_forecasts').upsert(
       [{
+        user_id: input.user_id,
         plan_day_id: input.plan_day_id,
         forecast_date: input.plan_date,
         predicted_sales: 0,
@@ -39,7 +40,7 @@ export async function createForecastForPlanDay(input: PlanForecastInput) {
         confidence_score: 1,
         forecast_basis: '休業日のため予測値は0件',
       }],
-      { onConflict: 'plan_day_id,forecast_date' }
+      { onConflict: 'user_id,plan_day_id,forecast_date' }
     )
 
     return
@@ -103,6 +104,7 @@ export async function createForecastForPlanDay(input: PlanForecastInput) {
 
       await (supabase as any).from('weather_forecasts').upsert(
         [{
+          user_id: input.user_id,
           plan_day_id: input.plan_day_id,
           forecast_date: input.plan_date,
           location_id: locationMeta.id,
@@ -113,7 +115,7 @@ export async function createForecastForPlanDay(input: PlanForecastInput) {
           temperature_max: weather.temperature_max,
           temperature_min: weather.temperature_min,
         }],
-        { onConflict: 'plan_day_id,forecast_date' }
+        { onConflict: 'user_id,plan_day_id,forecast_date' }
       )
     }
   }
@@ -206,6 +208,7 @@ export async function createForecastForPlanDay(input: PlanForecastInput) {
 
   await (supabase as any).from('sales_forecasts').upsert(
     [{
+      user_id: input.user_id,
       plan_day_id: input.plan_day_id,
       forecast_date: input.plan_date,
       predicted_sales: predictedSales,
@@ -218,6 +221,6 @@ export async function createForecastForPlanDay(input: PlanForecastInput) {
           ? `過去実績 ${samples.length} 件をもとに予測`
           : '過去実績が少ないため全体平均をもとに予測',
     }],
-    { onConflict: 'plan_day_id,forecast_date' }
+    { onConflict: 'user_id,plan_day_id,forecast_date' }
   )
 }

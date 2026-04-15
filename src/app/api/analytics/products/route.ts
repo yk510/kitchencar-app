@@ -1,16 +1,20 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
   // 商品別売上集計
-  const { data: sales, error: saleErr } = await supabase
+  const { data: sales, error: saleErr } = await (supabase as any)
     .from('product_sales')
     .select('product_name, unit_price, quantity, subtotal')
 
   if (saleErr) return NextResponse.json({ error: saleErr.message }, { status: 500 })
 
   // 原価マスタ
-  const { data: costs } = await supabase
+  const { data: costs } = await (supabase as any)
     .from('product_master')
     .select('product_name, cost_amount, cost_rate')
 

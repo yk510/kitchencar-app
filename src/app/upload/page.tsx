@@ -60,6 +60,48 @@ export default function UploadPage() {
         </p>
       </div>
 
+      <div className="soft-panel mb-6 p-5">
+        <p className="text-sm font-semibold text-gray-700">現在対応中のPOSデータ：Airレジ</p>
+        <p className="mt-2 text-sm leading-7 text-gray-600">
+          Airレジの取引履歴より csv データをダウンロードの上、csv データの取り込みをお願いします。
+        </p>
+        <a
+          href="https://airregi.jp/CLP//view/salesRegiInspectHist/#/"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex rounded-full bg-[var(--accent-blue-soft)] px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] hover:bg-[#dfeaff]"
+        >
+          Airレジの取引履歴を開く
+        </a>
+      </div>
+
+      <div className="soft-panel p-5 mb-6">
+        <p className="text-sm font-semibold text-gray-700 mb-3">AirレジでのCSVダウンロード手順</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 1</p>
+            <p className="font-medium text-gray-800">取引履歴を開く</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              Airレジの取引履歴画面を開いて、取り込みたい期間を表示します。
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 2</p>
+            <p className="font-medium text-gray-800">CSVをダウンロード</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              画面内の CSV ダウンロードから、取引履歴のファイルを保存します。
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 3</p>
+            <p className="font-medium text-gray-800">この画面で取り込む</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              ダウンロードした CSV を選択して、そのまま取り込みを実行します。
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="soft-panel p-5 mb-6">
         <p className="text-sm font-semibold text-gray-700 mb-3">取込の流れ</p>
         <div className="grid gap-3 md:grid-cols-3">

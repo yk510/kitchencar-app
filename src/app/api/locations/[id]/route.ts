@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 
 // PUT: 場所情報更新
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
   const { name, address } = await req.json()
 
   const { error } = await (supabase as any)
@@ -19,9 +23,13 @@ export async function PUT(
 
 // DELETE: 場所削除
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
   const { error } = await (supabase as any)
     .from('locations')
     .delete()

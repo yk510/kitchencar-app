@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 import { createForecastForPlanDay } from '@/lib/forecast'
 import { geocodeAddress } from '@/lib/geocode'
 
@@ -14,8 +14,12 @@ function normalizeMunicipality(address: string) {
   return fallbackMatch ? fallbackMatch[0] : trimmed
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase } = auth.session
+
     const { data: plans, error } = await (supabase as any)
       .from('operation_plans')
       .select(`
@@ -54,6 +58,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase, user } = auth.session
+
     const { title, plan_month, source_image_name, days } = await req.json()
 
     if (!plan_month || !Array.isArray(days) || days.length === 0) {
@@ -64,6 +72,7 @@ export async function POST(req: NextRequest) {
       .from('operation_plans')
       .insert([
         {
+          user_id: user.id,
           title: title ?? null,
           plan_month,
           source_image_name: source_image_name ?? null,
@@ -115,13 +124,14 @@ export async function POST(req: NextRequest) {
           .upsert(
             [
               {
+                user_id: user.id,
                 name: locationName,
                 address: municipality,
                 latitude,
                 longitude,
               },
             ],
-            { onConflict: 'name,address' }
+            { onConflict: 'user_id,name,address' }
           )
           .select('id')
           .single()
@@ -134,6 +144,7 @@ export async function POST(req: NextRequest) {
       }
 
       normalizedDays.push({
+        user_id: user.id,
         plan_id: plan.id,
         plan_date: day.plan_date ?? day.date,
         operation_type: operationType,
@@ -160,7 +171,8 @@ export async function POST(req: NextRequest) {
     }
 
     for (const day of insertedDays as any[]) {
-      await createForecastForPlanDay({
+      await createForecastForPlanDay(supabase, {
+        user_id: day.user_id,
         plan_day_id: day.id,
         plan_date: day.plan_date,
         operation_type: day.operation_type,

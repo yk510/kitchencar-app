@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireRouteSession } from '@/lib/auth'
 
 type DimensionKey = 'location' | 'weekday' | 'weather' | 'hour' | 'product'
 type MetricKey =
@@ -40,6 +40,10 @@ function getWeekdayLabel(dayOfWeek: number | null | undefined) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRouteSession(req)
+    if (auth.response) return auth.response
+    const { supabase } = auth.session
+
     const body = await req.json()
     const dimensions = normalizeDimensions(body.dimensions).slice(0, 2)
     const metrics = normalizeMetrics(body.metrics)

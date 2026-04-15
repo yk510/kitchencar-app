@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireRouteSession } from '@/lib/auth'
 
-export async function GET() {
-  const { data: locations, error: locErr } = await supabase
+export async function GET(req: NextRequest) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+  const { supabase } = auth.session
+
+  const { data: locations, error: locErr } = await (supabase as any)
     .from('locations')
     .select('id, name')
 
@@ -11,7 +15,7 @@ export async function GET() {
     return NextResponse.json({ error: locErr.message }, { status: 500 })
   }
 
-  const { data: txns, error: txErr } = await supabase
+  const { data: txns, error: txErr } = await (supabase as any)
     .from('transactions')
     .select('location_id, total_amount, txn_date, is_return')
     .eq('is_return', false)
@@ -21,7 +25,7 @@ export async function GET() {
     return NextResponse.json({ error: txErr.message }, { status: 500 })
   }
 
-  const { data: sales, error: salesErr } = await supabase
+  const { data: sales, error: salesErr } = await (supabase as any)
     .from('product_sales')
     .select('location_id, product_name, subtotal, quantity')
 
@@ -30,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ error: salesErr.message }, { status: 500 })
   }
 
-  const { data: costs, error: costsErr } = await supabase
+  const { data: costs, error: costsErr } = await (supabase as any)
     .from('product_master')
     .select('product_name, cost_amount, cost_rate')
 
@@ -39,7 +43,7 @@ export async function GET() {
     return NextResponse.json({ error: costsErr.message }, { status: 500 })
   }
 
-  const { data: weather, error: weatherErr } = await supabase
+  const { data: weather, error: weatherErr } = await (supabase as any)
     .from('weather_logs')
     .select('location_id, weather_type')
 
