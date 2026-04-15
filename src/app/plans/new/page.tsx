@@ -208,7 +208,7 @@ export default function NewPlanPage() {
 
       const json = await res.json()
       if (!res.ok) {
-        setError(json.error ?? '予定案の作成に失敗しました')
+        setError(json.error ?? '予測案の作成に失敗しました')
         return
       }
 
@@ -236,7 +236,7 @@ export default function NewPlanPage() {
         }))
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : '予定案の作成に失敗しました')
+      setError(err instanceof Error ? err.message : '予測案の作成に失敗しました')
     } finally {
       setParsing(false)
     }
@@ -244,7 +244,7 @@ export default function NewPlanPage() {
 
   async function handleSave() {
     if (!planMonth || sortedDays.length === 0) {
-      setError('先に予定案を作成してください')
+      setError('先に予測案を作成してください')
       return
     }
 
@@ -303,9 +303,9 @@ export default function NewPlanPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">営業予定を作成</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">営業予測（β）を作成</h1>
         <p className="text-sm text-gray-500">
-          画像から予定案を作ったあと、勤怠入力のような一覧表で一気に確認・修正できます。
+          画像から予測案を作ったあと、勤怠入力のような一覧表で一気に確認・修正できます。
         </p>
       </div>
 
@@ -328,7 +328,7 @@ export default function NewPlanPage() {
 
           <div className="rounded-xl border border-gray-200 bg-slate-50 p-4 text-sm text-gray-600">
             <p className="font-semibold text-gray-700 mb-2">おすすめの流れ</p>
-            <p>1. 画像から予定案を作成</p>
+            <p>1. 画像から予測案を作成</p>
             <p>2. 表の中で場所・市町村・イベント名だけ整える</p>
             <p>3. 必要なら休祝日フラグを補正する</p>
             <p>4. 保存して天気予報と売上予測を作る</p>
@@ -341,7 +341,7 @@ export default function NewPlanPage() {
           disabled={!imageFile || parsing || saving || loadingReference}
           className="mt-5 rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
         >
-          {parsing ? 'AIが予定案を作成中...' : '画像から予定案を作る'}
+          {parsing ? 'AIが予測案を作成中...' : '画像から予測案を作る'}
         </button>
       </div>
 
@@ -355,7 +355,7 @@ export default function NewPlanPage() {
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-1">予定案の確認・修正</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-1">予測案の確認・修正</h2>
               <p className="text-sm text-gray-500">
                 固定情報は読み取り結果を表示し、修正が必要な列だけ入力できるようにしています。
               </p>
@@ -378,7 +378,7 @@ export default function NewPlanPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="例: 2026年5月営業予定"
+                placeholder="例: 2026年5月営業予測"
               />
             </div>
             <div className="flex flex-wrap gap-2 text-xs">

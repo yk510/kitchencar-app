@@ -102,9 +102,9 @@ export default function LocationsPage() {
     <div>
       <div className="mb-6">
         <div className="badge-green badge-soft inline-block mb-3">入力</div>
-        <h1 className="section-title text-3xl font-bold mb-2">出店場所管理</h1>
+        <h1 className="section-title text-3xl font-bold mb-2">出店場所登録</h1>
         <p className="section-subtitle text-sm">
-          出店する場所を先に登録しておくと、あとからログや分析で使いやすくなります。
+          出店する場所を先に登録しておくと、出店ログ入力や分析で選びやすくなります。
         </p>
       </div>
 
@@ -112,7 +112,7 @@ export default function LocationsPage() {
         <div className="soft-panel p-6">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-lg">📍</span>
-            <h2 className="section-title text-lg font-semibold">新規出店場所登録</h2>
+            <h2 className="section-title text-lg font-semibold">出店場所を登録する</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

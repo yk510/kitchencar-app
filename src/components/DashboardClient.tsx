@@ -333,7 +333,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { href: '/upload', label: 'CSVアップロード', color: 'bg-blue-50 border-blue-200 text-blue-700', icon: '📂' },
-              { href: '/locations', label: '出店場所管理', color: 'bg-green-50 border-green-200 text-green-700', icon: '📍' },
+              { href: '/locations', label: '出店場所登録', color: 'bg-green-50 border-green-200 text-green-700', icon: '📍' },
               { href: '/stall-logs', label: '出店ログ管理', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: '📝' },
               { href: '/analytics/locations', label: '場所分析', color: 'bg-purple-50 border-purple-200 text-purple-700', icon: '📊' },
               { href: '/analytics/products', label: '商品分析', color: 'bg-orange-50 border-orange-200 text-orange-700', icon: '🥤' },

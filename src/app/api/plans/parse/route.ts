@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[plans/parse POST]', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '予定案の作成に失敗しました' },
+      { error: error instanceof Error ? error.message : '予測案の作成に失敗しました' },
       { status: 500 }
     )
   }

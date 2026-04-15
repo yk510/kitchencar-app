@@ -182,7 +182,7 @@ export default function StallLogsPage() {
                 ))}
               </select>
               <p className="text-xs text-sub mt-1">
-                出店場所は「出店場所管理」で事前に登録してください
+                出店場所は「出店場所登録」で事前に登録してください
               </p>
             </div>
 
