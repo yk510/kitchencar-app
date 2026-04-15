@@ -14,22 +14,22 @@ type NavGroup = {
 
 const navGroups: NavGroup[] = [
   {
-    label: '入力',
+    label: '準備',
     items: [
-      { href: '/upload', label: 'CSVアップロード', shortLabel: 'CSV' },
-      { href: '/locations', label: '出店場所登録', shortLabel: '出店場所' },
-      { href: '/products/master', label: '原価マスタ', shortLabel: '原価' },
+      { href: '/upload', label: '売上データ取込', shortLabel: '売上' },
+      { href: '/locations', label: '出店場所登録', shortLabel: '場所' },
+      { href: '/products/master', label: '原価登録', shortLabel: '原価' },
     ],
   },
   {
     label: '営業',
     items: [
-      { href: '/plans', label: '営業予測（β）', shortLabel: '営業予測' },
+      { href: '/plans', label: '営業予測（β）', shortLabel: '予測' },
       { href: '/stall-logs', label: '出店ログ', shortLabel: '出店ログ' },
     ],
   },
   {
-    label: '分析',
+    label: 'ふり返り',
     items: [
       { href: '/analytics/cross', label: 'クロス分析' },
       { href: '/analytics/daily', label: '日別売上' },
@@ -59,11 +59,11 @@ export default function HeaderNav() {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700">
-            Kitchencar Analytics
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-700">
+            Food Truck Business
           </p>
           <div className="mt-0.5 flex items-center gap-2">
-            <h1 className="truncate text-lg font-semibold text-main">キッチンカー分析</h1>
+            <h1 className="truncate text-lg font-semibold text-main">キッチンカー営業ボード</h1>
             {activeItem && (
               <span className="hidden rounded-full bg-white/85 px-2.5 py-1 text-xs text-sub ring-1 ring-[#ebe7df] sm:inline-flex">
                 {activeItem.label}
@@ -79,7 +79,7 @@ export default function HeaderNav() {
               : 'bg-white/90 text-[#616b7c] ring-[#ebe7df] hover:bg-[var(--accent-blue-soft)] hover:text-[var(--accent-blue)]'
           }`}
         >
-          ダッシュボード
+          ホーム
         </Link>
       </div>
 

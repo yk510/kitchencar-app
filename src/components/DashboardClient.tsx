@@ -74,10 +74,10 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
     <div>
       <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <div className="badge-blue badge-soft inline-block mb-3">HOME</div>
-          <h1 className="section-title text-3xl font-bold mb-2">ダッシュボード</h1>
+          <div className="badge-blue badge-soft inline-block mb-3">出店サポート</div>
+          <h1 className="section-title text-3xl font-bold mb-2">今日の営業ボード</h1>
           <p className="section-subtitle text-sm">
-            今日の状況と、次にやることをひと目で確認できます。
+            出店前の準備、営業中の確認、あとで見返したい数字をひとまとめにしています。
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
         <div className="soft-panel p-5 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">📝</span>
-            <h2 className="section-title text-lg font-semibold">今日やること</h2>
+            <h2 className="section-title text-lg font-semibold">先に確認したいこと</h2>
           </div>
 
           <div className="space-y-3">
@@ -140,7 +140,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
       {isVisible('missing_costs') && data.unregisteredCount > 0 && (
         <div className="alert-warn p-5 mb-6">
           <p className="font-bold text-amber-800 mb-2">
-            原価未登録の商品があります（{data.unregisteredCount}件）
+            原価がまだ入っていない商品があります（{data.unregisteredCount}件）
           </p>
           <p className="text-sm text-amber-700 mb-3 break-words">
             {data.unregisteredNames.join(', ')}
@@ -157,7 +157,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
       {isVisible('missing_stall_logs') && data.unmatchedDates.length > 0 && (
         <div className="alert-warn p-5 mb-6">
           <p className="font-bold text-amber-800 mb-2">
-            出店ログ未登録の日付があります（{data.unmatchedDates.length}日）
+            出店した場所がまだ入っていない日があります（{data.unmatchedDates.length}日）
           </p>
           <p className="text-sm text-amber-700 mb-3 break-words">
             {data.unmatchedDates.join(', ')}
@@ -176,7 +176,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
           <div className="kpi-card p-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">☀️</span>
-              <p className="text-sm text-sub">本日の売上</p>
+              <p className="text-sm text-sub">今日の売上</p>
             </div>
             <p className="text-3xl font-bold text-blue-700">{fmtYen(data.todaySales)}</p>
           </div>
@@ -196,7 +196,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
           <div className="kpi-card p-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">🧾</span>
-              <p className="text-sm text-sub">本日の取引数</p>
+              <p className="text-sm text-sub">今日の取引数</p>
             </div>
             <p className="text-3xl font-bold text-main">{data.todayTxnCount} 件</p>
           </div>
@@ -216,7 +216,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
           <div className="kpi-card p-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💴</span>
-              <p className="text-sm text-sub">平均取引単価</p>
+              <p className="text-sm text-sub">1会計あたりの平均</p>
             </div>
             <p className="text-3xl font-bold text-blue-700">{fmtYen(data.avgTicket)}</p>
           </div>
@@ -226,7 +226,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
           <div className="kpi-card p-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💚</span>
-              <p className="text-sm text-sub">今月の推定粗利</p>
+              <p className="text-sm text-sub">今月の見込み粗利</p>
             </div>
             <p
               className={`text-3xl font-bold ${
@@ -257,7 +257,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
             <div className="soft-card p-5 bg-green-50 border-green-200">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">🌟</span>
-                <p className="text-sm text-green-700">今月のベスト日</p>
+                <p className="text-sm text-green-700">今月いちばん良かった日</p>
               </div>
               {data.bestDay ? (
                 <>
@@ -275,7 +275,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
             <div className="soft-card p-5 bg-sky-50 border-sky-200">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">📍</span>
-                <p className="text-sm text-sky-700">今月のベスト場所</p>
+                <p className="text-sm text-sky-700">今月相性の良い場所</p>
               </div>
               {data.bestLocation ? (
                 <>
@@ -299,7 +299,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
         <div className="soft-panel p-6 mb-8">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-lg">🥤</span>
-            <h2 className="section-title text-lg font-semibold">今月の売上TOP3商品</h2>
+            <h2 className="section-title text-lg font-semibold">今月よく出た商品</h2>
           </div>
 
           {data.top3.length === 0 ? (

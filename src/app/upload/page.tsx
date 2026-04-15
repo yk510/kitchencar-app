@@ -51,23 +51,44 @@ export default function UploadPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">CSVアップロード</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Airレジの「ジャーナル履歴」CSVをアップロードしてください。<br />
-        既存データがある場合は最新内容で上書きされます。
-      </p>
+      <div className="mb-8">
+        <div className="badge-blue badge-soft inline-block mb-3">売上データ取込</div>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">売上データを取り込む</h1>
+        <p className="text-sm text-gray-500">
+          Airレジの「ジャーナル履歴」CSVを選んで取り込みます。<br />
+          すでに入っている同じ取引は、最新の内容で上書きされます。
+        </p>
+      </div>
+
+      <div className="soft-panel p-5 mb-6">
+        <p className="text-sm font-semibold text-gray-700 mb-3">取込の流れ</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 1</p>
+            <p className="font-medium text-gray-800">CSVを選択</p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 2</p>
+            <p className="font-medium text-gray-800">取込を実行</p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-white px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">STEP 3</p>
+            <p className="font-medium text-gray-800">原価登録を確認</p>
+          </div>
+        </div>
+      </div>
 
       {/* アップロードエリア */}
-      <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-10 text-center mb-6
+      <div className="bg-white rounded-2xl border-2 border-dashed border-[#d9cbbd] p-10 text-center mb-6
         hover:border-blue-400 transition cursor-pointer"
         onClick={() => inputRef.current?.click()}>
-        <div className="text-4xl mb-3">📁</div>
+        <div className="text-4xl mb-3">🧾</div>
         {file ? (
           <p className="text-blue-700 font-medium">{file.name}</p>
         ) : (
           <>
-            <p className="text-gray-600 font-medium">クリックしてファイルを選択</p>
-            <p className="text-gray-400 text-sm mt-1">ジャーナル履歴_YYYYMM.csv（Shift_JIS）</p>
+            <p className="text-gray-700 font-medium">クリックしてCSVファイルを選択してください</p>
+            <p className="text-gray-400 text-sm mt-1">例: ジャーナル履歴_YYYYMM.csv</p>
           </>
         )}
         <input
@@ -85,9 +106,9 @@ export default function UploadPage() {
       <button
         onClick={handleUpload}
         disabled={!file || loading}
-        className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold text-lg
+        className="w-full bg-blue-600 text-white rounded-2xl py-3 font-semibold text-lg
           hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
-        {loading ? '処理中...' : 'アップロードして取り込む'}
+        {loading ? '取り込み中...' : 'CSVを取り込む'}
       </button>
 
       {/* エラー表示 */}
@@ -121,14 +142,14 @@ export default function UploadPage() {
           {result.newProducts.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
               <p className="font-semibold text-amber-800 mb-2">
-                ⚠ 新規商品 {result.newProducts.length} 件を検出しました
+                新規商品を {result.newProducts.length} 件検出しました
               </p>
               <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
                 {result.newProducts.map(n => <li key={n}>{n}</li>)}
               </ul>
               <a href="/products/master"
                 className="inline-block mt-3 text-sm bg-amber-500 text-white rounded-lg px-3 py-1.5 hover:bg-amber-600">
-                原価を登録する →
+                原価マスタへ →
               </a>
             </div>
           )}

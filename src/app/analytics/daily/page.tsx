@@ -34,11 +34,11 @@ function getMonthRange(baseDate?: string) {
 }
 
 async function getDailyAnalytics(start: string, end: string) {
-  const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }, { data: stallLogs, error: stallLogError }] =
+  const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }, { data: stallLogs, error: stallLogError }, { data: events, error: eventError }] =
     await Promise.all([
       (supabase as any)
         .from('transactions')
-        .select('txn_no, txn_date, total_amount, location_id')
+        .select('txn_no, txn_date, total_amount, location_id, event_id')
         .eq('is_return', false)
         .gte('txn_date', start)
         .lte('txn_date', end)
@@ -61,9 +61,12 @@ async function getDailyAnalytics(start: string, end: string) {
         .select('id, name, address'),
       (supabase as any)
         .from('stall_logs')
-        .select('log_date, location_id')
+        .select('log_date, location_id, event_id')
         .gte('log_date', start)
         .lte('log_date', end),
+      (supabase as any)
+        .from('events')
+        .select('id, event_name'),
     ])
 
   if (txnError) throw new Error(txnError.message)
@@ -72,6 +75,7 @@ async function getDailyAnalytics(start: string, end: string) {
   if (weatherError) throw new Error(weatherError.message)
   if (locationError) throw new Error(locationError.message)
   if (stallLogError) throw new Error(stallLogError.message)
+  if (eventError) throw new Error(eventError.message)
 
   const locationMap = new Map<string, { name: string; address: string }>()
   for (const location of (locations ?? []) as any[]) {
@@ -88,6 +92,11 @@ async function getDailyAnalytics(start: string, end: string) {
     }
   }
 
+  const eventNameMap = new Map<string, string>()
+  for (const event of (events ?? []) as any[]) {
+    eventNameMap.set(event.id, event.event_name)
+  }
+
   const grossProfitByTxnNo = new Map<string, number>()
   for (const row of (sales ?? []) as any[]) {
     const unitCost = costMap.get(row.product_name) ?? 0
@@ -97,11 +106,12 @@ async function getDailyAnalytics(start: string, end: string) {
     )
   }
 
-  const stallLogLocationByDate = new Map<string, string>()
+  const stallLogByDate = new Map<string, { locationId: string | null; eventName: string | null }>()
   for (const row of (stallLogs ?? []) as any[]) {
-    if (row.location_id) {
-      stallLogLocationByDate.set(row.log_date, row.location_id)
-    }
+    stallLogByDate.set(row.log_date, {
+      locationId: row.location_id ?? null,
+      eventName: row.event_id ? eventNameMap.get(row.event_id) ?? null : null,
+    })
   }
 
   const weatherMap = new Map<string, { weather_type: string | null; temperature_min: number | null; temperature_max: number | null }>()
@@ -121,17 +131,23 @@ async function getDailyAnalytics(start: string, end: string) {
       txnCount: number
       grossProfit: number
       locationId: string | null
+      eventName: string | null
     }
   >()
 
   for (const txn of (txns ?? []) as any[]) {
     const date = txn.txn_date
+    const stallLog = stallLogByDate.get(date)
     const current = rows.get(date) ?? {
       date,
       sales: 0,
       txnCount: 0,
       grossProfit: 0,
-      locationId: stallLogLocationByDate.get(date) ?? txn.location_id ?? null,
+      locationId: stallLog?.locationId ?? txn.location_id ?? null,
+      eventName:
+        (txn.event_id ? eventNameMap.get(txn.event_id) ?? null : null) ??
+        stallLog?.eventName ??
+        null,
     }
 
     current.sales += txn.total_amount ?? 0
@@ -139,7 +155,14 @@ async function getDailyAnalytics(start: string, end: string) {
     current.grossProfit += (txn.total_amount ?? 0) - (grossProfitByTxnNo.get(txn.txn_no) ?? 0)
 
     if (!current.locationId) {
-      current.locationId = txn.location_id ?? stallLogLocationByDate.get(date) ?? null
+      current.locationId = txn.location_id ?? stallLog?.locationId ?? null
+    }
+
+    if (!current.eventName) {
+      current.eventName =
+        (txn.event_id ? eventNameMap.get(txn.event_id) ?? null : null) ??
+        stallLog?.eventName ??
+        null
     }
 
     rows.set(date, current)
@@ -160,6 +183,7 @@ async function getDailyAnalytics(start: string, end: string) {
         weekday: getWeekdayLabel(row.date),
         holidayFlag: getDefaultHolidayFlag(row.date),
         locationName: location?.name ?? '-',
+        eventName: row.eventName ?? '-',
         municipality: location?.address ?? '-',
         weatherType: weather?.weather_type ?? '-',
         avgTemperature: formatAverageTemperature(
@@ -208,6 +232,7 @@ export default async function DailyAnalyticsPage({
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">曜日</th>
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">休祝日</th>
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">出店場所</th>
+                <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">イベント名</th>
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">市町村</th>
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">天候</th>
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">平均気温</th>
@@ -241,6 +266,7 @@ export default async function DailyAnalyticsPage({
                       )}
                     </td>
                     <td className="border-b border-gray-100 px-4 py-3">{row.locationName}</td>
+                    <td className="border-b border-gray-100 px-4 py-3">{row.eventName}</td>
                     <td className="border-b border-gray-100 px-4 py-3">{row.municipality}</td>
                     <td className="border-b border-gray-100 px-4 py-3">{row.weatherType}</td>
                     <td className="border-b border-gray-100 px-4 py-3">{row.avgTemperature}</td>
