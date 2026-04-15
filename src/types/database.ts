@@ -37,10 +37,35 @@ export interface Database {
         Insert: Omit<ProductSale, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<ProductSale, 'id' | 'created_at'>>
       }
+      stall_logs: {
+        Row: StallLog
+        Insert: Omit<StallLog, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<StallLog, 'id' | 'created_at'>>
+      }
       weather_logs: {
         Row: WeatherLog
         Insert: Omit<WeatherLog, 'id' | 'created_at'>
         Update: Partial<Omit<WeatherLog, 'id' | 'created_at'>>
+      }
+      operation_plans: {
+        Row: OperationPlan
+        Insert: Omit<OperationPlan, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<OperationPlan, 'id' | 'created_at'>>
+      }
+      operation_plan_days: {
+        Row: OperationPlanDay
+        Insert: Omit<OperationPlanDay, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<OperationPlanDay, 'id' | 'created_at'>>
+      }
+      weather_forecasts: {
+        Row: WeatherForecast
+        Insert: Omit<WeatherForecast, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<WeatherForecast, 'id' | 'created_at'>>
+      }
+      sales_forecasts: {
+        Row: SalesForecast
+        Insert: Omit<SalesForecast, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<SalesForecast, 'id' | 'created_at'>>
       }
     }
   }
@@ -61,6 +86,7 @@ export interface Location {
 export interface Event {
   id: string
   event_name: string
+  event_date: string
   location_id: string | null
   created_at: string
 }
@@ -115,6 +141,15 @@ export interface ProductSale {
   updated_at: string
 }
 
+export interface StallLog {
+  id: string
+  log_date: string
+  location_id: string
+  event_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface WeatherLog {
   id: string
   log_date: string
@@ -124,6 +159,64 @@ export interface WeatherLog {
   temperature_max: number | null
   temperature_min: number | null
   created_at: string
+}
+
+export interface OperationPlan {
+  id: string
+  plan_month: string
+  title: string | null
+  source_image_name: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OperationPlanDay {
+  id: string
+  plan_id: string
+  plan_date: string
+  operation_type: string
+  holiday_flag: string | null
+  location_id: string | null
+  location_name: string | null
+  municipality: string | null
+  event_name: string | null
+  business_start_time: string | null
+  business_end_time: string | null
+  ai_source_text: string | null
+  ai_confidence: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WeatherForecast {
+  id: string
+  plan_day_id: string
+  forecast_date: string
+  location_id: string | null
+  latitude: number | null
+  longitude: number | null
+  weather_type: '晴れ' | '曇り' | '雨' | '雪' | null
+  weather_code: number | null
+  temperature_max: number | null
+  temperature_min: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SalesForecast {
+  id: string
+  plan_day_id: string
+  forecast_date: string
+  predicted_sales: number
+  predicted_txn_count: number
+  predicted_avg_ticket: number
+  predicted_gross_profit: number
+  confidence_score: number | null
+  forecast_basis: string | null
+  created_at: string
+  updated_at: string
 }
 
 // ---- API レスポンス型 ----

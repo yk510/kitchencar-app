@@ -1,148 +1,227 @@
-'use client'
+import { supabase } from '@/lib/supabase'
+import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 
-import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+export const dynamic = 'force-dynamic'
 
-const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
-
-function heatColor(val: number, max: number): string {
-  if (max === 0 || val === 0) return '#F3F4F6'
-  const ratio = val / max
-  if (ratio < 0.25) return '#DBEAFE'
-  if (ratio < 0.5)  return '#93C5FD'
-  if (ratio < 0.75) return '#3B82F6'
-  return '#1D4ED8'
+function normalizeScope(scope?: string): AnalyticsScope {
+  if (scope === 'normal') return 'normal'
+  if (scope === 'event') return 'event'
+  return 'all'
 }
 
-export default function HourlyAnalyticsPage() {
-  const [hourly,  setHourly]  = useState<any[]>([])
-  const [heatmap, setHeatmap] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+function hourLabel(hour: number) {
+  return `${String(hour).padStart(2, '0')}:00`
+}
 
-  useEffect(() => {
-    fetch('/api/analytics/hourly')
-      .then(r => r.json())
-      .then(j => {
-        setHourly(j.hourly ?? [])
-        setHeatmap(j.heatmap ?? [])
-        setLoading(false)
-      })
-  }, [])
+async function getHourlyAnalytics(
+  scope: AnalyticsScope,
+  start?: string,
+  end?: string
+) {
+  let txnQuery = (supabase as any)
+    .from('transactions')
+    .select('hour_of_day, total_amount, txn_no, event_id, txn_date')
+    .eq('is_return', false)
 
-  if (loading) return <p className="text-gray-400">読み込み中...</p>
+  if (scope === 'normal') txnQuery = txnQuery.is('event_id', null)
+  else if (scope === 'event') txnQuery = txnQuery.not('event_id', 'is', null)
 
-  // ヒートマップの最大値
-  const maxHeat = Math.max(...heatmap.flatMap((d: any) => d.hours.map((h: any) => h.sales)), 1)
+  if (start) txnQuery = txnQuery.gte('txn_date', start)
+  if (end) txnQuery = txnQuery.lte('txn_date', end)
 
-  // 表示する時間帯（全heatmapから売上ある時間を抽出）
-  const activeHours = Array.from(
-  new Set(
-    heatmap.flatMap((d: any) =>
-      d.hours
-        .filter((h: any) => h.sales > 0)
-        .map((h: any) => h.hour)
-    )
-  )
-).sort((a, b) => a - b) as number[]
+  const { data: txns, error: txErr } = await txnQuery
+  if (txErr) throw new Error(txErr.message)
 
-  const peakHour = hourly.reduce((best, h) => h.total_sales > (best?.total_sales ?? 0) ? h : best, null as any)
+  let salesQuery = (supabase as any)
+    .from('product_sales')
+    .select('product_name, quantity, event_id, txn_date, txn_no')
+
+  if (scope === 'normal') salesQuery = salesQuery.is('event_id', null)
+  else if (scope === 'event') salesQuery = salesQuery.not('event_id', 'is', null)
+
+  if (start) salesQuery = salesQuery.gte('txn_date', start)
+  if (end) salesQuery = salesQuery.lte('txn_date', end)
+
+  const { data: sales, error: salesErr } = await salesQuery
+  if (salesErr) throw new Error(salesErr.message)
+
+  const { data: costs, error: costsErr } = await (supabase as any)
+    .from('product_master')
+    .select('product_name, cost_amount')
+  if (costsErr) throw new Error(costsErr.message)
+
+  const txnHourMap = new Map<string, number>()
+  for (const t of ((txns ?? []) as any[])) {
+    if (t.txn_no && t.hour_of_day != null) {
+      txnHourMap.set(t.txn_no, t.hour_of_day)
+    }
+  }
+
+  const costMap = new Map<string, number>()
+  for (const c of ((costs ?? []) as any[])) {
+    if (c.cost_amount != null) costMap.set(c.product_name, c.cost_amount)
+  }
+
+  const hourMap = new Map<
+    number,
+    {
+      totalSales: number
+      totalCost: number
+      txnSet: Set<string>
+    }
+  >()
+
+  for (let i = 0; i <= 23; i++) {
+    hourMap.set(i, {
+      totalSales: 0,
+      totalCost: 0,
+      txnSet: new Set<string>(),
+    })
+  }
+
+  for (const t of ((txns ?? []) as any[])) {
+    const hour = t.hour_of_day
+    if (hour == null) continue
+
+    const entry = hourMap.get(hour)
+    if (!entry) continue
+
+    entry.totalSales += t.total_amount ?? 0
+    if (t.txn_no) entry.txnSet.add(t.txn_no)
+  }
+
+  for (const s of ((sales ?? []) as any[])) {
+    if (!s.txn_no) continue
+    const hour = txnHourMap.get(s.txn_no)
+    if (hour == null) continue
+
+    const entry = hourMap.get(hour)
+    if (!entry) continue
+
+    const unitCost = costMap.get(s.product_name)
+    if (unitCost != null) {
+      entry.totalCost += unitCost * (s.quantity ?? 0)
+    }
+  }
+
+  const rows = Array.from(hourMap.entries())
+    .map(([hour, value]) => {
+      const txnCount = value.txnSet.size
+      const avgSalesPerTxn = txnCount > 0 ? Math.round(value.totalSales / txnCount) : 0
+
+      return {
+        hour,
+        label: hourLabel(hour),
+        total_sales: value.totalSales,
+        total_cost: value.totalCost,
+        gross_profit: value.totalSales - value.totalCost,
+        txn_count: txnCount,
+        avg_sales_per_txn: avgSalesPerTxn,
+      }
+    })
+    .filter((row) => row.txn_count > 0)
+
+  const sorted = [...rows].sort((a, b) => b.total_sales - a.total_sales)
+  const total = sorted.length
+
+  const ranked = sorted.map((row, i) => {
+    let performance: 'high' | 'mid' | 'low'
+    if (i < Math.ceil(total * 0.3)) performance = 'high'
+    else if (i >= total - Math.ceil(total * 0.3)) performance = 'low'
+    else performance = 'mid'
+    return { ...row, performance }
+  })
+
+  const perfMap = new Map<number, 'high' | 'mid' | 'low'>()
+  for (const row of ranked) perfMap.set(row.hour, row.performance)
+
+  return rows
+    .map((row) => ({
+      ...row,
+      performance: perfMap.get(row.hour) ?? 'mid',
+    }))
+    .sort((a, b) => a.hour - b.hour)
+}
+
+export default async function HourlyAnalyticsPage({
+  searchParams,
+}: {
+  searchParams?: { scope?: string; start?: string; end?: string }
+}) {
+  const scope = normalizeScope(searchParams?.scope)
+  const start = searchParams?.start
+  const end = searchParams?.end
+
+  const data = await getHourlyAnalytics(scope, start, end)
+
+  const scopeLabel =
+    scope === 'normal' ? '通常出店のみ' : scope === 'event' ? 'イベント出店のみ' : '全体'
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">時間帯別分析</h1>
-      <p className="text-sm text-gray-500 mb-8">何時台に売上が集中しているかを把握できます。</p>
+      <AnalyticsPageHeader
+        title="時間帯別分析"
+        description="売上と取引件数をもとに、時間帯ごとの傾向を表示します。"
+        scopeLabel={scopeLabel}
+        basePath="/analytics/hourly"
+        currentScope={scope}
+        currentStart={start}
+        currentEnd={end}
+      />
 
-      {hourly.length === 0 ? (
-        <p className="text-gray-400 text-center py-20">データがありません。</p>
+      {data.length === 0 ? (
+        <div className="soft-panel text-center py-20">
+          <p className="section-subtitle">この条件に一致するデータがありません。</p>
+        </div>
       ) : (
-        <>
-          {/* ピーク時間帯 */}
-          {peakHour && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-              <span className="text-2xl">⚡</span>
-              <div>
-                <p className="font-semibold text-blue-800">
-                  ピーク時間帯：{String(peakHour.hour).padStart(2, '0')}:00〜{String(peakHour.hour + 1).padStart(2, '0')}:00
-                </p>
-                <p className="text-sm text-blue-600">
-                  累計売上 {peakHour.total_sales.toLocaleString()} 円 / {peakHour.txn_count} 取引
-                </p>
-              </div>
-            </div>
-          )}
+        <div className="space-y-4">
+          {data.map((row) => {
+            const style =
+              row.performance === 'high'
+                ? { card: 'bg-green-50 border-green-200', badge: 'badge-soft badge-green', icon: '⏰' }
+                : row.performance === 'low'
+                ? { card: 'bg-red-50 border-red-200', badge: 'badge-soft bg-red-100 text-red-800', icon: '🫥' }
+                : { card: 'bg-white border-soft', badge: 'badge-soft bg-gray-100 text-gray-700', icon: '🕒' }
 
-          {/* 時間帯別棒グラフ */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-            <h2 className="text-base font-semibold text-gray-700 mb-4">時間帯別 累計売上</h2>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={hourly} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(v: number) => [`${v.toLocaleString()} 円`, '売上']}
-                  labelFormatter={l => `${l}台`}
-                />
-                <Bar dataKey="total_sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            return (
+              <div key={row.hour} className={`soft-card p-5 ${style.card}`}>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{style.icon}</span>
+                      <span className={style.badge}>
+                        {row.performance === 'high' ? '強い時間帯' : row.performance === 'low' ? '弱い時間帯' : '中間'}
+                      </span>
+                    </div>
+                    <h2 className="text-lg font-semibold text-main">{row.label}</h2>
+                  </div>
 
-          {/* 曜日×時間帯ヒートマップ */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-700 mb-1">曜日 × 時間帯 ヒートマップ</h2>
-            <p className="text-xs text-gray-400 mb-4">色が濃いほど売上が高い時間帯です</p>
-
-            {activeHours.length === 0 ? (
-              <p className="text-gray-400 text-sm">データがありません</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="text-xs border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="w-8 pr-2 text-gray-400 text-right font-normal"></th>
-                      {DAY_LABELS.map(d => (
-                        <th key={d} className="w-12 text-center text-gray-600 font-semibold pb-2">{d}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeHours.map(h => (
-                      <tr key={h}>
-                        <td className="pr-2 text-right text-gray-400 font-mono">
-                          {String(h).padStart(2, '0')}
-                        </td>
-                        {heatmap.map((dayData: any) => {
-                          const hourData = dayData.hours.find((hd: any) => hd.hour === h)
-                          const sales    = hourData?.sales ?? 0
-                          return (
-                            <td key={dayData.day} className="p-0.5">
-                              <div
-                                className="w-11 h-9 rounded flex items-center justify-center text-white text-[10px] font-medium"
-                                style={{ background: heatColor(sales, maxHeat) }}
-                                title={`${dayData.label}曜 ${String(h).padStart(2, '0')}:00 - ${sales.toLocaleString()}円`}
-                              >
-                                {sales > 0 ? `${Math.round(sales / 1000)}k` : ''}
-                              </div>
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {/* 凡例 */}
-                <div className="flex items-center gap-2 mt-4">
-                  <span className="text-xs text-gray-400">低</span>
-                  {['#F3F4F6','#DBEAFE','#93C5FD','#3B82F6','#1D4ED8'].map(c => (
-                    <div key={c} className="w-6 h-4 rounded" style={{ background: c }} />
-                  ))}
-                  <span className="text-xs text-gray-400">高</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-right">
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">取引数</p>
+                      <p className="font-bold text-main">{row.txn_count} 件</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">平均取引単価</p>
+                      <p className="font-bold text-blue-700">{row.avg_sales_per_txn.toLocaleString()} 円</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">累計売上</p>
+                      <p className="font-bold text-main">{row.total_sales.toLocaleString()} 円</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">推定粗利</p>
+                      <p className={`font-bold ${row.gross_profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {row.gross_profit.toLocaleString()} 円
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        </>
+            )
+          })}
+        </div>
       )}
     </div>
   )

@@ -1,101 +1,203 @@
-'use client'
+import { supabase } from '@/lib/supabase'
+import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 
-import { useState, useEffect } from 'react'
+export const dynamic = 'force-dynamic'
 
-interface ProductRow {
-  product_name:  string
-  total_sales:   number
-  total_qty:     number
-  avg_price:     number
-  cost_amount:   number | null
-  profit:        number | null
-  profit_rate:   number | null
-  has_cost:      boolean
-  is_top3:       boolean
-  is_low_margin: boolean
+function normalizeScope(scope?: string): AnalyticsScope {
+  if (scope === 'normal') return 'normal'
+  if (scope === 'event') return 'event'
+  return 'all'
 }
 
-export default function ProductAnalyticsPage() {
-  const [data, setData]     = useState<ProductRow[]>([])
-  const [loading, setLoading] = useState(true)
+async function getProductAnalytics(
+  scope: AnalyticsScope,
+  start?: string,
+  end?: string
+) {
+  let salesQuery = (supabase as any)
+    .from('product_sales')
+    .select('product_name, subtotal, quantity, txn_no, event_id, txn_date')
 
-  useEffect(() => {
-    fetch('/api/analytics/products')
-      .then(r => r.json())
-      .then(j => { setData(j.data ?? []); setLoading(false) })
-  }, [])
+  if (scope === 'normal') {
+    salesQuery = salesQuery.is('event_id', null)
+  } else if (scope === 'event') {
+    salesQuery = salesQuery.not('event_id', 'is', null)
+  }
 
-  if (loading) return <p className="text-gray-400">読み込み中...</p>
+  if (start) {
+    salesQuery = salesQuery.gte('txn_date', start)
+  }
+  if (end) {
+    salesQuery = salesQuery.lte('txn_date', end)
+  }
+
+  const { data: sales, error: salesErr } = await salesQuery
+
+  if (salesErr) {
+    throw new Error(salesErr.message)
+  }
+
+  const { data: costs, error: costsErr } = await (supabase as any)
+    .from('product_master')
+    .select('product_name, cost_amount')
+
+  if (costsErr) {
+    throw new Error(costsErr.message)
+  }
+
+  const costMap = new Map<string, number>()
+  for (const c of ((costs ?? []) as any[])) {
+    if (c.cost_amount != null) {
+      costMap.set(c.product_name, c.cost_amount)
+    }
+  }
+
+  const productMap = new Map<
+    string,
+    {
+      totalSales: number
+      totalQty: number
+      txnSet: Set<string>
+      totalCost: number
+    }
+  >()
+
+  for (const s of ((sales ?? []) as any[])) {
+    const name = s.product_name
+    if (!name) continue
+
+    const entry = productMap.get(name) ?? {
+      totalSales: 0,
+      totalQty: 0,
+      txnSet: new Set<string>(),
+      totalCost: 0,
+    }
+
+    entry.totalSales += s.subtotal ?? 0
+    entry.totalQty += s.quantity ?? 0
+
+    if (s.txn_no) {
+      entry.txnSet.add(s.txn_no)
+    }
+
+    const unitCost = costMap.get(name)
+    if (unitCost != null) {
+      entry.totalCost += unitCost * (s.quantity ?? 0)
+    }
+
+    productMap.set(name, entry)
+  }
+
+  const rows = Array.from(productMap.entries())
+    .map(([product_name, value]) => {
+      const txnCount = value.txnSet.size
+      const avgSalesPerTxn =
+        txnCount > 0 ? Math.round(value.totalSales / txnCount) : 0
+
+      return {
+        product_name,
+        total_sales: value.totalSales,
+        total_qty: value.totalQty,
+        txn_count: txnCount,
+        avg_sales_per_txn: avgSalesPerTxn,
+        profit: value.totalSales - value.totalCost,
+      }
+    })
+    .sort((a, b) => b.total_sales - a.total_sales)
+
+  return rows
+}
+
+export default async function ProductAnalyticsPage({
+  searchParams,
+}: {
+  searchParams?: { scope?: string; start?: string; end?: string }
+}) {
+  const scope = normalizeScope(searchParams?.scope)
+  const start = searchParams?.start
+  const end = searchParams?.end
+
+  const data = await getProductAnalytics(scope, start, end)
+
+  const scopeLabel =
+    scope === 'normal'
+      ? '通常出店のみ'
+      : scope === 'event'
+      ? 'イベント出店のみ'
+      : '全体'
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">商品別分析</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        利益率50%未満の商品には要改善バッジ、売上上位3件には主力バッジが付きます。
-      </p>
+      <AnalyticsPageHeader
+        title="商品別分析"
+        description="商品ごとの売上・販売数量・利益感を表示します。"
+        scopeLabel={scopeLabel}
+        basePath="/analytics/products"
+        currentScope={scope}
+        currentStart={start}
+        currentEnd={end}
+      />
 
       {data.length === 0 ? (
-        <p className="text-gray-400 text-center py-20">データがありません。</p>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">商品名</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">累計売上</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">販売数</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">平均単価</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">原価</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">利益率</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row, i) => (
-                <tr key={row.product_name}
-                  className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                    ${row.is_low_margin ? 'bg-red-50' : ''}`}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-gray-800">{row.product_name}</span>
-                      {row.is_top3 && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-1.5 py-0.5 rounded-full">
-                          主力
-                        </span>
-                      )}
-                      {row.is_low_margin && (
-                        <span className="text-xs bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded-full">
-                          要改善
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-blue-700">
-                    {row.total_sales.toLocaleString()} 円
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">{row.total_qty}</td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {row.avg_price.toLocaleString()} 円
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {row.cost_amount != null
-                      ? `${row.cost_amount.toLocaleString()} 円`
-                      : <span className="text-gray-300 text-xs">未登録</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {row.profit_rate != null ? (
-                      <span className={`font-semibold ${row.is_low_margin ? 'text-red-600' : 'text-green-700'}`}>
-                        {row.profit_rate} %
-                      </span>
-                    ) : (
-                      <span className="text-gray-300 text-xs">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  <div className="soft-panel text-center py-20">
+    <p className="section-subtitle">この条件に一致するデータがありません。</p>
+  </div>
+) : (
+  <div className="space-y-4">
+    {data.map((row, i) => (
+      <div
+        key={row.product_name}
+        className="soft-card p-5 bg-white"
+      >
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-50 border border-orange-200 text-sm font-bold text-orange-700">
+                {i + 1}
+              </span>
+              <span className="text-lg">🥤</span>
+            </div>
+            <h2 className="text-lg font-semibold text-main">{row.product_name}</h2>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-right">
+            <div className="rounded-2xl bg-[#fffdf9] border border-soft p-3">
+              <p className="text-xs text-sub">販売数量</p>
+              <p className="font-bold text-main">{row.total_qty} 個</p>
+            </div>
+            <div className="rounded-2xl bg-[#fffdf9] border border-soft p-3">
+              <p className="text-xs text-sub">取引件数</p>
+              <p className="font-bold text-main">{row.txn_count} 件</p>
+            </div>
+            <div className="rounded-2xl bg-[#fffdf9] border border-soft p-3">
+              <p className="text-xs text-sub">累計売上</p>
+              <p className="font-bold text-blue-700">
+                {row.total_sales.toLocaleString()} 円
+              </p>
+            </div>
+            <div className="rounded-2xl bg-[#fffdf9] border border-soft p-3">
+              <p className="text-xs text-sub">平均売上 / 取引</p>
+              <p className="font-bold text-main">
+                {row.avg_sales_per_txn.toLocaleString()} 円
+              </p>
+            </div>
+            <div className="rounded-2xl bg-[#fffdf9] border border-soft p-3">
+              <p className="text-xs text-sub">推定利益</p>
+              <p
+                className={`font-bold ${
+                  row.profit >= 0 ? 'text-green-700' : 'text-red-600'
+                }`}
+              >
+                {row.profit.toLocaleString()} 円
+              </p>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+    ))}
+  </div>
+)}
     </div>
   )
 }

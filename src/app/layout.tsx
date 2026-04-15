@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -6,28 +7,44 @@ export const metadata: Metadata = {
   description: 'Airレジデータをもとに出店判断を最適化するツール',
 }
 
+const navItems = [
+  { href: '/', label: 'ダッシュボード' },
+  { href: '/upload', label: 'CSVアップロード' },
+  { href: '/plans', label: '営業予定' },
+  { href: '/locations', label: '出店場所管理' },
+  { href: '/stall-logs', label: '出店ログ' },
+  { href: '/products/master', label: '原価マスタ' },
+  { href: '/analytics/daily', label: '日別売上' },
+  { href: '/analytics/locations', label: '場所分析' },
+  { href: '/analytics/weekday', label: '曜日分析' },
+  { href: '/analytics/hourly', label: '時間帯分析' },
+  { href: '/analytics/products', label: '商品分析' },
+  { href: '/analytics/events', label: 'イベント分析' },
+]
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
-        <nav className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="max-w-6xl mx-auto flex items-center gap-6">
-            <span className="font-bold text-blue-700 text-lg">🚚 キッチンカー分析</span>
-            <div className="flex gap-4 text-sm">
-              <a href="/"                       className="text-gray-600 hover:text-blue-600">ダッシュボード</a>
-              <a href="/upload"                 className="text-gray-600 hover:text-blue-600">CSVアップロード</a>
-              <a href="/products/master"        className="text-gray-600 hover:text-blue-600">原価マスタ</a>
-              <a href="/locations"              className="text-gray-600 hover:text-blue-600">出店ログ</a>
-              <a href="/analytics/locations"    className="text-gray-600 hover:text-blue-600">場所分析</a>
-              <a href="/analytics/weekday"      className="text-gray-600 hover:text-blue-600">曜日分析</a>
-              <a href="/analytics/hourly"       className="text-gray-600 hover:text-blue-600">時間帯分析</a>
-              <a href="/analytics/products"     className="text-gray-600 hover:text-blue-600">商品分析</a>
+      <body className="min-h-screen bg-gray-50 text-gray-900">
+        <nav className="border-b border-gray-200 bg-white px-6 py-3">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="text-lg font-bold text-blue-700">キッチンカー分析</span>
+              <div className="flex flex-wrap gap-3 text-sm">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="rounded-full px-3 py-1.5 text-gray-600 transition hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </nav>
-        <main className="max-w-6xl mx-auto px-6 py-8">
-          {children}
-        </main>
+        <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
       </body>
     </html>
   )

@@ -1,105 +1,228 @@
-'use client'
+import { supabase } from '@/lib/supabase'
+import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 
-import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+export const dynamic = 'force-dynamic'
 
-interface DayData {
-  day_of_week: number
-  label:       string
-  total_sales: number
-  out_days:    number
-  avg_sales:   number
+function normalizeScope(scope?: string): AnalyticsScope {
+  if (scope === 'normal') return 'normal'
+  if (scope === 'event') return 'event'
+  return 'all'
 }
 
-const BAR_COLORS = ['#6B7FD7', '#6B7FD7', '#6B7FD7', '#6B7FD7', '#6B7FD7', '#F59E0B', '#EF4444']
+function weekdayLabel(day: number) {
+  const labels = ['日', '月', '火', '水', '木', '金', '土']
+  return labels[day] ?? '-'
+}
 
-export default function WeekdayAnalyticsPage() {
-  const [data, setData]     = useState<DayData[]>([])
-  const [loading, setLoading] = useState(true)
+async function getWeekdayAnalytics(
+  scope: AnalyticsScope,
+  start?: string,
+  end?: string
+) {
+  let txnQuery = (supabase as any)
+    .from('transactions')
+    .select('day_of_week, total_amount, txn_date, event_id, txn_no')
+    .eq('is_return', false)
 
-  useEffect(() => {
-    fetch('/api/analytics/weekday')
-      .then(r => r.json())
-      .then(j => { setData(j.data ?? []); setLoading(false) })
-  }, [])
+  if (scope === 'normal') txnQuery = txnQuery.is('event_id', null)
+  else if (scope === 'event') txnQuery = txnQuery.not('event_id', 'is', null)
 
-  if (loading) return <p className="text-gray-400">読み込み中...</p>
+  if (start) txnQuery = txnQuery.gte('txn_date', start)
+  if (end) txnQuery = txnQuery.lte('txn_date', end)
 
-  const maxAvg = Math.max(...data.map(d => d.avg_sales), 1)
+  const { data: txns, error: txErr } = await txnQuery
+  if (txErr) throw new Error(txErr.message)
 
-  // グラフ用に色付き
-  const chartData = data.map((d, i) => ({ ...d, fill: BAR_COLORS[i] ?? '#6B7FD7' }))
+  let salesQuery = (supabase as any)
+    .from('product_sales')
+    .select('product_name, quantity, txn_date, event_id')
+
+  if (scope === 'normal') salesQuery = salesQuery.is('event_id', null)
+  else if (scope === 'event') salesQuery = salesQuery.not('event_id', 'is', null)
+
+  if (start) salesQuery = salesQuery.gte('txn_date', start)
+  if (end) salesQuery = salesQuery.lte('txn_date', end)
+
+  const { data: sales, error: salesErr } = await salesQuery
+  if (salesErr) throw new Error(salesErr.message)
+
+  const { data: costs, error: costsErr } = await (supabase as any)
+    .from('product_master')
+    .select('product_name, cost_amount')
+  if (costsErr) throw new Error(costsErr.message)
+
+  const costMap = new Map<string, number>()
+  for (const c of ((costs ?? []) as any[])) {
+    if (c.cost_amount != null) costMap.set(c.product_name, c.cost_amount)
+  }
+
+  const weekdayMap = new Map<
+    number,
+    {
+      totalSales: number
+      totalCost: number
+      days: Set<string>
+      txnSet: Set<string>
+    }
+  >()
+
+  for (let i = 0; i <= 6; i++) {
+    weekdayMap.set(i, {
+      totalSales: 0,
+      totalCost: 0,
+      days: new Set<string>(),
+      txnSet: new Set<string>(),
+    })
+  }
+
+  for (const t of ((txns ?? []) as any[])) {
+    const day = t.day_of_week
+    if (day == null) continue
+
+    const entry = weekdayMap.get(day)
+    if (!entry) continue
+
+    entry.totalSales += t.total_amount ?? 0
+    if (t.txn_date) entry.days.add(t.txn_date)
+    if (t.txn_no) entry.txnSet.add(t.txn_no)
+  }
+
+  for (const s of ((sales ?? []) as any[])) {
+    if (!s.txn_date) continue
+    const day = new Date(`${s.txn_date}T00:00:00`).getDay()
+    const entry = weekdayMap.get(day)
+    if (!entry) continue
+
+    const unitCost = costMap.get(s.product_name)
+    if (unitCost != null) {
+      entry.totalCost += unitCost * (s.quantity ?? 0)
+    }
+  }
+
+  const rows = Array.from(weekdayMap.entries()).map(([day, value]) => {
+    const dayCount = value.days.size
+    const txnCount = value.txnSet.size
+    const avgSales = dayCount > 0 ? Math.round(value.totalSales / dayCount) : 0
+    const avgSalesPerTxn = txnCount > 0 ? Math.round(value.totalSales / txnCount) : 0
+
+    return {
+      day,
+      label: weekdayLabel(day),
+      total_sales: value.totalSales,
+      total_cost: value.totalCost,
+      gross_profit: value.totalSales - value.totalCost,
+      avg_sales: avgSales,
+      avg_sales_per_txn: avgSalesPerTxn,
+      day_count: dayCount,
+      txn_count: txnCount,
+    }
+  })
+
+  const sorted = [...rows].sort((a, b) => b.avg_sales - a.avg_sales)
+  const total = sorted.length
+
+  const ranked = sorted.map((row, i) => {
+    let performance: 'high' | 'mid' | 'low'
+    if (i < Math.ceil(total * 0.3)) performance = 'high'
+    else if (i >= total - Math.ceil(total * 0.3)) performance = 'low'
+    else performance = 'mid'
+    return { ...row, performance }
+  })
+
+  const perfMap = new Map<number, 'high' | 'mid' | 'low'>()
+  for (const row of ranked) perfMap.set(row.day, row.performance)
+
+  return rows
+    .map((row) => ({
+      ...row,
+      performance: perfMap.get(row.day) ?? 'mid',
+    }))
+    .sort((a, b) => a.day - b.day)
+}
+
+export default async function WeekdayAnalyticsPage({
+  searchParams,
+}: {
+  searchParams?: { scope?: string; start?: string; end?: string }
+}) {
+  const scope = normalizeScope(searchParams?.scope)
+  const start = searchParams?.start
+  const end = searchParams?.end
+
+  const data = await getWeekdayAnalytics(scope, start, end)
+
+  const scopeLabel =
+    scope === 'normal' ? '通常出店のみ' : scope === 'event' ? 'イベント出店のみ' : '全体'
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">曜日別分析</h1>
-      <p className="text-sm text-gray-500 mb-8">曜日ごとの平均売上をもとに、出店に適した曜日を把握できます。</p>
+      <AnalyticsPageHeader
+        title="曜日別分析"
+        description="平均売上をもとに曜日ごとの傾向を表示します。"
+        scopeLabel={scopeLabel}
+        basePath="/analytics/weekday"
+        currentScope={scope}
+        currentStart={start}
+        currentEnd={end}
+      />
 
       {data.length === 0 ? (
-        <p className="text-gray-400 text-center py-20">データがありません。</p>
+        <div className="soft-panel text-center py-20">
+          <p className="section-subtitle">この条件に一致するデータがありません。</p>
+        </div>
       ) : (
-        <>
-          {/* 棒グラフ */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-            <h2 className="text-base font-semibold text-gray-700 mb-4">曜日別 平均売上</h2>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData} margin={{ top: 4, right: 16, left: 16, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 13 }} />
-                <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} />
-                <Tooltip
-                  formatter={(v: number) => [`${v.toLocaleString()} 円`, '平均売上']}
-                  labelFormatter={l => `${l}曜日`}
-                />
-                <Bar dataKey="avg_sales" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry, i) => (
-                    <rect key={i} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="space-y-4">
+          {data.map((row) => {
+            const style =
+              row.performance === 'high'
+                ? { card: 'bg-green-50 border-green-200', badge: 'badge-soft badge-green', icon: '😊' }
+                : row.performance === 'low'
+                ? { card: 'bg-red-50 border-red-200', badge: 'badge-soft bg-red-100 text-red-800', icon: '🌀' }
+                : { card: 'bg-white border-soft', badge: 'badge-soft bg-gray-100 text-gray-700', icon: '📅' }
 
-          {/* テーブル */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-5 py-3 font-semibold text-gray-600">曜日</th>
-                  <th className="text-right px-5 py-3 font-semibold text-gray-600">出店日数</th>
-                  <th className="text-right px-5 py-3 font-semibold text-gray-600">平均売上</th>
-                  <th className="text-right px-5 py-3 font-semibold text-gray-600">累計売上</th>
-                  <th className="px-5 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((d, i) => (
-                  <tr key={d.day_of_week} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-5 py-3 font-medium text-gray-800">{d.label}曜日</td>
-                    <td className="px-5 py-3 text-right text-gray-600">{d.out_days} 日</td>
-                    <td className="px-5 py-3 text-right font-semibold text-blue-700">
-                      {d.avg_sales.toLocaleString()} 円
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-600">
-                      {d.total_sales.toLocaleString()} 円
-                    </td>
-                    <td className="px-5 py-3 w-32">
-                      <div className="bg-gray-200 rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: `${(d.avg_sales / maxAvg) * 100}%`,
-                            background: BAR_COLORS[i] ?? '#6B7FD7',
-                          }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+            return (
+              <div key={row.day} className={`soft-card p-5 ${style.card}`}>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{style.icon}</span>
+                      <span className={style.badge}>
+                        {row.performance === 'high' ? '強い曜日' : row.performance === 'low' ? '弱い曜日' : '中間'}
+                      </span>
+                    </div>
+                    <h2 className="text-lg font-semibold text-main">{row.label}曜日</h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-right">
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">出店日数</p>
+                      <p className="font-bold text-main">{row.day_count} 日</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">取引数</p>
+                      <p className="font-bold text-main">{row.txn_count} 件</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">平均取引単価</p>
+                      <p className="font-bold text-blue-700">{row.avg_sales_per_txn.toLocaleString()} 円</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">累計売上</p>
+                      <p className="font-bold text-main">{row.total_sales.toLocaleString()} 円</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/70 border border-white p-3">
+                      <p className="text-xs text-sub">推定粗利</p>
+                      <p className={`font-bold ${row.gross_profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {row.gross_profit.toLocaleString()} 円
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
