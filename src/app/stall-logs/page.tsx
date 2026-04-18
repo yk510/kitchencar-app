@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 interface Location {
   id: string
@@ -26,10 +27,14 @@ interface StallLogSummaryResponse {
 }
 
 export default function StallLogsPage() {
-  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0, 10))
-  const [locationId, setLocationId] = useState('')
-  const [eventName, setEventName] = useState('')
+  const stallDraft = usePersistentDraft('draft:stall-logs-form', {
+    logDate: new Date().toISOString().slice(0, 10),
+    locationId: '',
+    eventName: '',
+  })
   const [locations, setLocations] = useState<Location[]>([])
+  const { value: draft, setValue: setDraft } = stallDraft
+  const { logDate, locationId, eventName } = draft
   const [unmatchedDates, setUnmatchedDates] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -65,8 +70,8 @@ export default function StallLogsPage() {
       const fetched = json.data ?? []
       setLocations(fetched)
 
-      if (fetched.length === 1) {
-        setLocationId(fetched[0].id)
+      if (fetched.length === 1 && !draft.locationId) {
+        setDraft((prev) => ({ ...prev, locationId: fetched[0].id }))
       }
     } catch (e) {
       setError('出店場所一覧の取得に失敗しました')
@@ -121,7 +126,7 @@ export default function StallLogsPage() {
           ' / 天候情報も更新しました。'
       )
 
-      setEventName('')
+      setDraft((prev) => ({ ...prev, eventName: '' }))
       await loadUnmatchedDates()
     } catch (e) {
       setError('通信エラーが発生しました')
@@ -154,7 +159,7 @@ export default function StallLogsPage() {
                 type="date"
                 required
                 value={logDate}
-                onChange={(e) => setLogDate(e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, logDate: e.target.value }))}
                 className="soft-input w-full px-3 py-2 text-sm"
               />
             </div>
@@ -164,7 +169,7 @@ export default function StallLogsPage() {
               <select
                 required
                 value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, locationId: e.target.value }))}
                 disabled={loading || locations.length === 0}
                 className="soft-input w-full px-3 py-2 text-sm disabled:bg-gray-100"
               >
@@ -194,7 +199,7 @@ export default function StallLogsPage() {
                 type="text"
                 placeholder="例: 鹿嶋フードフェス"
                 value={eventName}
-                onChange={(e) => setEventName(e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, eventName: e.target.value }))}
                 className="soft-input w-full px-3 py-2 text-sm"
               />
               <p className="text-xs text-sub mt-1">
@@ -250,7 +255,7 @@ export default function StallLogsPage() {
                     <button
                       key={date}
                       type="button"
-                      onClick={() => setLogDate(date)}
+                      onClick={() => setDraft((prev) => ({ ...prev, logDate: date }))}
                       className={`soft-button rounded-full px-4 py-2 text-sm border transition ${
                         isSelected
                           ? 'bg-blue-600 text-white border-blue-600'

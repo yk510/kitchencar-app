@@ -67,6 +67,36 @@ export interface Database {
         Insert: Omit<SalesForecast, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<SalesForecast, 'id' | 'created_at'>>
       }
+      user_profiles: {
+        Row: UserProfile
+        Insert: Omit<UserProfile, 'created_at' | 'updated_at'>
+        Update: Partial<Omit<UserProfile, 'created_at'>>
+      }
+      vendor_profiles: {
+        Row: VendorProfile
+        Insert: Omit<VendorProfile, 'created_at' | 'updated_at'>
+        Update: Partial<Omit<VendorProfile, 'created_at'>>
+      }
+      organizer_profiles: {
+        Row: OrganizerProfile
+        Insert: Omit<OrganizerProfile, 'created_at' | 'updated_at'>
+        Update: Partial<Omit<OrganizerProfile, 'created_at'>>
+      }
+      event_offers: {
+        Row: EventOffer
+        Insert: Omit<EventOffer, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<EventOffer, 'id' | 'created_at'>>
+      }
+      event_applications: {
+        Row: EventApplication
+        Insert: Omit<EventApplication, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<EventApplication, 'id' | 'created_at'>>
+      }
+      application_messages: {
+        Row: ApplicationMessage
+        Insert: Omit<ApplicationMessage, 'id' | 'created_at'>
+        Update: Partial<Omit<ApplicationMessage, 'id' | 'created_at'>>
+      }
     }
   }
 }
@@ -229,6 +259,105 @@ export interface SalesForecast {
   forecast_basis: string | null
   created_at: string
   updated_at: string
+}
+
+export interface UserProfile {
+  user_id: string
+  role: 'vendor' | 'organizer'
+  display_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VendorProfile {
+  user_id: string
+  business_name: string
+  owner_name: string | null
+  contact_email: string | null
+  phone: string | null
+  main_menu: string | null
+  logo_image_url: string | null
+  instagram_url: string | null
+  x_url: string | null
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizerProfile {
+  user_id: string
+  organizer_name: string
+  contact_name: string | null
+  contact_email: string | null
+  phone: string | null
+  logo_image_url: string | null
+  instagram_url: string | null
+  x_url: string | null
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EventOffer {
+  id: string
+  user_id: string
+  organizer_profile_id: string | null
+  title: string
+  event_date: string
+  event_end_date: string | null
+  venue_name: string
+  venue_address: string | null
+  municipality: string | null
+  recruitment_count: number
+  fee_type: 'fixed' | 'revenue_share' | 'fixed_plus_revenue_share' | 'free'
+  stall_fee: number | null
+  revenue_share_rate: number | null
+  application_deadline: string | null
+  load_in_start_time: string | null
+  load_in_end_time: string | null
+  sales_start_time: string | null
+  sales_end_time: string | null
+  load_out_start_time: string | null
+  load_out_end_time: string | null
+  provided_facilities: string[] | null
+  photo_urls: string[] | null
+  venue_features: string | null
+  recruitment_purpose: string | null
+  required_equipment: string | null
+  notes: string | null
+  status: 'draft' | 'open' | 'closed'
+  is_public: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface EventApplication {
+  id: string
+  offer_id: string
+  organizer_user_id: string
+  vendor_user_id: string
+  vendor_profile_id: string | null
+  vendor_business_name: string
+  vendor_contact_name: string | null
+  vendor_contact_email: string | null
+  vendor_phone: string | null
+  initial_message: string | null
+  status: 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
+  contact_released_at: string | null
+  last_message_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ApplicationMessage {
+  id: string
+  application_id: string
+  sender_user_id: string
+  sender_role: 'vendor' | 'organizer'
+  message: string
+  read_by_vendor_at: string | null
+  read_by_organizer_at: string | null
+  created_at: string
 }
 
 // ---- API レスポンス型 ----

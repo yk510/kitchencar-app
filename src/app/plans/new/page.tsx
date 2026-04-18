@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getDefaultHolidayFlag, getHolidayFlagTone, getWeekdayLabel } from '@/lib/calendar'
+import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 type DraftDay = {
   id: string
@@ -40,18 +41,44 @@ function normalizeOperationType(value: string, eventName: string) {
 
 export default function NewPlanPage() {
   const router = useRouter()
-  const [title, setTitle] = useState('')
+  const planDraft = usePersistentDraft<{
+    title: string
+    sourceImageName: string
+    planMonth: string
+    days: DraftDay[]
+  }>('draft:plans-new-form', {
+    title: '',
+    sourceImageName: '',
+    planMonth: '',
+    days: [],
+  })
+  const {
+    hydrated: planDraftHydrated,
+    setValue: setPlanDraft,
+    clearDraft: clearPlanDraft,
+  } = planDraft
+  const [title, setTitle] = useState(planDraft.value.title)
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [sourceImageName, setSourceImageName] = useState('')
+  const [sourceImageName, setSourceImageName] = useState(planDraft.value.sourceImageName)
   const [parsing, setParsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loadingReference, setLoadingReference] = useState(true)
   const [loadingWeatherPreview, setLoadingWeatherPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [planMonth, setPlanMonth] = useState('')
-  const [days, setDays] = useState<DraftDay[]>([])
+  const [planMonth, setPlanMonth] = useState(planDraft.value.planMonth)
+  const [days, setDays] = useState<DraftDay[]>(planDraft.value.days)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [eventNames, setEventNames] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!planDraftHydrated) return
+    setPlanDraft({
+      title,
+      sourceImageName,
+      planMonth,
+      days,
+    })
+  }, [title, sourceImageName, planMonth, days, planDraftHydrated, setPlanDraft])
 
   useEffect(() => {
     async function loadReference() {
@@ -292,6 +319,7 @@ export default function NewPlanPage() {
         return
       }
 
+      clearPlanDraft()
       router.push('/plans')
     } catch (err) {
       setError(err instanceof Error ? err.message : '予定の保存に失敗しました')
@@ -324,6 +352,11 @@ export default function NewPlanPage() {
               disabled={parsing || saving}
             />
             {imageFile && <p className="text-sm text-gray-500 mt-2">選択中: {imageFile.name}</p>}
+            {!imageFile && sourceImageName && (
+              <p className="text-sm text-gray-500 mt-2">
+                前回の入力内容を復元しました。画像ファイルだけは再度選び直してください: {sourceImageName}
+              </p>
+            )}
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-slate-50 p-4 text-sm text-gray-600">

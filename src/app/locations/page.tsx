@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 interface Location {
   id: string
@@ -18,10 +19,11 @@ export default function LocationsPage() {
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [form, setForm] = useState({
+  const formDraft = usePersistentDraft('draft:locations-form', {
     name: '',
     address: '',
   })
+  const { value: form, setValue: setForm, clearDraft } = formDraft
 
   async function loadLocations() {
     try {
@@ -78,6 +80,7 @@ export default function LocationsPage() {
         name: '',
         address: '',
       })
+      clearDraft()
 
       loadLocations()
     } catch (e) {

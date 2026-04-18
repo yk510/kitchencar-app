@@ -2,14 +2,22 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
+import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 type AuthMode = 'signin' | 'signup'
+type Role = 'vendor' | 'organizer'
 
 export default function LoginPage() {
   const { supabase, loading } = useAuth()
-  const [mode, setMode] = useState<AuthMode>('signin')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const authDraft = usePersistentDraft('draft:login-form', {
+    mode: 'signin' as AuthMode,
+    email: '',
+    password: '',
+    role: 'vendor' as Role,
+    displayName: '',
+  })
+  const { value: draft, setValue: setDraft, clearDraft } = authDraft
+  const { mode, email, password, role, displayName } = draft
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -36,10 +44,17 @@ export default function LoginPage() {
         }
 
         setMessage('ログインしました。ホームへ移動します。')
+        clearDraft()
       } else {
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              role,
+              display_name: displayName.trim() || null,
+            },
+          },
         })
 
         if (signUpError) {
@@ -47,6 +62,7 @@ export default function LoginPage() {
         }
 
         setMessage('アカウントを作成しました。確認メールが届いた場合は、メールの案内に沿って進めてください。')
+        clearDraft()
       }
     } catch (submitError: any) {
       setError(submitError.message ?? 'ログインに失敗しました')
@@ -89,7 +105,7 @@ export default function LoginPage() {
           <div className="flex rounded-full bg-[var(--bg-main)] p-1">
             <button
               type="button"
-              onClick={() => setMode('signin')}
+              onClick={() => setDraft((prev) => ({ ...prev, mode: 'signin' }))}
               className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold ${
                 mode === 'signin'
                   ? 'bg-white text-[var(--accent-blue)] shadow-sm'
@@ -100,7 +116,7 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('signup')}
+              onClick={() => setDraft((prev) => ({ ...prev, mode: 'signup' }))}
               className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold ${
                 mode === 'signup'
                   ? 'bg-white text-[var(--accent-blue)] shadow-sm'
@@ -117,16 +133,60 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-[var(--text-sub)]">
             {mode === 'signin'
               ? '登録したメールアドレスとパスワードを入力してください。'
-              : 'メールアドレスとパスワードでアカウントを作成します。'}
+              : 'メールアドレス、パスワード、利用者区分を選んでアカウントを作成します。'}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {mode === 'signup' && (
+              <>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--text-main)]">利用者区分</label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setDraft((prev) => ({ ...prev, role: 'vendor' }))}
+                      className={`rounded-2xl border px-4 py-4 text-left ${
+                        role === 'vendor'
+                          ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
+                          : 'border-[var(--line-soft)] bg-white'
+                      }`}
+                    >
+                      <p className="font-semibold text-[var(--text-main)]">キッチンカー事業者</p>
+                      <p className="mt-1 text-sm text-[var(--text-sub)]">募集を見る、質問する、応募する</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDraft((prev) => ({ ...prev, role: 'organizer' }))}
+                      className={`rounded-2xl border px-4 py-4 text-left ${
+                        role === 'organizer'
+                          ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
+                          : 'border-[var(--line-soft)] bg-white'
+                      }`}
+                    >
+                      <p className="font-semibold text-[var(--text-main)]">イベント主催者</p>
+                      <p className="mt-1 text-sm text-[var(--text-sub)]">募集を作る、応募を確認する</p>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--text-main)]">表示名（任意）</label>
+                  <input
+                    value={displayName}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, displayName: event.target.value }))}
+                    className="w-full px-4 py-3"
+                    placeholder="例: 匠 Soup Curry / まちなかマルシェ実行委員会"
+                  />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-[var(--text-main)]">メールアドレス</label>
               <input
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => setDraft((prev) => ({ ...prev, email: event.target.value }))}
                 className="w-full px-4 py-3"
                 placeholder="you@example.com"
                 required
@@ -138,7 +198,7 @@ export default function LoginPage() {
               <input
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => setDraft((prev) => ({ ...prev, password: event.target.value }))}
                 className="w-full px-4 py-3"
                 placeholder="8文字以上がおすすめです"
                 minLength={6}

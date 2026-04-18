@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { AUTH_COOKIE_NAME } from '@/lib/auth-cookie'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import type { AppRole } from '@/lib/user-role'
 
 async function getUserFromAccessToken(accessToken?: string | null) {
   if (!accessToken) {
@@ -25,10 +26,36 @@ async function getUserFromAccessToken(accessToken?: string | null) {
   }
 }
 
+async function getUserProfileForSession(session: Awaited<ReturnType<typeof getUserFromAccessToken>>) {
+  if (!session) return null
+
+  const { data } = await (session.supabase as any)
+    .from('user_profiles')
+    .select('user_id, role, display_name')
+    .eq('user_id', session.user.id)
+    .maybeSingle()
+
+  return data ?? null
+}
+
+function getRoleFromMetadata(session: Awaited<ReturnType<typeof getUserFromAccessToken>>) {
+  const metadataRole = session?.user?.user_metadata?.role
+  return metadataRole === 'organizer' ? 'organizer' : metadataRole === 'vendor' ? 'vendor' : null
+}
+
 export async function getServerSession() {
   const cookieStore = await cookies()
   const accessToken = cookieStore.get(AUTH_COOKIE_NAME)?.value
-  return getUserFromAccessToken(accessToken)
+  const session = await getUserFromAccessToken(accessToken)
+  const profile = await getUserProfileForSession(session)
+
+  return session
+    ? {
+        ...session,
+        profile,
+        role: profile?.role ?? getRoleFromMetadata(session),
+      }
+    : null
 }
 
 export async function requireServerSession() {
@@ -43,7 +70,16 @@ export async function requireServerSession() {
 
 export async function getRouteSession(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value
-  return getUserFromAccessToken(accessToken)
+  const session = await getUserFromAccessToken(accessToken)
+  const profile = await getUserProfileForSession(session)
+
+  return session
+    ? {
+        ...session,
+        profile,
+        role: profile?.role ?? getRoleFromMetadata(session),
+      }
+    : null
 }
 
 export async function requireRouteSession(request: NextRequest) {
@@ -68,3 +104,5 @@ export function buildUserScopedData<T extends Record<string, unknown>>(user: Use
     user_id: user.id,
   }
 }
+
+export type { AppRole }

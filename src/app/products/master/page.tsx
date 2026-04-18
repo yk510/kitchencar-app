@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 interface ProductMaster {
   product_name:    string
@@ -10,11 +11,19 @@ interface ProductMaster {
 }
 
 export default function ProductMasterPage() {
+  const draftState = usePersistentDraft<Record<string, { amount: string; rate: string; mode: 'amount' | 'rate' }>>(
+    'draft:product-master-inputs',
+    {}
+  )
   const [products, setProducts] = useState<ProductMaster[]>([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState<string | null>(null)
-  // 入力値を管理: { product_name -> { amount: string, rate: string, mode: 'amount'|'rate' } }
-  const [inputs, setInputs] = useState<Record<string, { amount: string; rate: string; mode: 'amount' | 'rate' }>>({})
+  const [inputs, setInputs] = useState<Record<string, { amount: string; rate: string; mode: 'amount' | 'rate' }>>(draftState.value)
+
+  useEffect(() => {
+    if (!draftState.hydrated) return
+    draftState.setValue(inputs)
+  }, [inputs, draftState.hydrated, draftState.setValue])
 
   async function load() {
     setLoading(true)
@@ -32,7 +41,7 @@ export default function ProductMasterPage() {
         mode:   p.cost_rate   != null ? 'rate' : 'amount',
       }
     }
-    setInputs(init)
+    setInputs(draftState.hasStoredDraft ? { ...init, ...draftState.value } : init)
     setLoading(false)
   }
 
@@ -61,7 +70,10 @@ export default function ProductMasterPage() {
       body:    JSON.stringify(body),
     })
     setSaving(null)
-    if (res.ok) await load()
+    if (res.ok) {
+      draftState.clearDraft()
+      await load()
+    }
     else alert('保存に失敗しました')
   }
 

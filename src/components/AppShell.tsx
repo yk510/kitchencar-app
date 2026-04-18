@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
+import { subscribeProfileUpdated } from '@/lib/profile-sync'
+import { getHomePathByRole } from '@/lib/user-role'
 
 function LoadingScreen({ message }: { message: string }) {
   return (
@@ -19,9 +21,12 @@ function LoadingScreen({ message }: { message: string }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { loading, user } = useAuth()
+  const { loading, user, role, profileReady } = useAuth()
 
   const isLoginPage = pathname === '/login'
+  const isOrganizerPath = pathname === '/organizer' || pathname.startsWith('/organizer/')
+  const isVendorPath = pathname === '/vendor' || pathname.startsWith('/vendor/')
+  const homePath = getHomePathByRole(role)
 
   useEffect(() => {
     if (loading) return
@@ -31,16 +36,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return
     }
 
-    if (user && isLoginPage) {
-      router.replace('/')
+    if (user && !profileReady) {
+      return
     }
-  }, [isLoginPage, loading, router, user])
+
+    if (user && isLoginPage && profileReady) {
+      router.replace(homePath)
+      return
+    }
+
+    if (user && role === 'organizer' && pathname === '/') {
+      router.replace('/organizer')
+      return
+    }
+
+    if (user && role === 'vendor' && isOrganizerPath) {
+      router.replace('/')
+      return
+    }
+
+    if (user && role === 'organizer' && isVendorPath) {
+      router.replace('/organizer')
+    }
+  }, [homePath, isLoginPage, isOrganizerPath, isVendorPath, loading, pathname, profileReady, role, router, user])
+
+  useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 
   if (isLoginPage) {
     return <main className="min-h-screen px-4 py-8 lg:px-6">{children}</main>
   }
 
-  if (loading) {
+  if (loading || (user && !profileReady)) {
     return <LoadingScreen message="ログイン状態を確認しています..." />
   }
 
