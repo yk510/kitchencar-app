@@ -2,42 +2,22 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { isStatusUpdateMessage } from '@/lib/applicationMessages'
+import MarketplaceMessageItem from '@/components/MarketplaceMessageItem'
+import { getApplicationMessagePresentation } from '@/lib/applicationMessages'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
+import type {
+  ApplicationMessagesPayload,
+  ApplicationMutationPayload,
+  ApplicationSendMessagePayload,
+  OrganizerApplicationsPayload,
+} from '@/types/api-payloads'
+import type { MarketplaceMessage, OrganizerApplicationRow, OrganizerProfile } from '@/types/marketplace'
 
-type ApplicationRow = {
-  id: string
-  vendor_user_id: string
-  status: 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
-  contact_released_at: string | null
-  vendor_name: string | null
-  vendor_business_name: string
-  vendor_contact_name: string | null
-  initial_message: string | null
-  unread_count: number
-  offer: {
-    title: string
-    event_date: string
-    event_end_date: string | null
-    venue_name: string
-  } | null
-}
+type OrganizerContact = Pick<OrganizerProfile, 'contact_name' | 'contact_email' | 'phone'>
 
-type MessageRow = {
-  id: string
-  sender_role: 'vendor' | 'organizer'
-  message: string
-  created_at: string
-}
-
-type OrganizerContact = {
-  contact_name: string | null
-  contact_email: string | null
-  phone: string | null
-}
-
-function statusLabel(status: ApplicationRow['status']) {
+function statusLabel(status: OrganizerApplicationRow['status']) {
   if (status === 'accepted') return '出店決定'
   if (status === 'rejected') return '見送り'
   if (status === 'under_review') return '確認中'
@@ -45,32 +25,12 @@ function statusLabel(status: ApplicationRow['status']) {
   return '新着応募'
 }
 
-function messageLabel(message: MessageRow, initialMessage: string | null) {
-  if (isStatusUpdateMessage(message.message)) {
-    return '運営からのお知らせ'
-  }
-
-  if (message.sender_role === 'organizer') {
-    return '主催者からの返信'
-  }
-
-  if (initialMessage && message.message === initialMessage) {
-    return '応募時メッセージ'
-  }
-
-  return '追加メッセージ'
-}
-
-function isInitialApplicationMessage(message: MessageRow, initialMessage: string | null) {
-  return message.sender_role === 'vendor' && !!initialMessage && message.message === initialMessage
-}
-
 export default function OrganizerApplicationsPage() {
   const draftState = usePersistentDraft('draft:organizer-applications-message', '')
   const { hydrated: draftHydrated, setValue: setDraftStorage, clearDraft } = draftState
-  const [applications, setApplications] = useState<ApplicationRow[]>([])
+  const [applications, setApplications] = useState<OrganizerApplicationRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<MessageRow[]>([])
+  const [messages, setMessages] = useState<MarketplaceMessage[]>([])
   const [draft, setDraft] = useState(draftState.value)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -86,50 +46,40 @@ export default function OrganizerApplicationsPage() {
 
   async function loadApplications() {
     try {
-      const res = await fetch('/api/event-applications', { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '応募一覧の取得に失敗しました')
-        return
-      }
-      const rows = json.data ?? []
+      const rows = await fetchApi<OrganizerApplicationsPayload>('/api/event-applications', { cache: 'no-store' })
       setApplications(rows)
       setSelectedId((prev) => prev ?? rows[0]?.id ?? null)
-    } catch {
-      setError('応募一覧の取得に失敗しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '応募一覧の取得に失敗しました')
     } finally {
       setLoading(false)
     }
   }
 
   async function loadMessages(applicationId: string) {
-    const res = await fetch(`/api/event-applications/${applicationId}/messages`, { cache: 'no-store' })
-    const json = await res.json()
-    if (!res.ok) {
-      setError(json.error ?? 'メッセージの取得に失敗しました')
-      return
+    try {
+      const data = await fetchApi<ApplicationMessagesPayload>(`/api/event-applications/${applicationId}/messages`, {
+        cache: 'no-store',
+      })
+      setMessages(data)
+      setApplications((prev) =>
+        prev.map((item) => (item.id === applicationId ? { ...item, unread_count: 0 } : item))
+      )
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : 'メッセージの取得に失敗しました')
     }
-    setMessages(json.data ?? [])
-    setApplications((prev) =>
-      prev.map((item) => (item.id === applicationId ? { ...item, unread_count: 0 } : item))
-    )
   }
 
   async function loadOrganizerContact() {
     try {
-      const res = await fetch('/api/organizer/profile', { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '主催者設定の取得に失敗しました')
-        return
-      }
+      const json = await fetchApi<OrganizerProfile>('/api/organizer/profile', { cache: 'no-store' })
       setOrganizerContact({
-        contact_name: json.data?.contact_name ?? null,
-        contact_email: json.data?.contact_email ?? null,
-        phone: json.data?.phone ?? null,
+        contact_name: json.contact_name ?? null,
+        contact_email: json.contact_email ?? null,
+        phone: json.phone ?? null,
       })
-    } catch {
-      setError('主催者設定の取得に失敗しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '主催者設定の取得に失敗しました')
     }
   }
 
@@ -173,28 +123,23 @@ export default function OrganizerApplicationsPage() {
     setError(null)
 
     try {
-      const res = await fetch(`/api/event-applications/${selectedId}/messages`, {
+      await fetchApi<ApplicationSendMessagePayload>(`/api/event-applications/${selectedId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: draft }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '送信に失敗しました')
-        return
-      }
       setDraft('')
       clearDraft()
       loadMessages(selectedId)
       loadApplications()
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setSending(false)
     }
   }
 
-  async function handleStatusUpdate(status: ApplicationRow['status']) {
+  async function handleStatusUpdate(status: OrganizerApplicationRow['status']) {
     if (!selectedId) return
     setError(null)
 
@@ -208,18 +153,17 @@ export default function OrganizerApplicationsPage() {
       if (!confirmed) return
     }
 
-    const res = await fetch(`/api/event-applications/${selectedId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      setError(json.error ?? '状態の更新に失敗しました')
-      return
+    try {
+      await fetchApi<ApplicationMutationPayload>(`/api/event-applications/${selectedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      await loadApplications()
+      await loadMessages(selectedId)
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '状態の更新に失敗しました')
     }
-    await loadApplications()
-    await loadMessages(selectedId)
   }
 
   async function handleReleaseContact() {
@@ -236,21 +180,16 @@ export default function OrganizerApplicationsPage() {
     setError(null)
 
     try {
-      const res = await fetch(`/api/event-applications/${selectedId}`, {
+      await fetchApi<ApplicationMutationPayload>(`/api/event-applications/${selectedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ release_contact: true }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '連絡先情報の公開に失敗しました')
-        return
-      }
       setShowContactModal(false)
       await loadApplications()
       await loadMessages(selectedId)
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setReleasingContact(false)
     }
@@ -399,40 +338,25 @@ export default function OrganizerApplicationsPage() {
                 {messages.length === 0 ? (
                   <p className="text-sm text-gray-500">まだやり取りはありません。</p>
                 ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'mx-auto w-full max-w-full border border-amber-200 bg-amber-50 text-amber-900'
-                          : message.sender_role === 'organizer'
-                          ? 'ml-auto bg-[var(--accent-blue)] text-white'
-                          : 'bg-[#f3f5f8] text-gray-700'
-                      } ${isInitialApplicationMessage(message, selectedApplication.initial_message) ? 'ring-2 ring-blue-200 ring-offset-2' : ''}`}
-                    >
-                      <p className={`text-[11px] font-semibold ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'text-amber-700'
-                          : message.sender_role === 'organizer'
-                            ? 'text-blue-100'
-                            : 'text-gray-500'
-                      }`}>
-                        {messageLabel(message, selectedApplication.initial_message)}
-                      </p>
-                      <p className={isInitialApplicationMessage(message, selectedApplication.initial_message) ? 'mt-1 font-semibold' : ''}>
-                        {message.message}
-                      </p>
-                      <p className={`mt-2 text-[11px] ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'text-amber-700'
-                          : message.sender_role === 'organizer'
-                            ? 'text-blue-100'
-                            : 'text-gray-400'
-                      }`}>
-                        {new Date(message.created_at).toLocaleString('ja-JP')}
-                      </p>
-                    </div>
-                  ))
+                  messages.map((message) => {
+                    const presentation = getApplicationMessagePresentation({
+                      message,
+                      initialMessage: selectedApplication.initial_message,
+                      currentRole: 'organizer',
+                    })
+
+                    return (
+                      <MarketplaceMessageItem
+                        key={message.id}
+                        label={presentation.label}
+                        message={message.message}
+                        createdAt={message.created_at}
+                        align={presentation.align}
+                        tone={presentation.tone}
+                        highlighted={presentation.highlighted}
+                      />
+                    )
+                  })
                 )}
               </div>
 

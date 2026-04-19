@@ -2,32 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { getDefaultHolidayFlag, getHolidayFlagTone, getWeekdayLabel } from '@/lib/calendar'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-type DraftDay = {
-  id: string
-  plan_date: string
-  operation_type: 'open' | 'closed' | 'event'
-  holiday_flag: string
-  location_id: string | null
-  location_name: string
-  municipality: string
-  event_name: string
-  business_start_time: string
-  business_end_time: string
-  ai_source_text: string
-  ai_confidence: string
-  notes: string
-  weather_type: string
-  avg_temperature: string
-}
-
-type LocationOption = {
-  id: string
-  name: string
-  address: string
-}
+import type {
+  PlansParseApiPayload,
+  PlansReferenceApiPayload,
+  PlansSaveApiPayload,
+  PlansWeatherPreviewApiPayload,
+} from '@/types/api-payloads'
+import type {
+  DraftDay,
+  Location as LocationOption,
+} from '@/types/operations'
 
 function toTimeInputValue(value: string | null | undefined) {
   if (!value) return ''
@@ -83,17 +70,11 @@ export default function NewPlanPage() {
   useEffect(() => {
     async function loadReference() {
       try {
-        const res = await fetch('/api/plans/reference', { cache: 'no-store' })
-        const json = await res.json()
-        if (!res.ok) {
-          setError(json.error ?? '候補データの取得に失敗しました')
-          return
-        }
-
-        setLocations(json.locations ?? [])
-        setEventNames(json.eventNames ?? [])
-      } catch {
-        setError('候補データの取得に失敗しました')
+        const data = await fetchApi<PlansReferenceApiPayload>('/api/plans/reference', { cache: 'no-store' })
+        setLocations(data.locations ?? [])
+        setEventNames(data.eventNames ?? [])
+      } catch (err) {
+        setError(err instanceof ApiClientError ? err.message : '候補データの取得に失敗しました')
       } finally {
         setLoadingReference(false)
       }
@@ -144,17 +125,14 @@ export default function NewPlanPage() {
       try {
         setLoadingWeatherPreview(true)
 
-        const res = await fetch('/api/plans/weather-preview', {
+        const data = await fetchApi<PlansWeatherPreviewApiPayload>('/api/plans/weather-preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ days: weatherPreviewTargets }),
         })
 
-        const json = await res.json()
-        if (!res.ok) return
-
         const previewMap = new Map<string, { weather_type: string | null; avg_temperature: number | null }>()
-        for (const item of json.data ?? []) {
+        for (const item of data ?? []) {
           previewMap.set(item.id, item)
         }
 
@@ -221,7 +199,7 @@ export default function NewPlanPage() {
         reader.readAsDataURL(imageFile)
       })
 
-      const res = await fetch('/api/plans/parse', {
+      const data = await fetchApi<PlansParseApiPayload>('/api/plans/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,14 +210,7 @@ export default function NewPlanPage() {
           })),
         }),
       })
-
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '予測案の作成に失敗しました')
-        return
-      }
-
-      const draft = json.draft
+      const draft = data.draft
       setTitle(draft.title ?? '')
       setPlanMonth(draft.plan_month ?? '')
       setSourceImageName(imageFile.name)
@@ -263,7 +234,7 @@ export default function NewPlanPage() {
         }))
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : '予測案の作成に失敗しました')
+      setError(err instanceof ApiClientError ? err.message : '予測案の作成に失敗しました')
     } finally {
       setParsing(false)
     }
@@ -289,7 +260,7 @@ export default function NewPlanPage() {
       setSaving(true)
       setError(null)
 
-      const res = await fetch('/api/plans', {
+      const data = await fetchApi<PlansSaveApiPayload>('/api/plans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,17 +283,12 @@ export default function NewPlanPage() {
           })),
         }),
       })
-
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '予定の保存に失敗しました')
-        return
-      }
+      const savedPlanId = data.plan_id
 
       clearPlanDraft()
-      router.push('/plans')
+      router.push(savedPlanId ? `/plans?plan=${savedPlanId}` : '/plans')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '予定の保存に失敗しました')
+      setError(err instanceof ApiClientError ? err.message : '予定の保存に失敗しました')
     } finally {
       setSaving(false)
     }

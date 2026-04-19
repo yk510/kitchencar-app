@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 function normalizeOfferBody(body: any) {
   const title = String(body.title ?? '').trim()
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
   const offerIds = (data ?? []).map((row: any) => row.id)
@@ -188,13 +189,13 @@ export async function GET(req: NextRequest) {
     countMap.set(row.offer_id, current)
   }
 
-  return NextResponse.json({
-    data: (data ?? []).map((row: any) => ({
+  return apiOk(
+    (data ?? []).map((row: any) => ({
       ...row,
       application_count: countMap.get(row.id)?.application_count ?? 0,
       accepted_count: countMap.get(row.id)?.accepted_count ?? 0,
-    })),
-  })
+    }))
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -207,7 +208,7 @@ export async function POST(req: NextRequest) {
     const payload = normalizeOfferBody(body)
     const validationError = validateOfferPayload(payload)
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 })
+      return apiError(validationError, 400)
     }
 
     const { data: profile } = await (supabase as any)
@@ -231,13 +232,13 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
-    return NextResponse.json({ data })
+    return apiOk(data)
   } catch (error) {
     console.error('[organizer/offers POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }
 
@@ -250,13 +251,13 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const id = String(body.id ?? '').trim()
     if (!id) {
-      return NextResponse.json({ error: '更新対象の募集が見つかりません' }, { status: 400 })
+      return apiError('更新対象の募集が見つかりません', 400)
     }
 
     const payload = normalizeOfferBody(body)
     const validationError = validateOfferPayload(payload)
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 })
+      return apiError(validationError, 400)
     }
 
     const { data: currentOffer, error: currentOfferError } = await (supabase as any)
@@ -267,7 +268,7 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle()
 
     if (currentOfferError || !currentOffer) {
-      return NextResponse.json({ error: '募集が見つかりません' }, { status: 404 })
+      return apiError('募集が見つかりません', 404)
     }
 
     const { data, error } = await (supabase as any)
@@ -283,15 +284,15 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
     const changedLabels = summarizeOfferChanges(currentOffer, payload)
     await notifyOfferUpdate(supabase as any, user.id, id, changedLabels)
 
-    return NextResponse.json({ data })
+    return apiOk(data)
   } catch (error) {
     console.error('[organizer/offers PATCH]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

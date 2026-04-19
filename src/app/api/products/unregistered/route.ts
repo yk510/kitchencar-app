@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -13,6 +14,9 @@ export async function GET(req: NextRequest) {
     .is('cost_rate', null)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data, count: data?.length ?? 0 })
+  if (error) return apiError(error.message)
+  return apiOk({
+    items: data ?? [],
+    count: data?.length ?? 0,
+  })
 }

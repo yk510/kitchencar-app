@@ -1,5 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import { buildApplicationRows } from '@/lib/application-view'
+import type {
+  ApplicationCreatePayload,
+  OrganizerApplicationsPayload,
+  VendorApplicationsPayload,
+} from '@/types/api-payloads'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -17,101 +24,13 @@ export async function GET(req: NextRequest) {
       : await baseQuery.eq('vendor_user_id', user.id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
-  const offerIds = Array.from(new Set((applications ?? []).map((row: any) => row.offer_id)))
-  const organizerIds =
-    role === 'vendor'
-      ? Array.from(new Set((applications ?? []).map((row: any) => row.organizer_user_id)))
-      : []
+  const data = await buildApplicationRows(supabase as any, applications ?? [], role)
+  const payload: OrganizerApplicationsPayload | VendorApplicationsPayload = data
 
-  const vendorIds =
-    role === 'organizer'
-      ? Array.from(new Set((applications ?? []).map((row: any) => row.vendor_user_id)))
-      : []
-
-  const [offersResult, organizersResult, vendorsResult, unreadResult] = await Promise.all([
-    offerIds.length > 0
-      ? (supabase as any)
-          .from('event_offers')
-          .select('id, title, event_date, event_end_date, venue_name, municipality, status')
-          .in('id', offerIds)
-      : Promise.resolve({ data: [], error: null }),
-    organizerIds.length > 0
-      ? (supabase as any)
-          .from('organizer_profiles')
-          .select('user_id, organizer_name')
-          .in('user_id', organizerIds)
-      : Promise.resolve({ data: [], error: null }),
-    vendorIds.length > 0
-      ? Promise.all(
-          vendorIds.map(async (vendorId) => {
-            const { data } = await (supabase as any)
-              .rpc('get_vendor_public_profile', { target_user_id: vendorId })
-              .maybeSingle()
-
-            return data ? { user_id: vendorId, ...data } : null
-          })
-        )
-      : Promise.resolve([]),
-    offerIds.length > 0 || (applications ?? []).length > 0
-      ? (supabase as any)
-          .from('application_messages')
-          .select('id, application_id, read_by_vendor_at, read_by_organizer_at, sender_role')
-          .in(
-            'application_id',
-            (applications ?? []).map((row: any) => row.id)
-          )
-      : Promise.resolve({ data: [], error: null }),
-  ])
-
-  const unreadRows = (unreadResult.data ?? []) as any[]
-  const unreadMap = new Map<string, number>()
-  for (const row of unreadRows) {
-    const unread =
-      role === 'organizer'
-        ? row.sender_role === 'vendor' && !row.read_by_organizer_at
-        : row.sender_role === 'organizer' && !row.read_by_vendor_at
-    if (!unread) continue
-    unreadMap.set(row.application_id, (unreadMap.get(row.application_id) ?? 0) + 1)
-  }
-
-  const offerMap = new Map<string, any>((offersResult.data ?? []).map((row: any) => [row.id, row]))
-  const organizerMap = new Map<string, any>((organizersResult.data ?? []).map((row: any) => [row.user_id, row]))
-  const vendorMap = new Map<string, any>((vendorsResult ?? []).filter(Boolean).map((row: any) => [row.user_id, row]))
-
-  const data = (applications ?? []).map((application: any) => ({
-    ...application,
-    offer: offerMap.get(application.offer_id) ?? null,
-    organizer_name:
-      role === 'vendor'
-        ? organizerMap.get(application.organizer_user_id)?.organizer_name ?? '主催者'
-        : null,
-    vendor_name:
-      role === 'organizer'
-        ? vendorMap.get(application.vendor_user_id)?.business_name ?? application.vendor_business_name
-        : null,
-    vendor_business_name:
-      role === 'organizer'
-        ? vendorMap.get(application.vendor_user_id)?.business_name ?? application.vendor_business_name
-        : application.vendor_business_name,
-    vendor_contact_name:
-      role === 'organizer'
-        ? vendorMap.get(application.vendor_user_id)?.owner_name ?? application.vendor_contact_name
-        : application.vendor_contact_name,
-    vendor_contact_email:
-      role === 'organizer'
-        ? vendorMap.get(application.vendor_user_id)?.contact_email ?? application.vendor_contact_email
-        : application.vendor_contact_email,
-    vendor_phone:
-      role === 'organizer'
-        ? vendorMap.get(application.vendor_user_id)?.phone ?? application.vendor_phone
-        : application.vendor_phone,
-    unread_count: unreadMap.get(application.id) ?? 0,
-  }))
-
-  return NextResponse.json({ data })
+  return apiOk(payload)
 }
 
 export async function POST(req: NextRequest) {
@@ -121,7 +40,7 @@ export async function POST(req: NextRequest) {
     const { supabase, user, role } = auth.session
 
     if (role !== 'vendor') {
-      return NextResponse.json({ error: '事業者のみ応募できます' }, { status: 403 })
+      return apiError('事業者のみ応募できます', 403)
     }
 
     const body = await req.json()
@@ -130,7 +49,7 @@ export async function POST(req: NextRequest) {
     const mode = body.mode === 'inquiry' ? 'inquiry' : 'application'
 
     if (!offerId) {
-      return NextResponse.json({ error: '募集が選択されていません' }, { status: 400 })
+      return apiError('募集が選択されていません', 400)
     }
 
     const [{ data: offer, error: offerError }, { data: vendorProfile }] = await Promise.all([
@@ -147,15 +66,15 @@ export async function POST(req: NextRequest) {
     ])
 
     if (offerError || !offer) {
-      return NextResponse.json({ error: '募集が見つかりません' }, { status: 404 })
+      return apiError('募集が見つかりません', 404)
     }
 
     if (offer.status !== 'open' || !offer.is_public) {
-      return NextResponse.json({ error: '現在は応募できない募集です' }, { status: 400 })
+      return apiError('現在は応募できない募集です', 400)
     }
 
     if (!vendorProfile?.business_name) {
-      return NextResponse.json({ error: '先に事業者設定を入力してください' }, { status: 400 })
+      return apiError('先に事業者設定を入力してください', 400)
     }
 
     const { data: existing } = await (supabase as any)
@@ -166,11 +85,11 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existing?.status && mode === 'application' && existing.status !== 'inquiry') {
-      return NextResponse.json({ error: 'この募集にはすでに応募しています' }, { status: 400 })
+      return apiError('この募集にはすでに応募しています', 400)
     }
 
     if (existing?.status === 'inquiry' && mode === 'inquiry') {
-      return NextResponse.json({ error: 'この募集にはすでに質問スレッドがあります' }, { status: 400 })
+      return apiError('この募集にはすでに質問スレッドがあります', 400)
     }
 
     const applicationPayload = {
@@ -206,7 +125,7 @@ export async function POST(req: NextRequest) {
           .single()
 
     if (applicationError) {
-      return NextResponse.json({ error: applicationError.message }, { status: 500 })
+      return apiError(applicationError.message)
     }
 
     if (initialMessage) {
@@ -224,13 +143,14 @@ export async function POST(req: NextRequest) {
         ])
 
       if (messageError) {
-        return NextResponse.json({ error: messageError.message }, { status: 500 })
+        return apiError(messageError.message)
       }
     }
 
-    return NextResponse.json({ data: application })
+    const payload: ApplicationCreatePayload = application
+    return apiOk(payload)
   } catch (error) {
     console.error('[event-applications POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

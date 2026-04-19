@@ -1,13 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
-
-type DimensionKey = 'location' | 'weekday' | 'weather' | 'hour' | 'product'
-type MetricKey =
-  | 'sales'
-  | 'txn_count'
-  | 'avg_ticket'
-  | 'gross_profit'
-  | 'gross_profit_rate'
+import { apiError, apiOk } from '@/lib/api-response'
+import type {
+  CrossAnalyticsDimensionKey as DimensionKey,
+  CrossAnalyticsMetricKey as MetricKey,
+  CrossAnalyticsPayload,
+} from '@/types/api-payloads'
 
 const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日'] as const
 
@@ -51,7 +49,7 @@ export async function POST(req: NextRequest) {
     const end = typeof body.end === 'string' ? body.end : ''
 
     if (dimensions.length === 0) {
-      return NextResponse.json({ error: '分析軸を1つ以上選択してください' }, { status: 400 })
+      return apiError('分析軸を1つ以上選択してください', 400)
     }
 
     const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }] =
@@ -76,11 +74,11 @@ export async function POST(req: NextRequest) {
         (supabase as any).from('locations').select('id, name'),
       ])
 
-    if (txnError) return NextResponse.json({ error: txnError.message }, { status: 500 })
-    if (salesError) return NextResponse.json({ error: salesError.message }, { status: 500 })
-    if (costError) return NextResponse.json({ error: costError.message }, { status: 500 })
-    if (weatherError) return NextResponse.json({ error: weatherError.message }, { status: 500 })
-    if (locationError) return NextResponse.json({ error: locationError.message }, { status: 500 })
+    if (txnError) return apiError(txnError.message)
+    if (salesError) return apiError(salesError.message)
+    if (costError) return apiError(costError.message)
+    if (weatherError) return apiError(weatherError.message)
+    if (locationError) return apiError(locationError.message)
 
     const locationMap = new Map<string, string>()
     for (const location of (locations ?? []) as any[]) {
@@ -230,13 +228,15 @@ export async function POST(req: NextRequest) {
       })
       .sort((a, b) => b.sales - a.sales)
 
-    return NextResponse.json({
+    const payload: CrossAnalyticsPayload = {
       dimensions,
       metrics,
       rows,
-    })
+    }
+
+    return apiOk(payload)
   } catch (error) {
     console.error('[analytics/cross POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

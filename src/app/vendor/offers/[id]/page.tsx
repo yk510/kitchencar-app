@@ -3,56 +3,18 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import EventOfferPreviewCard from '@/components/EventOfferPreviewCard'
-import { isStatusUpdateMessage } from '@/lib/applicationMessages'
+import MarketplaceMessageItem from '@/components/MarketplaceMessageItem'
+import PublicProfileCard from '@/components/PublicProfileCard'
+import { getApplicationMessagePresentation } from '@/lib/applicationMessages'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-type OfferDetail = {
-  id: string
-  title: string
-  event_date: string
-  event_end_date: string | null
-  venue_name: string
-  venue_address: string | null
-  municipality: string | null
-  recruitment_count: number
-  fee_type: 'fixed' | 'revenue_share' | 'fixed_plus_revenue_share' | 'free'
-  stall_fee: number | null
-  revenue_share_rate: number | null
-  application_deadline: string | null
-  load_in_start_time: string | null
-  load_in_end_time: string | null
-  sales_start_time: string | null
-  sales_end_time: string | null
-  load_out_start_time: string | null
-  load_out_end_time: string | null
-  provided_facilities: string[] | null
-  photo_urls: string[] | null
-  venue_features: string | null
-  recruitment_purpose: string | null
-  required_equipment: string | null
-  notes: string | null
-  organizer_name: string
-  organizer_contact_name: string | null
-  organizer_logo_image_url: string | null
-  organizer_instagram_url: string | null
-  organizer_x_url: string | null
-  organizer_description: string | null
-  my_application: {
-    id: string
-    status: 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
-    initial_message: string | null
-  } | null
-}
-
-type MessageRow = {
-  id: string
-  sender_role: 'vendor' | 'organizer'
-  message: string
-  created_at: string
-}
-
-type ApplicationStatus = 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
+import type {
+  ApplicationCreatePayload,
+  ApplicationMessagesPayload,
+  ApplicationSendMessagePayload,
+} from '@/types/api-payloads'
+import type { ApplicationStatus, MarketplaceMessage, VendorOfferDetail } from '@/types/marketplace'
 
 function formatPeriod(start: string, end?: string | null) {
   return end && end !== start ? `${start} 〜 ${end}` : start
@@ -67,7 +29,7 @@ function statusLabel(status: ApplicationStatus) {
 }
 
 function formatFeeLabel(input: {
-  fee_type: OfferDetail['fee_type']
+  fee_type: VendorOfferDetail['fee_type']
   stall_fee: number | null
   revenue_share_rate: number | null
 }) {
@@ -79,33 +41,13 @@ function formatFeeLabel(input: {
   return input.stall_fee != null ? `${Number(input.stall_fee).toLocaleString()}円（固定）` : '-'
 }
 
-function threadMessageLabel(message: MessageRow, initialMessage: string | null) {
-  if (isStatusUpdateMessage(message.message)) {
-    return '運営からのお知らせ'
-  }
-
-  if (message.sender_role === 'organizer') {
-    return '主催者からの返信'
-  }
-
-  if (initialMessage && message.message === initialMessage) {
-    return '応募時メッセージ'
-  }
-
-  return '追加メッセージ'
-}
-
-function isInitialApplicationMessage(message: MessageRow, initialMessage: string | null) {
-  return message.sender_role === 'vendor' && !!initialMessage && message.message === initialMessage
-}
-
 export default function VendorOfferDetailPage({ params }: { params: { id: string } }) {
   const questionDraftState = usePersistentDraft(`draft:vendor-offer-question:${params.id}`, '')
   const applicationDraftState = usePersistentDraft(`draft:vendor-offer-application:${params.id}`, '')
   const { hydrated: questionDraftHydrated, setValue: setQuestionDraftStorage, clearDraft: clearQuestionDraft } = questionDraftState
   const { hydrated: applicationDraftHydrated, setValue: setApplicationDraftStorage, clearDraft: clearApplicationDraft } = applicationDraftState
-  const [offer, setOffer] = useState<OfferDetail | null>(null)
-  const [messages, setMessages] = useState<MessageRow[]>([])
+  const [offer, setOffer] = useState<VendorOfferDetail | null>(null)
+  const [messages, setMessages] = useState<MarketplaceMessage[]>([])
   const [questionDraft, setQuestionDraft] = useState(questionDraftState.value)
   const [applicationDraft, setApplicationDraft] = useState(applicationDraftState.value)
   const [loading, setLoading] = useState(true)
@@ -126,24 +68,25 @@ export default function VendorOfferDetailPage({ params }: { params: { id: string
   }, [applicationDraft, applicationDraftHydrated, setApplicationDraftStorage])
 
   async function loadOffer() {
-    const res = await fetch(`/api/vendor/offers/${params.id}`, { cache: 'no-store' })
-    const json = await res.json()
-    if (!res.ok) {
-      setError(json.error ?? '募集詳細の取得に失敗しました')
+    try {
+      const data = await fetchApi<VendorOfferDetail>(`/api/vendor/offers/${params.id}`, { cache: 'no-store' })
+      setOffer(data)
+      return data
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '募集詳細の取得に失敗しました')
       return null
     }
-    setOffer(json.data)
-    return json.data as OfferDetail
   }
 
   async function loadMessages(applicationId: string) {
-    const res = await fetch(`/api/event-applications/${applicationId}/messages`, { cache: 'no-store' })
-    const json = await res.json()
-    if (!res.ok) {
-      setError(json.error ?? 'メッセージの取得に失敗しました')
-      return
+    try {
+      const data = await fetchApi<ApplicationMessagesPayload>(`/api/event-applications/${applicationId}/messages`, {
+        cache: 'no-store',
+      })
+      setMessages(data)
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : 'メッセージの取得に失敗しました')
     }
-    setMessages(json.data ?? [])
   }
 
   useEffect(() => {
@@ -191,35 +134,25 @@ export default function VendorOfferDetailPage({ params }: { params: { id: string
 
     try {
       if (offer?.my_application?.id) {
-        const res = await fetch(`/api/event-applications/${offer.my_application.id}/messages`, {
+        await fetchApi<ApplicationSendMessagePayload>(`/api/event-applications/${offer.my_application.id}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: questionDraft }),
         })
-        const json = await res.json()
-        if (!res.ok) {
-          setError(json.error ?? '質問の送信に失敗しました')
-          return
-        }
       } else {
-        const res = await fetch('/api/event-applications', {
+        await fetchApi<ApplicationCreatePayload>('/api/event-applications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ offer_id: params.id, message: questionDraft, mode: 'inquiry' }),
         })
-        const json = await res.json()
-        if (!res.ok) {
-          setError(json.error ?? '質問の送信に失敗しました')
-          return
-        }
       }
 
       setQuestionDraft('')
       clearQuestionDraft()
       setMessage('質問を送りました。返信が来ると右上のお知らせに表示されます。')
       await refreshAll()
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setSendingQuestion(false)
     }
@@ -232,23 +165,18 @@ export default function VendorOfferDetailPage({ params }: { params: { id: string
     setMessage(null)
 
     try {
-      const res = await fetch('/api/event-applications', {
+      await fetchApi<ApplicationCreatePayload>('/api/event-applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offer_id: params.id, message: applicationDraft, mode: 'application' }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '応募に失敗しました')
-        return
-      }
 
       setApplicationDraft('')
       clearApplicationDraft()
       setMessage('応募を送りました。今後のやり取りはこのページと応募状況から確認できます。')
       await refreshAll()
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setSendingApplication(false)
     }
@@ -259,21 +187,16 @@ export default function VendorOfferDetailPage({ params }: { params: { id: string
     setSendingMessage(true)
     setError(null)
     try {
-      const res = await fetch(`/api/event-applications/${offer.my_application.id}/messages`, {
+      await fetchApi<ApplicationSendMessagePayload>(`/api/event-applications/${offer.my_application.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: questionDraft }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? 'メッセージ送信に失敗しました')
-        return
-      }
       setQuestionDraft('')
       clearQuestionDraft()
       await refreshAll()
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setSendingMessage(false)
     }
@@ -438,81 +361,41 @@ export default function VendorOfferDetailPage({ params }: { params: { id: string
                 {messages.length === 0 ? (
                   <p className="text-sm text-gray-500">まだやり取りはありません。</p>
                 ) : (
-                  messages.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-                        isStatusUpdateMessage(entry.message)
-                          ? 'mx-auto w-full max-w-full border border-amber-200 bg-amber-50 text-amber-900'
-                          : entry.sender_role === 'vendor'
-                          ? 'ml-auto bg-[var(--accent-blue)] text-white'
-                          : 'bg-[#f3f5f8] text-gray-700'
-                      } ${isInitialApplicationMessage(entry, offer.my_application?.initial_message ?? null) ? 'ring-2 ring-blue-200 ring-offset-2' : ''}`}
-                    >
-                      <p className={`text-[11px] font-semibold ${
-                        isStatusUpdateMessage(entry.message)
-                          ? 'text-amber-700'
-                          : entry.sender_role === 'vendor'
-                            ? 'text-blue-100'
-                            : 'text-gray-500'
-                      }`}>
-                        {threadMessageLabel(entry, offer.my_application?.initial_message ?? null)}
-                      </p>
-                      <p className={isInitialApplicationMessage(entry, offer.my_application?.initial_message ?? null) ? 'mt-1 font-semibold' : ''}>
-                        {entry.message}
-                      </p>
-                      <p className={`mt-2 text-[11px] ${
-                        isStatusUpdateMessage(entry.message)
-                          ? 'text-amber-700'
-                          : entry.sender_role === 'vendor'
-                            ? 'text-blue-100'
-                            : 'text-gray-400'
-                      }`}>
-                        {new Date(entry.created_at).toLocaleString('ja-JP')}
-                      </p>
-                    </div>
-                  ))
+                  messages.map((entry) => {
+                    const presentation = getApplicationMessagePresentation({
+                      message: entry,
+                      initialMessage: offer.my_application?.initial_message ?? null,
+                      currentRole: 'vendor',
+                    })
+
+                    return (
+                      <MarketplaceMessageItem
+                        key={entry.id}
+                        label={presentation.label}
+                        message={entry.message}
+                        createdAt={entry.created_at}
+                        align={presentation.align}
+                        tone={presentation.tone}
+                        highlighted={presentation.highlighted}
+                      />
+                    )
+                  })
                 )}
               </div>
             </div>
           )}
 
-          <div className="soft-panel p-6">
-            <h2 className="text-lg font-semibold text-gray-800">主催者情報</h2>
-            <div className="mt-4 space-y-2 text-sm text-gray-600">
-              <p>団体名 {offer.organizer_name}</p>
-              <p>担当者 {offer.organizer_contact_name || '-'}</p>
-            </div>
-            {(offer.organizer_instagram_url || offer.organizer_x_url) && (
-              <div className="mt-4 flex flex-wrap gap-3 text-sm">
-                {offer.organizer_instagram_url && (
-                  <a
-                    href={offer.organizer_instagram_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-[#f8fafc] px-4 py-2 font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
-                  >
-                    Instagramを見る
-                  </a>
-                )}
-                {offer.organizer_x_url && (
-                  <a
-                    href={offer.organizer_x_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-[#f8fafc] px-4 py-2 font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
-                  >
-                    Xを見る
-                  </a>
-                )}
-              </div>
-            )}
-            {offer.organizer_description && (
-              <p className="mt-4 rounded-2xl bg-[#f8fafc] p-4 text-sm text-gray-700 whitespace-pre-wrap">
-                {offer.organizer_description}
-              </p>
-            )}
-          </div>
+          <PublicProfileCard
+            title="主催者情報"
+            nameLabel="団体名"
+            name={offer.organizer_name}
+            contactLabel="担当者"
+            contactName={offer.organizer_contact_name}
+            logoImageUrl={offer.organizer_logo_image_url}
+            instagramUrl={offer.organizer_instagram_url}
+            xUrl={offer.organizer_x_url}
+            description={offer.organizer_description}
+          />
         </div>
       </div>
     </div>

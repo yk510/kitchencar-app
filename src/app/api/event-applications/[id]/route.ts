@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 import { contactReleaseMessage, statusUpdateMessage } from '@/lib/applicationMessages'
+import type { ApplicationMutationPayload } from '@/types/api-payloads'
 
 export async function PATCH(
   req: NextRequest,
@@ -20,7 +22,7 @@ export async function PATCH(
         : null
 
     if (!status && !releaseContact) {
-      return NextResponse.json({ error: '更新内容が不正です' }, { status: 400 })
+      return apiError('更新内容が不正です', 400)
     }
 
     const { data: application, error: applicationError } = await (supabase as any)
@@ -30,22 +32,22 @@ export async function PATCH(
       .maybeSingle()
 
     if (applicationError || !application) {
-      return NextResponse.json({ error: '応募情報が見つかりません' }, { status: 404 })
+      return apiError('応募情報が見つかりません', 404)
     }
 
     if (role !== 'organizer' || application.organizer_user_id !== user.id) {
-      return NextResponse.json({ error: '更新権限がありません' }, { status: 403 })
+      return apiError('更新権限がありません', 403)
     }
 
     const updateTimestamp = new Date().toISOString()
 
     if (releaseContact) {
       if (application.status !== 'accepted') {
-        return NextResponse.json({ error: '出店決定後に連絡先を公開できます' }, { status: 400 })
+        return apiError('出店決定後に連絡先を公開できます', 400)
       }
 
       if (application.contact_released_at) {
-        return NextResponse.json({ error: '連絡先情報はすでに公開済みです' }, { status: 400 })
+        return apiError('連絡先情報はすでに公開済みです', 400)
       }
 
       const { data: organizerProfile, error: organizerProfileError } = await (supabase as any)
@@ -55,11 +57,11 @@ export async function PATCH(
         .maybeSingle()
 
       if (organizerProfileError || !organizerProfile) {
-        return NextResponse.json({ error: '主催者設定の取得に失敗しました' }, { status: 500 })
+        return apiError('主催者設定の取得に失敗しました')
       }
 
       if (!organizerProfile.contact_email && !organizerProfile.phone) {
-        return NextResponse.json({ error: '公開できる連絡先情報がありません' }, { status: 400 })
+        return apiError('公開できる連絡先情報がありません', 400)
       }
 
       const releaseMessage = contactReleaseMessage({
@@ -77,7 +79,7 @@ export async function PATCH(
         .eq('id', id)
 
       if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 })
+        return apiError(updateError.message)
       }
 
       const messageInsert = await (supabase as any)
@@ -94,10 +96,11 @@ export async function PATCH(
         ])
 
       if (messageInsert.error) {
-        return NextResponse.json({ error: messageInsert.error.message }, { status: 500 })
+        return apiError(messageInsert.error.message)
       }
 
-      return NextResponse.json({ data: { ...application, contact_released_at: updateTimestamp } })
+      const payload: ApplicationMutationPayload = { ...application, contact_released_at: updateTimestamp }
+      return apiOk(payload)
     }
 
     const { data, error } = await (supabase as any)
@@ -111,7 +114,7 @@ export async function PATCH(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
     if (status === 'accepted' || status === 'rejected') {
@@ -129,13 +132,14 @@ export async function PATCH(
         ])
 
       if (messageInsert.error) {
-        return NextResponse.json({ error: messageInsert.error.message }, { status: 500 })
+        return apiError(messageInsert.error.message)
       }
     }
 
-    return NextResponse.json({ data })
+    const payload: ApplicationMutationPayload = data
+    return apiOk(payload)
   } catch (error) {
     console.error('[event-applications PATCH]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

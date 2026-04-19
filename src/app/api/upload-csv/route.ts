@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { parseCsvString, groupTransactions } from '@/lib/csvParser'
 import type { CsvUploadResult } from '@/types/database'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,13 +12,13 @@ export async function POST(req: NextRequest) {
 
     const { csvText } = await req.json()
     if (!csvText || typeof csvText !== 'string') {
-      return NextResponse.json({ error: 'CSVテキストが空です' }, { status: 400 })
+      return apiError('CSVテキストが空です', 400)
     }
 
     // 1. CSV をパース
     const rows = parseCsvString(csvText)
     if (rows.length === 0) {
-      return NextResponse.json({ error: 'CSVの行が読み取れませんでした' }, { status: 400 })
+      return apiError('CSVの行が読み取れませんでした', 400)
     }
 
     const { transactions, errors } = groupTransactions(rows)
@@ -127,9 +128,9 @@ export async function POST(req: NextRequest) {
     result.inserted = total
     result.updated  = 0
 
-    return NextResponse.json(result)
+    return apiOk(result)
   } catch (e) {
     console.error('[upload-csv]', e)
-    return NextResponse.json({ error: 'サーバーエラーが発生しました' }, { status: 500 })
+    return apiError('サーバーエラーが発生しました')
   }
 }

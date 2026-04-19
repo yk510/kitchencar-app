@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { NotificationsUnreadCountPayload } from '@/types/api-payloads'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -12,12 +14,13 @@ export async function GET(req: NextRequest) {
     .eq(role === 'organizer' ? 'organizer_user_id' : 'vendor_user_id', user.id)
 
   if (applicationsError) {
-    return NextResponse.json({ error: applicationsError.message }, { status: 500 })
+    return apiError(applicationsError.message)
   }
 
   const applicationIds = (applications ?? []).map((row: any) => row.id)
   if (applicationIds.length === 0) {
-    return NextResponse.json({ count: 0 })
+    const payload: NotificationsUnreadCountPayload = { count: 0 }
+    return apiOk(payload)
   }
 
   const { data: messages, error } = await (supabase as any)
@@ -26,7 +29,7 @@ export async function GET(req: NextRequest) {
     .in('application_id', applicationIds)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
   const count = (messages ?? []).filter((message: any) =>
@@ -35,5 +38,6 @@ export async function GET(req: NextRequest) {
       : message.sender_role === 'organizer' && !message.read_by_vendor_at
   ).length
 
-  return NextResponse.json({ count })
+  const payload: NotificationsUnreadCountPayload = { count }
+  return apiOk(payload)
 }

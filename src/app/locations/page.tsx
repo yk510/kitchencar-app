@@ -1,37 +1,37 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-interface Location {
-  id: string
-  name: string
-  address: string
-  latitude: number | null
-  longitude: number | null
-  created_at: string
-}
+import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { useDraftForm } from '@/lib/use-draft-form'
+import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import type { LocationUpsertPayload, MutationSuccessPayload } from '@/types/api-payloads'
+import type { ManagedLocation as Location } from '@/types/operations'
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    pending: submitting,
+    message: result,
+    error,
+    setError,
+    start,
+    succeed,
+    stop,
+  } = useSubmissionFeedback()
 
-  const formDraft = usePersistentDraft('draft:locations-form', {
+  const { form, setForm, clearDraft } = useDraftForm('draft:locations-form', {
     name: '',
     address: '',
   })
-  const { value: form, setValue: setForm, clearDraft } = formDraft
 
   async function loadLocations() {
     try {
-      const res = await fetch('/api/locations', { cache: 'no-store' })
-      const json = await res.json()
-      setLocations(json.data ?? [])
-    } catch (e) {
-      setError('出店場所一覧の取得に失敗しました')
+      const data = await fetchApi<Location[]>('/api/locations', { cache: 'no-store' })
+      setLocations(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '出店場所一覧の取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -49,12 +49,10 @@ export default function LocationsPage() {
       return
     }
 
-    setSubmitting(true)
-    setResult(null)
-    setError(null)
+    start()
 
     try {
-      const res = await fetch('/api/locations', {
+      const result = await fetchApi<LocationUpsertPayload>('/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -62,17 +60,12 @@ export default function LocationsPage() {
           address: form.address.trim(),
         }),
       })
+      const location = result?.location ?? null
+      const geocoded = result?.geocoded ?? null
 
-      const json = await res.json()
-
-      if (!res.ok) {
-        setError(json.error ?? '登録に失敗しました')
-        return
-      }
-
-      setResult(
-        `場所を登録しました。住所: ${json.location?.address ?? '-'}${
-          json.geocoded ? ` / 座標取得: ${json.geocoded.slice(0, 40)}...` : ''
+      succeed(
+        `場所を登録しました。住所: ${location?.address ?? '-'}${
+          geocoded ? ` / 座標取得: ${String(geocoded).slice(0, 40)}...` : ''
         }`
       )
 
@@ -82,11 +75,10 @@ export default function LocationsPage() {
       })
       clearDraft()
 
-      loadLocations()
-    } catch (e) {
-      setError('通信エラーが発生しました')
-    } finally {
-      setSubmitting(false)
+      void loadLocations()
+    } catch (err) {
+      stop()
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     }
   }
 
@@ -94,10 +86,10 @@ export default function LocationsPage() {
     if (!confirm(`「${name}」を削除しますか？`)) return
 
     try {
-      await fetch(`/api/locations/${id}`, { method: 'DELETE' })
-      loadLocations()
-    } catch (e) {
-      setError('削除に失敗しました')
+      await fetchApi<MutationSuccessPayload>(`/api/locations/${id}`, { method: 'DELETE' })
+      void loadLocations()
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '削除に失敗しました')
     }
   }
 

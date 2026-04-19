@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   if (locErr) {
     console.error('[analytics/locations] locations error:', locErr)
-    return NextResponse.json({ error: locErr.message }, { status: 500 })
+    return apiError(locErr.message)
   }
 
   const { data: txns, error: txErr } = await (supabase as any)
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   if (txErr) {
     console.error('[analytics/locations] transactions error:', txErr)
-    return NextResponse.json({ error: txErr.message }, { status: 500 })
+    return apiError(txErr.message)
   }
 
   const { data: sales, error: salesErr } = await (supabase as any)
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   if (salesErr) {
     console.error('[analytics/locations] product_sales error:', salesErr)
-    return NextResponse.json({ error: salesErr.message }, { status: 500 })
+    return apiError(salesErr.message)
   }
 
   const { data: costs, error: costsErr } = await (supabase as any)
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   if (costsErr) {
     console.error('[analytics/locations] product_master error:', costsErr)
-    return NextResponse.json({ error: costsErr.message }, { status: 500 })
+    return apiError(costsErr.message)
   }
 
   const { data: weather, error: weatherErr } = await (supabase as any)
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
 
   if (weatherErr) {
     console.error('[analytics/locations] weather_logs error:', weatherErr)
-    return NextResponse.json({ error: weatherErr.message }, { status: 500 })
+    return apiError(weatherErr.message)
   }
 
   console.log('[analytics/locations] counts:', {
@@ -153,5 +154,5 @@ export async function GET(req: NextRequest) {
 
   console.log('[analytics/locations] result:', result)
 
-  return NextResponse.json({ data: result })
+  return apiOk(result)
 }

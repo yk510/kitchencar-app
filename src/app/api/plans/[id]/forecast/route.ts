@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { requireRouteSession } from '@/lib/auth'
 import { createForecastForPlanDay } from '@/lib/forecast'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { PlanForecastRunPayload } from '@/types/api-payloads'
 
 export async function POST(
   req: NextRequest,
@@ -18,7 +20,7 @@ export async function POST(
       .eq('plan_id', params.id)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
     for (const day of (days ?? []) as any[]) {
@@ -35,9 +37,10 @@ export async function POST(
     }
 
     revalidatePath('/plans')
-    return NextResponse.json({ success: true })
+    const payload: PlanForecastRunPayload = { success: true }
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans/[id]/forecast POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

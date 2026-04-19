@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-
-type DimensionKey = 'location' | 'weekday' | 'weather' | 'hour' | 'product'
-type MetricKey =
-  | 'sales'
-  | 'txn_count'
-  | 'avg_ticket'
-  | 'gross_profit'
-  | 'gross_profit_rate'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
+import type {
+  CrossAnalyticsDimensionKey as DimensionKey,
+  CrossAnalyticsMetricKey as MetricKey,
+  CrossAnalyticsPayload,
+  CrossAnalyticsRow,
+} from '@/types/api-payloads'
 
 type Preset = {
   id: string
@@ -44,7 +43,7 @@ export default function CrossAnalyticsClient() {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [draggingDimension, setDraggingDimension] = useState<DimensionKey | null>(null)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<CrossAnalyticsRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [presetName, setPresetName] = useState('')
@@ -77,7 +76,7 @@ export default function CrossAnalyticsClient() {
       setLoading(true)
       setError(null)
 
-      const res = await fetch('/api/analytics/cross', {
+      const data = await fetchApi<CrossAnalyticsPayload>('/api/analytics/cross', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,16 +86,9 @@ export default function CrossAnalyticsClient() {
           end: end || undefined,
         }),
       })
-
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? 'クロス分析の取得に失敗しました')
-        return
-      }
-
-      setRows(json.rows ?? [])
-    } catch {
-      setError('クロス分析の取得に失敗しました')
+      setRows(data.rows ?? [])
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'クロス分析の取得に失敗しました')
     } finally {
       setLoading(false)
     }

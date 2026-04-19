@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { MutationSuccessPayload } from '@/types/api-payloads'
 
 // PUT: 場所情報更新
 export async function PUT(
@@ -17,8 +19,9 @@ export async function PUT(
     .update({ name, address })
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  if (error) return apiError(error.message)
+  const payload: MutationSuccessPayload = { success: true }
+  return apiOk(payload)
 }
 
 // DELETE: 場所削除
@@ -35,6 +38,7 @@ export async function DELETE(
     .delete()
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  if (error) return apiError(error.message)
+  const payload: MutationSuccessPayload = { success: true }
+  return apiOk(payload)
 }

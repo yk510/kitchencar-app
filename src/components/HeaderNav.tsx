@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
+import { fetchApi } from '@/lib/api-client'
 import { getHomePathByRole } from '@/lib/user-role'
+import type { NotificationsUnreadCountPayload } from '@/types/api-payloads'
 
 type NavGroup = {
   label: string
@@ -99,11 +101,10 @@ export default function HeaderNav() {
 
     async function loadUnreadCount() {
       try {
-        const res = await fetch('/api/notifications/unread-count', { cache: 'no-store' })
-        const json = await res.json()
-        if (res.ok) {
-          setUnreadCount(Number(json.count ?? 0))
-        }
+        const data = await fetchApi<NotificationsUnreadCountPayload>('/api/notifications/unread-count', {
+          cache: 'no-store',
+        })
+        setUnreadCount(Number(data.count ?? 0))
       } catch {
         setUnreadCount(0)
       }

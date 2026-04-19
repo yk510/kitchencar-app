@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import { getOrganizerPublicProfile } from '@/lib/public-profiles'
 
 export async function GET(
   req: NextRequest,
@@ -10,7 +12,7 @@ export async function GET(
   const { supabase, user, role } = auth.session
 
   if (role !== 'vendor') {
-    return NextResponse.json({ error: '事業者向けの画面です' }, { status: 403 })
+    return apiError('事業者向けの画面です', 403)
   }
 
   const [{ data: offer, error: offerError }, { data: application }] = await Promise.all([
@@ -29,23 +31,19 @@ export async function GET(
   ])
 
   if (offerError || !offer) {
-    return NextResponse.json({ error: '募集が見つかりません' }, { status: 404 })
+    return apiError('募集が見つかりません', 404)
   }
 
-  const { data: organizer } = await (supabase as any)
-    .rpc('get_organizer_public_profile', { target_user_id: offer.user_id })
-    .maybeSingle()
+  const organizer = await getOrganizerPublicProfile(supabase as any, offer.user_id)
 
-  return NextResponse.json({
-    data: {
-      ...offer,
-      organizer_name: organizer?.organizer_name ?? '主催者',
-      organizer_contact_name: organizer?.contact_name ?? null,
-      organizer_logo_image_url: organizer?.logo_image_url ?? null,
-      organizer_instagram_url: organizer?.instagram_url ?? null,
-      organizer_x_url: organizer?.x_url ?? null,
-      organizer_description: organizer?.description ?? null,
-      my_application: application ?? null,
-    },
+  return apiOk({
+    ...offer,
+    organizer_name: organizer?.organizer_name ?? '主催者',
+    organizer_contact_name: organizer?.contact_name ?? null,
+    organizer_logo_image_url: organizer?.logo_image_url ?? null,
+    organizer_instagram_url: organizer?.instagram_url ?? null,
+    organizer_x_url: organizer?.x_url ?? null,
+    organizer_description: organizer?.description ?? null,
+    my_application: application ?? null,
   })
 }

@@ -1,15 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { UserProfilePayload, UserProfileUpdatePayload } from '@/types/api-payloads'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
 
-  return NextResponse.json({
-    data: auth.session.profile,
+  const payload: UserProfilePayload = {
+    profile: auth.session.profile,
     role: auth.session.role,
     email: auth.session.user.email ?? null,
-  })
+  }
+
+  return apiOk(payload)
 }
 
 export async function POST(req: NextRequest) {
@@ -38,12 +42,17 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
-    return NextResponse.json({ data, role: data.role })
+    const payload: UserProfileUpdatePayload = {
+      profile: data,
+      role: data.role,
+    }
+
+    return apiOk(payload)
   } catch (error) {
     console.error('[user/profile POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

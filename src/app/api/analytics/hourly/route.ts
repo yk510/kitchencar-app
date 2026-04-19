@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     .select('hour_of_day, day_of_week, total_amount, txn_date')
     .eq('is_return', false)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return apiError(error.message)
 
   const hourTotals = Array.from({ length: 24 }, () => ({ total: 0, count: 0 }))
   const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0))
@@ -41,5 +42,5 @@ export async function GET(req: NextRequest) {
     hours: heatmap[dow].map((sales, h) => ({ hour: h, sales })),
   }))
 
-  return NextResponse.json({ hourly: hourlyData, heatmap: heatmapData })
+  return apiOk({ hourly: hourlyData, heatmap: heatmapData })
 }

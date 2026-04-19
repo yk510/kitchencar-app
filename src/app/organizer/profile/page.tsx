@@ -4,24 +4,16 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { compressImageFile } from '@/lib/client-image'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
-import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-type OrganizerProfile = {
-  organizer_name: string
-  contact_name: string | null
-  contact_email: string | null
-  phone: string | null
-  logo_image_url: string | null
-  instagram_url: string | null
-  x_url: string | null
-  description: string | null
-}
+import { useDraftForm } from '@/lib/use-draft-form'
+import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import type { OrganizerProfile } from '@/types/marketplace'
 
 export default function OrganizerProfilePage() {
   const router = useRouter()
   const { refreshProfile } = useAuth()
-  const draftState = usePersistentDraft('draft:organizer-profile-form', {
+  const { form, setForm, hasStoredDraft, clearDraft } = useDraftForm('draft:organizer-profile-form', {
     organizer_name: '',
     contact_name: '',
     contact_email: '',
@@ -31,19 +23,23 @@ export default function OrganizerProfilePage() {
     x_url: '',
     description: '',
   })
-  const { value: form, setValue: setForm, hasStoredDraft, clearDraft } = draftState
   const [savedProfile, setSavedProfile] = useState<OrganizerProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    pending: saving,
+    message,
+    error,
+    setError,
+    start,
+    succeed,
+    stop,
+    reset,
+  } = useSubmissionFeedback()
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/organizer/profile', { cache: 'no-store' })
-        const json = await res.json()
-        const data: OrganizerProfile | null = json.data ?? null
+        const data = await fetchApi<OrganizerProfile | null>('/api/organizer/profile', { cache: 'no-store' })
         setSavedProfile(data)
 
         if (data && !hasStoredDraft) {
@@ -88,24 +84,16 @@ export default function OrganizerProfilePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setMessage(null)
-    setError(null)
+    start()
 
     try {
-      const res = await fetch('/api/organizer/profile', {
+      await fetchApi<null>('/api/organizer/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      const json = await res.json()
 
-      if (!res.ok) {
-        setError(json.error ?? '保存に失敗しました')
-        return
-      }
-
-      setMessage('主催者情報を保存しました')
+      succeed('主催者情報を保存しました')
       clearDraft()
       setSavedProfile({
         organizer_name: form.organizer_name,
@@ -120,10 +108,9 @@ export default function OrganizerProfilePage() {
       await refreshProfile()
       notifyProfileUpdated()
       router.refresh()
-    } catch {
-      setError('通信エラーが発生しました')
-    } finally {
-      setSaving(false)
+    } catch (err) {
+      stop()
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     }
   }
 
@@ -186,7 +173,7 @@ export default function OrganizerProfilePage() {
                         description: savedProfile.description ?? '',
                       })
                       clearDraft()
-                      setMessage(null)
+                      reset()
                     }}
                     className="mt-3 rounded-full bg-white px-4 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200"
                   >

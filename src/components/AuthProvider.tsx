@@ -4,8 +4,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { AUTH_COOKIE_NAME } from '@/lib/auth-cookie'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
 import type { Database } from '@/types/database'
+import type { UserProfilePayload } from '@/types/api-payloads'
 
 type AuthContextValue = {
   supabase: SupabaseClient<Database> | null
@@ -52,19 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = window.setTimeout(() => controller.abort(), 2500)
 
     try {
-      const res = await fetch('/api/user/profile', {
+      const data = await fetchApi<UserProfilePayload>('/api/user/profile', {
         cache: 'no-store',
         signal: controller.signal,
       })
-
-      if (!res.ok) {
-        setRole('vendor')
-        setProfileReady(true)
-        return
-      }
-
-      const json = await res.json()
-      setRole(json.role ?? 'vendor')
+      setRole(data.role ?? 'vendor')
       setProfileReady(true)
     } catch {
       setRole('vendor')

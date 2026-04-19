@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     .from('product_sales')
     .select('product_name, unit_price, quantity, subtotal')
 
-  if (saleErr) return NextResponse.json({ error: saleErr.message }, { status: 500 })
+  if (saleErr) return apiError(saleErr.message)
 
   // 原価マスタ
   const { data: costs } = await (supabase as any)
@@ -78,5 +79,5 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ data: result })
+  return apiOk(result)
 }

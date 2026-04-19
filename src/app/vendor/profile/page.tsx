@@ -4,25 +4,16 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { compressImageFile } from '@/lib/client-image'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
-import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-type VendorProfile = {
-  business_name: string
-  owner_name: string | null
-  contact_email: string | null
-  phone: string | null
-  main_menu: string | null
-  logo_image_url: string | null
-  instagram_url: string | null
-  x_url: string | null
-  description: string | null
-}
+import { useDraftForm } from '@/lib/use-draft-form'
+import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import type { VendorProfile } from '@/types/marketplace'
 
 export default function VendorProfilePage() {
   const router = useRouter()
   const { refreshProfile } = useAuth()
-  const draftState = usePersistentDraft('draft:vendor-profile-form', {
+  const { form, setForm, hasStoredDraft, clearDraft } = useDraftForm('draft:vendor-profile-form', {
     business_name: '',
     owner_name: '',
     contact_email: '',
@@ -33,18 +24,21 @@ export default function VendorProfilePage() {
     x_url: '',
     description: '',
   })
-  const { value: form, setValue: setForm, hasStoredDraft, clearDraft } = draftState
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    pending: saving,
+    message,
+    error,
+    setError,
+    start,
+    succeed,
+    stop,
+  } = useSubmissionFeedback()
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/vendor/profile', { cache: 'no-store' })
-        const json = await res.json()
-        const data: VendorProfile | null = json.data ?? null
+        const data = await fetchApi<VendorProfile | null>('/api/vendor/profile', { cache: 'no-store' })
 
         if (data && !hasStoredDraft) {
           setForm({
@@ -71,32 +65,23 @@ export default function VendorProfilePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setMessage(null)
-    setError(null)
+    start()
 
     try {
-      const res = await fetch('/api/vendor/profile', {
+      await fetchApi<null>('/api/vendor/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      const json = await res.json()
 
-      if (!res.ok) {
-        setError(json.error ?? '保存に失敗しました')
-        return
-      }
-
-      setMessage('事業者情報を保存しました')
+      succeed('事業者情報を保存しました')
       clearDraft()
       await refreshProfile()
       notifyProfileUpdated()
       router.refresh()
-    } catch {
-      setError('通信エラーが発生しました')
-    } finally {
-      setSaving(false)
+    } catch (err) {
+      stop()
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     }
   }
 

@@ -1,14 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-interface ProductMaster {
-  product_name:    string
-  cost_amount:     number | null
-  cost_rate:       number | null
-  cost_updated_at: string | null
-}
+import type { MutationSuccessPayload, ProductMasterListPayload } from '@/types/api-payloads'
+import type { ProductMaster } from '@/types/operations'
 
 export default function ProductMasterPage() {
   const draftState = usePersistentDraft<Record<string, { amount: string; rate: string; mode: 'amount' | 'rate' }>>(
@@ -27,22 +23,24 @@ export default function ProductMasterPage() {
 
   async function load() {
     setLoading(true)
-    const res  = await fetch('/api/products/master')
-    const json = await res.json()
-    const data: ProductMaster[] = json.data ?? []
-    setProducts(data)
+    try {
+      const data = await fetchApi<ProductMasterListPayload>('/api/products/master')
+      setProducts(data)
 
-    // 既存値で inputs を初期化
-    const init: typeof inputs = {}
-    for (const p of data) {
-      init[p.product_name] = {
-        amount: p.cost_amount != null ? String(p.cost_amount) : '',
-        rate:   p.cost_rate   != null ? String(p.cost_rate)   : '',
-        mode:   p.cost_rate   != null ? 'rate' : 'amount',
+      const init: typeof inputs = {}
+      for (const p of data) {
+        init[p.product_name] = {
+          amount: p.cost_amount != null ? String(p.cost_amount) : '',
+          rate:   p.cost_rate   != null ? String(p.cost_rate)   : '',
+          mode:   p.cost_rate   != null ? 'rate' : 'amount',
+        }
       }
+      setInputs(draftState.hasStoredDraft ? { ...init, ...draftState.value } : init)
+    } catch (err) {
+      alert(err instanceof ApiClientError ? err.message : '商品一覧の取得に失敗しました')
+    } finally {
+      setLoading(false)
     }
-    setInputs(draftState.hasStoredDraft ? { ...init, ...draftState.value } : init)
-    setLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -60,21 +58,23 @@ export default function ProductMasterPage() {
     }
 
     setSaving(productName)
-    const body: Record<string, unknown> = { product_name: productName }
-    if (isRate) body.cost_rate   = numVal
-    else        body.cost_amount = Math.round(numVal)
+    try {
+      const body: Record<string, unknown> = { product_name: productName }
+      if (isRate) body.cost_rate   = numVal
+      else        body.cost_amount = Math.round(numVal)
 
-    const res = await fetch('/api/products/master', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    })
-    setSaving(null)
-    if (res.ok) {
+      await fetchApi<MutationSuccessPayload>('/api/products/master', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      })
       draftState.clearDraft()
       await load()
+    } catch (err) {
+      alert(err instanceof ApiClientError ? err.message : '保存に失敗しました')
+    } finally {
+      setSaving(null)
     }
-    else alert('保存に失敗しました')
   }
 
   const unregistered = products.filter(p => p.cost_amount == null && p.cost_rate == null)

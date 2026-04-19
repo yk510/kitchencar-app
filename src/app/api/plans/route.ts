@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { requireRouteSession } from '@/lib/auth'
 import { createForecastForPlanDay } from '@/lib/forecast'
 import { geocodeAddress } from '@/lib/geocode'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { PlansListPayload, PlansSaveApiPayload } from '@/types/api-payloads'
 
 function normalizeMunicipality(address: string) {
   const trimmed = address.trim().replace(/\s+/g, '')
@@ -46,13 +48,14 @@ export async function GET(req: NextRequest) {
       .order('plan_month', { ascending: false })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
-    return NextResponse.json({ data: plans ?? [] })
+    const payload: PlansListPayload = plans ?? []
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans GET]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }
 
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest) {
     const { title, plan_month, source_image_name, days } = await req.json()
 
     if (!plan_month || !Array.isArray(days) || days.length === 0) {
-      return NextResponse.json({ error: '予定データが不足しています' }, { status: 400 })
+      return apiError('予定データが不足しています', 400)
     }
 
     const { data: plan, error: planErr } = await (supabase as any)
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (planErr || !plan) {
-      return NextResponse.json({ error: planErr?.message ?? '予定の保存に失敗しました' }, { status: 500 })
+      return apiError(planErr?.message ?? '予定の保存に失敗しました')
     }
 
     const normalizedDays = []
@@ -103,10 +106,7 @@ export async function POST(req: NextRequest) {
       let locationId = day.location_id ?? null
 
       if (operationType !== 'closed' && (!locationName || !municipality)) {
-        return NextResponse.json(
-          { error: '通常営業またはイベント営業では、出店場所と市町村が必須です' },
-          { status: 400 }
-        )
+        return apiError('通常営業またはイベント営業では、出店場所と市町村が必須です', 400)
       }
 
       if (!locationId && locationName && municipality) {
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
           .single()
 
         if (locationError) {
-          return NextResponse.json({ error: locationError.message }, { status: 500 })
+          return apiError(locationError.message)
         }
 
         locationId = location?.id ?? null
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
       .select()
 
     if (dayErr || !insertedDays) {
-      return NextResponse.json({ error: dayErr?.message ?? '予定日の保存に失敗しました' }, { status: 500 })
+      return apiError(dayErr?.message ?? '予定日の保存に失敗しました')
     }
 
     for (const day of insertedDays as any[]) {
@@ -188,9 +188,10 @@ export async function POST(req: NextRequest) {
     revalidatePath('/analytics/daily')
     revalidatePath('/locations')
 
-    return NextResponse.json({ plan_id: plan.id })
+    const payload: PlansSaveApiPayload = { plan_id: plan.id }
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

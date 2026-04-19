@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { MutationSuccessPayload } from '@/types/api-payloads'
 
 // GET
 export async function GET(req: NextRequest) {
@@ -13,8 +15,8 @@ export async function GET(req: NextRequest) {
     .order('cost_amount', { ascending: true, nullsFirst: true })
     .order('product_name', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data })
+  if (error) return apiError(error.message)
+  return apiOk(data)
 }
 
 // POST
@@ -27,10 +29,10 @@ export async function POST(req: NextRequest) {
     const { product_name, cost_amount, cost_rate } = await req.json()
 
     if (!product_name) {
-      return NextResponse.json({ error: '商品名が必要です' }, { status: 400 })
+      return apiError('商品名が必要です', 400)
     }
     if (cost_amount == null && cost_rate == null) {
-      return NextResponse.json({ error: '原価額か原価率のどちらかを入力してください' }, { status: 400 })
+      return apiError('原価額か原価率のどちらかを入力してください', 400)
     }
 
     const { data: current } = await (supabase as any)
@@ -63,9 +65,10 @@ export async function POST(req: NextRequest) {
         { onConflict: 'user_id,product_name' }
       )
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true })
+    if (error) return apiError(error.message)
+    const payload: MutationSuccessPayload = { success: true }
+    return apiOk(payload)
   } catch (e) {
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

@@ -2,27 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
-
-type OfferRow = {
-  id: string
-  title: string
-  event_date: string
-  event_end_date: string | null
-  venue_name: string
-  municipality: string | null
-  recruitment_count: number
-  stall_fee: number | null
-  application_deadline: string | null
-  organizer_name: string
-  my_application: {
-    id: string
-    status: 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
-    last_message_at: string
-  } | null
-}
-
-type ApplicationStatus = 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
+import type { ApplicationStatus, VendorOfferListItem } from '@/types/marketplace'
 
 function formatPeriod(start: string, end?: string | null) {
   return end && end !== start ? `${start} 〜 ${end}` : start
@@ -37,21 +19,18 @@ function statusLabel(status: ApplicationStatus) {
 }
 
 export default function VendorOffersPage() {
-  const [offers, setOffers] = useState<OfferRow[]>([])
+  const [offers, setOffers] = useState<VendorOfferListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   async function loadOffers() {
     try {
-      const res = await fetch('/api/vendor/offers', { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '募集一覧の取得に失敗しました')
-        return
-      }
-      setOffers(json.data ?? [])
-    } catch {
-      setError('募集一覧の取得に失敗しました')
+      const data = await fetchApi<VendorOfferListItem[]>('/api/vendor/offers', { cache: 'no-store' })
+      setOffers(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '募集一覧の取得に失敗しました')
+      setOffers([])
     } finally {
       setLoading(false)
     }

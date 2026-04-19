@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { ApplicationMessagesPayload, ApplicationSendMessagePayload } from '@/types/api-payloads'
 
 async function getAccessibleApplication(supabase: any, applicationId: string, userId: string) {
   const { data, error } = await supabase
@@ -22,7 +24,7 @@ export async function GET(
 
   const { data: application, error: applicationError } = await getAccessibleApplication(supabase as any, params.id, user.id)
   if (applicationError || !application) {
-    return NextResponse.json({ error: '応募情報が見つかりません' }, { status: 404 })
+    return apiError('応募情報が見つかりません', 404)
   }
 
   const { data: messages, error } = await (supabase as any)
@@ -32,7 +34,7 @@ export async function GET(
     .order('created_at', { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
   if (role === 'organizer') {
@@ -51,7 +53,8 @@ export async function GET(
       .eq('sender_role', 'organizer')
   }
 
-  return NextResponse.json({ data: messages ?? [] })
+  const payload: ApplicationMessagesPayload = messages ?? []
+  return apiOk(payload)
 }
 
 export async function POST(
@@ -65,14 +68,14 @@ export async function POST(
 
     const { data: application, error: applicationError } = await getAccessibleApplication(supabase as any, params.id, user.id)
     if (applicationError || !application) {
-      return NextResponse.json({ error: '応募情報が見つかりません' }, { status: 404 })
+      return apiError('応募情報が見つかりません', 404)
     }
 
     const body = await req.json()
     const message = String(body.message ?? '').trim()
 
     if (!message) {
-      return NextResponse.json({ error: 'メッセージを入力してください' }, { status: 400 })
+      return apiError('メッセージを入力してください', 400)
     }
 
     const readTimestamp = new Date().toISOString()
@@ -92,7 +95,7 @@ export async function POST(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
     await (supabase as any)
@@ -102,9 +105,10 @@ export async function POST(
       })
       .eq('id', params.id)
 
-    return NextResponse.json({ data })
+    const payload: ApplicationSendMessagePayload = data
+    return apiOk(payload)
   } catch (error) {
     console.error('[application-messages POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

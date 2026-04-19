@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -13,10 +14,10 @@ export async function GET(req: NextRequest) {
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
-  return NextResponse.json({ data })
+  return apiOk(data)
 }
 
 export async function POST(req: NextRequest) {
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     const description = String(body.description ?? '').trim() || null
 
     if (!business_name) {
-      return NextResponse.json({ error: '事業者名は必須です' }, { status: 400 })
+      return apiError('事業者名は必須です', 400)
     }
 
     const { data, error } = await (supabase as any)
@@ -63,12 +64,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
-    return NextResponse.json({ data })
+    return apiOk(data)
   } catch (error) {
     console.error('[vendor/profile POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

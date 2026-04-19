@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 // 0=月 〜 6=日
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     .select('day_of_week, txn_date, total_amount')
     .eq('is_return', false)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return apiError(error.message)
 
   const { data: sales } = await (supabase as any)
     .from('product_sales')
@@ -49,5 +50,5 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ data: result })
+  return apiOk(result)
 }

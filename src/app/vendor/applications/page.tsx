@@ -3,60 +3,24 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { isStatusUpdateMessage } from '@/lib/applicationMessages'
+import MarketplaceMessageItem from '@/components/MarketplaceMessageItem'
+import { getApplicationMessagePresentation } from '@/lib/applicationMessages'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
+import type {
+  ApplicationMessagesPayload,
+  ApplicationSendMessagePayload,
+  VendorApplicationsPayload,
+} from '@/types/api-payloads'
+import type { MarketplaceMessage, VendorApplicationRow } from '@/types/marketplace'
 
-type ApplicationRow = {
-  id: string
-  status: 'inquiry' | 'pending' | 'under_review' | 'accepted' | 'rejected'
-  last_message_at: string
-  initial_message: string | null
-  contact_released_at: string | null
-  organizer_name: string | null
-  unread_count: number
-  offer: {
-    id: string
-    title: string
-    event_date: string
-    event_end_date: string | null
-    venue_name: string
-  } | null
-}
-
-type MessageRow = {
-  id: string
-  sender_role: 'vendor' | 'organizer'
-  message: string
-  created_at: string
-}
-
-function statusLabel(status: ApplicationRow['status']) {
+function statusLabel(status: VendorApplicationRow['status']) {
   if (status === 'accepted') return '出店決定'
   if (status === 'rejected') return '見送り'
   if (status === 'under_review') return '確認中'
   if (status === 'inquiry') return '質問中'
   return '応募済み'
-}
-
-function messageLabel(message: MessageRow, initialMessage: string | null) {
-  if (isStatusUpdateMessage(message.message)) {
-    return '運営からのお知らせ'
-  }
-
-  if (message.sender_role === 'organizer') {
-    return '主催者からの返信'
-  }
-
-  if (initialMessage && message.message === initialMessage) {
-    return '応募時メッセージ'
-  }
-
-  return '追加メッセージ'
-}
-
-function isInitialApplicationMessage(message: MessageRow, initialMessage: string | null) {
-  return message.sender_role === 'vendor' && !!initialMessage && message.message === initialMessage
 }
 
 export default function VendorApplicationsPage() {
@@ -67,9 +31,9 @@ export default function VendorApplicationsPage() {
   const requestedHandledRef = useRef(false)
   const draftState = usePersistentDraft('draft:vendor-applications-message', '')
   const { hydrated: draftHydrated, setValue: setDraftStorage, clearDraft } = draftState
-  const [applications, setApplications] = useState<ApplicationRow[]>([])
+  const [applications, setApplications] = useState<VendorApplicationRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<MessageRow[]>([])
+  const [messages, setMessages] = useState<MarketplaceMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [draft, setDraft] = useState(draftState.value)
@@ -82,42 +46,37 @@ export default function VendorApplicationsPage() {
 
   async function loadApplications() {
     try {
-      const res = await fetch('/api/event-applications', { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '応募状況の取得に失敗しました')
-        return
-      }
-      const rows = json.data ?? []
+      const rows = await fetchApi<VendorApplicationsPayload>('/api/event-applications', { cache: 'no-store' })
       setApplications(rows)
       setSelectedId((prev) => {
         if (
           requestedApplicationId &&
           !requestedHandledRef.current &&
-          rows.some((row: ApplicationRow) => row.id === requestedApplicationId)
+          rows.some((row: VendorApplicationRow) => row.id === requestedApplicationId)
         ) {
           return requestedApplicationId
         }
         return prev ?? rows[0]?.id ?? null
       })
-    } catch {
-      setError('応募状況の取得に失敗しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '応募状況の取得に失敗しました')
     } finally {
       setLoading(false)
     }
   }
 
   async function loadMessages(applicationId: string) {
-    const res = await fetch(`/api/event-applications/${applicationId}/messages`, { cache: 'no-store' })
-    const json = await res.json()
-    if (!res.ok) {
-      setError(json.error ?? 'メッセージの取得に失敗しました')
-      return
+    try {
+      const data = await fetchApi<ApplicationMessagesPayload>(`/api/event-applications/${applicationId}/messages`, {
+        cache: 'no-store',
+      })
+      setMessages(data)
+      setApplications((prev) =>
+        prev.map((item) => (item.id === applicationId ? { ...item, unread_count: 0 } : item))
+      )
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : 'メッセージの取得に失敗しました')
     }
-    setMessages(json.data ?? [])
-    setApplications((prev) =>
-      prev.map((item) => (item.id === applicationId ? { ...item, unread_count: 0 } : item))
-    )
   }
 
   useEffect(() => {
@@ -167,22 +126,17 @@ export default function VendorApplicationsPage() {
     setError(null)
 
     try {
-      const res = await fetch(`/api/event-applications/${selectedId}/messages`, {
+      await fetchApi<ApplicationSendMessagePayload>(`/api/event-applications/${selectedId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: draft }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '送信に失敗しました')
-        return
-      }
       setDraft('')
       clearDraft()
       loadMessages(selectedId)
       loadApplications()
-    } catch {
-      setError('通信エラーが発生しました')
+    } catch (error) {
+      setError(error instanceof ApiClientError ? error.message : '通信エラーが発生しました')
     } finally {
       setSending(false)
     }
@@ -267,40 +221,25 @@ export default function VendorApplicationsPage() {
                 {messages.length === 0 ? (
                   <p className="text-sm text-gray-500">まだやり取りはありません。</p>
                 ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'mx-auto w-full max-w-full border border-amber-200 bg-amber-50 text-amber-900'
-                          : message.sender_role === 'vendor'
-                          ? 'ml-auto bg-[var(--accent-blue)] text-white'
-                          : 'bg-[#f3f5f8] text-gray-700'
-                      } ${isInitialApplicationMessage(message, selectedApplication.initial_message) ? 'ring-2 ring-blue-200 ring-offset-2' : ''}`}
-                    >
-                      <p className={`text-[11px] font-semibold ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'text-amber-700'
-                          : message.sender_role === 'vendor'
-                            ? 'text-blue-100'
-                            : 'text-gray-500'
-                      }`}>
-                        {messageLabel(message, selectedApplication.initial_message)}
-                      </p>
-                      <p className={isInitialApplicationMessage(message, selectedApplication.initial_message) ? 'mt-1 font-semibold' : ''}>
-                        {message.message}
-                      </p>
-                      <p className={`mt-2 text-[11px] ${
-                        isStatusUpdateMessage(message.message)
-                          ? 'text-amber-700'
-                          : message.sender_role === 'vendor'
-                            ? 'text-blue-100'
-                            : 'text-gray-400'
-                      }`}>
-                        {new Date(message.created_at).toLocaleString('ja-JP')}
-                      </p>
-                    </div>
-                  ))
+                  messages.map((message) => {
+                    const presentation = getApplicationMessagePresentation({
+                      message,
+                      initialMessage: selectedApplication.initial_message,
+                      currentRole: 'vendor',
+                    })
+
+                    return (
+                      <MarketplaceMessageItem
+                        key={message.id}
+                        label={presentation.label}
+                        message={message.message}
+                        createdAt={message.created_at}
+                        align={presentation.align}
+                        tone={presentation.tone}
+                        highlighted={presentation.highlighted}
+                      />
+                    )
+                  })
                 )}
               </div>
 

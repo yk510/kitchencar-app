@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { geocodeAddress } from '@/lib/geocode'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { LocationUpsertPayload } from '@/types/api-payloads'
 
 function normalizeMunicipality(address: string) {
   const trimmed = address.trim().replace(/\s+/g, '')
@@ -24,10 +26,10 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
-  return NextResponse.json({ data })
+  return apiOk(data)
 }
 
 // POST: 新規場所登録
@@ -40,22 +42,19 @@ export async function POST(req: NextRequest) {
     const { name, address } = await req.json()
 
     if (!name || !address) {
-      return NextResponse.json({ error: '場所名と住所は必須です' }, { status: 400 })
+      return apiError('場所名と住所は必須です', 400)
     }
 
     const trimmedName = String(name).trim()
     const normalizedAddress = normalizeMunicipality(String(address))
 
     if (!trimmedName || !normalizedAddress) {
-      return NextResponse.json({ error: '場所名と住所は必須です' }, { status: 400 })
+      return apiError('場所名と住所は必須です', 400)
     }
 
     const geo = await geocodeAddress(normalizedAddress)
     if (!geo) {
-      return NextResponse.json(
-        { error: '住所から座標を取得できませんでした。市町村までの住所で入力してください。' },
-        { status: 422 }
-      )
+      return apiError('住所から座標を取得できませんでした。市町村までの住所で入力してください。', 422)
     }
 
     const { data: location, error: locErr } = await (supabase as any)
@@ -76,15 +75,17 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (locErr) {
-      return NextResponse.json({ error: locErr.message }, { status: 500 })
+      return apiError(locErr.message)
     }
 
-    return NextResponse.json({
+    const payload: LocationUpsertPayload = {
       location,
       geocoded: geo.displayName,
-    })
+    }
+
+    return apiOk(payload)
   } catch (e) {
     console.error('[locations POST]', e)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

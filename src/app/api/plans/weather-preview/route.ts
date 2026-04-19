@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { geocodeAddress } from '@/lib/geocode'
 import { fetchWeather } from '@/lib/weather'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { PlansWeatherPreviewApiPayload } from '@/types/api-payloads'
 
 type PreviewInput = {
   id: string
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
     const { days } = await req.json()
 
     if (!Array.isArray(days)) {
-      return NextResponse.json({ error: 'days が不正です' }, { status: 400 })
+      return apiError('days が不正です', 400)
     }
 
     const previews = await Promise.all(
@@ -61,9 +63,10 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    return NextResponse.json({ data: previews })
+    const payload: PlansWeatherPreviewApiPayload = previews
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans/weather-preview POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

@@ -2,39 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import EventOfferPreviewCard from '@/components/EventOfferPreviewCard'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { compressImageFile } from '@/lib/client-image'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-type EventOffer = {
-  id: string
-  title: string
-  event_date: string
-  event_end_date: string | null
-  venue_name: string
-  venue_address: string | null
-  municipality: string | null
-  recruitment_count: number
-  fee_type: 'fixed' | 'revenue_share' | 'fixed_plus_revenue_share' | 'free'
-  stall_fee: number | null
-  revenue_share_rate: number | null
-  application_deadline: string | null
-  load_in_start_time: string | null
-  load_in_end_time: string | null
-  sales_start_time: string | null
-  sales_end_time: string | null
-  load_out_start_time: string | null
-  load_out_end_time: string | null
-  provided_facilities: string[] | null
-  photo_urls: string[] | null
-  venue_features: string | null
-  recruitment_purpose: string | null
-  required_equipment: string | null
-  notes: string | null
-  status: 'draft' | 'open' | 'closed'
-  is_public: boolean
-  application_count: number
-  accepted_count: number
-}
+import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import type { OfferFeeType, OrganizerEventOffer } from '@/types/marketplace'
 
 type OfferForm = {
   title: string
@@ -44,7 +16,7 @@ type OfferForm = {
   venue_address: string
   municipality: string
   recruitment_count: string
-  fee_type: EventOffer['fee_type']
+  fee_type: OfferFeeType
   stall_fee: string
   revenue_share_rate: string
   application_deadline: string
@@ -60,7 +32,7 @@ type OfferForm = {
   recruitment_purpose: string
   required_equipment: string
   notes: string
-  status: EventOffer['status']
+  status: OrganizerEventOffer['status']
   is_public: boolean
 }
 
@@ -76,7 +48,7 @@ const facilityOptions = [
   '冷蔵庫',
 ] as const
 
-function formatStatus(status: EventOffer['status']) {
+function formatStatus(status: OrganizerEventOffer['status']) {
   if (status === 'open') return '募集中'
   if (status === 'closed') return '募集終了'
   return '下書き'
@@ -129,7 +101,7 @@ function createEmptyForm(): OfferForm {
   }
 }
 
-function offerToForm(offer: EventOffer): OfferForm {
+function offerToForm(offer: OrganizerEventOffer): OfferForm {
   return {
     title: offer.title,
     event_date: offer.event_date,
@@ -172,12 +144,19 @@ export default function OrganizerOffersPage() {
     setValue: setOfferDraft,
     clearDraft: clearOfferDraft,
   } = offerDraft
-  const [offers, setOffers] = useState<EventOffer[]>([])
+  const [offers, setOffers] = useState<OrganizerEventOffer[]>([])
   const [editingOfferId, setEditingOfferId] = useState<string | null>(offerDraft.value.editingOfferId)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    pending: saving,
+    message,
+    error,
+    setError,
+    start,
+    succeed,
+    stop,
+    reset,
+  } = useSubmissionFeedback()
   const [form, setForm] = useState<OfferForm>(offerDraft.value.form)
 
   useEffect(() => {
@@ -187,18 +166,19 @@ export default function OrganizerOffersPage() {
 
   async function loadOffers() {
     try {
-      const res = await fetch('/api/organizer/offers', { cache: 'no-store' })
-      const json = await res.json()
-      setOffers(json.data ?? [])
-    } catch {
-      setError('募集一覧の取得に失敗しました')
+      const data = await fetchApi<OrganizerEventOffer[]>('/api/organizer/offers', { cache: 'no-store' })
+      setOffers(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '募集一覧の取得に失敗しました')
+      setOffers([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadOffers()
+    void loadOffers()
   }, [])
 
   async function handlePhotosChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -238,12 +218,10 @@ export default function OrganizerOffersPage() {
       if (!proceed) return
     }
 
-    setSaving(true)
-    setMessage(null)
-    setError(null)
+    start()
 
     try {
-      const res = await fetch('/api/organizer/offers', {
+      const savedOffer = await fetchApi<OrganizerEventOffer>('/api/organizer/offers', {
         method: editingOfferId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -257,26 +235,25 @@ export default function OrganizerOffersPage() {
           photo_urls: form.photo_urls,
         }),
       })
-      const json = await res.json()
 
-      if (!res.ok) {
-        setError(json.error ?? (editingOfferId ? '募集の更新に失敗しました' : '募集の作成に失敗しました'))
-        return
-      }
-
-      setMessage(editingOfferId ? '募集内容を更新しました' : '募集を保存しました')
-      if (editingOfferId && json.data) {
-        setForm(offerToForm(json.data))
+      succeed(editingOfferId ? '募集内容を更新しました' : '募集を保存しました')
+      if (editingOfferId) {
+        setForm(offerToForm(savedOffer))
       } else {
         setForm(createEmptyForm())
       }
       clearOfferDraft()
       setLoading(true)
-      loadOffers()
-    } catch {
-      setError('通信エラーが発生しました')
-    } finally {
-      setSaving(false)
+      void loadOffers()
+    } catch (err) {
+      stop()
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : editingOfferId
+            ? '募集の更新に失敗しました'
+            : '募集の作成に失敗しました'
+      )
     }
   }
 
@@ -306,8 +283,7 @@ export default function OrganizerOffersPage() {
                       setEditingOfferId(null)
                       setForm(createEmptyForm())
                       clearOfferDraft()
-                      setMessage(null)
-                      setError(null)
+                      reset()
                     }}
                     className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200"
                   >
@@ -470,7 +446,7 @@ export default function OrganizerOffersPage() {
                   <label className="mb-2 block text-sm font-medium text-gray-700">出店料の形式</label>
                   <select
                     value={form.fee_type}
-                    onChange={(event) => setForm((prev) => ({ ...prev, fee_type: event.target.value as EventOffer['fee_type'] }))}
+                    onChange={(event) => setForm((prev) => ({ ...prev, fee_type: event.target.value as OfferFeeType }))}
                     className="w-full px-4 py-3"
                   >
                     <option value="fixed">固定</option>
@@ -525,7 +501,7 @@ export default function OrganizerOffersPage() {
                   <label className="mb-2 block text-sm font-medium text-gray-700">募集状態</label>
                   <select
                     value={form.status}
-                    onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as EventOffer['status'] }))}
+                    onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as OrganizerEventOffer['status'] }))}
                     className="w-full px-4 py-3"
                   >
                     <option value="draft">下書き</option>
@@ -647,7 +623,7 @@ export default function OrganizerOffersPage() {
               <EventOfferPreviewCard
                 badges={[
                   { label: '主催者', tone: 'blue' },
-                  { label: formatStatus(form.status as EventOffer['status']), tone: 'slate' },
+                  { label: formatStatus(form.status as OrganizerEventOffer['status']), tone: 'slate' },
                 ]}
                 title={form.title}
                 periodLabel={(form.event_date && formatPeriod(form.event_date, form.event_end_date)) || '開催日'}
@@ -709,8 +685,7 @@ export default function OrganizerOffersPage() {
                         onClick={() => {
                           setEditingOfferId(offer.id)
                           setForm(offerToForm(offer))
-                          setMessage(null)
-                          setError(null)
+                          reset()
                           window.scrollTo({ top: 0, behavior: 'smooth' })
                         }}
                         className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"

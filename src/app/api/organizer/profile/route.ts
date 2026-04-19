@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -13,10 +14,10 @@ export async function GET(req: NextRequest) {
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error.message)
   }
 
-  return NextResponse.json({ data })
+  return apiOk(data)
 }
 
 export async function POST(req: NextRequest) {
@@ -36,15 +37,15 @@ export async function POST(req: NextRequest) {
     const description = String(body.description ?? '').trim() || null
 
     if (!organizer_name) {
-      return NextResponse.json({ error: '主催者名は必須です' }, { status: 400 })
+      return apiError('主催者名は必須です', 400)
     }
 
     if (!contact_name || !contact_email || !phone) {
-      return NextResponse.json({ error: '担当者名、連絡用メール、電話番号は入力してください' }, { status: 400 })
+      return apiError('担当者名、連絡用メール、電話番号は入力してください', 400)
     }
 
     if (!description || description.length < 80) {
-      return NextResponse.json({ error: '紹介文は80文字以上を目安に入力してください' }, { status: 400 })
+      return apiError('紹介文は80文字以上を目安に入力してください', 400)
     }
 
     const { data, error } = await (supabase as any)
@@ -69,12 +70,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error.message)
     }
 
-    return NextResponse.json({ data })
+    return apiOk(data)
   } catch (error) {
     console.error('[organizer/profile POST]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import { getOrganizerPublicProfiles } from '@/lib/public-profiles'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -7,7 +9,7 @@ export async function GET(req: NextRequest) {
   const { supabase, user, role } = auth.session
 
   if (role !== 'vendor') {
-    return NextResponse.json({ error: '事業者向けの画面です' }, { status: 403 })
+    return apiError('事業者向けの画面です', 403)
   }
 
   const [{ data: offers, error: offersError }, { data: applications, error: applicationsError }] = await Promise.all([
@@ -24,19 +26,13 @@ export async function GET(req: NextRequest) {
   ])
 
   if (offersError || applicationsError) {
-    return NextResponse.json({ error: offersError?.message ?? applicationsError?.message }, { status: 500 })
+    return apiError(offersError?.message ?? applicationsError?.message ?? '募集一覧の取得に失敗しました')
   }
 
-  const organizerIds = Array.from(new Set((offers ?? []).map((offer: any) => offer.user_id).filter(Boolean)))
-  const { data: organizers } =
-    organizerIds.length > 0
-      ? await (supabase as any)
-          .from('organizer_profiles')
-          .select('user_id, organizer_name, contact_name')
-          .in('user_id', organizerIds)
-      : { data: [] }
-
-  const organizerMap = new Map<string, any>((organizers ?? []).map((row: any) => [row.user_id, row]))
+  const organizerIds: string[] = Array.from(
+    new Set((offers ?? []).map((offer: any) => offer.user_id).filter((userId: unknown): userId is string => typeof userId === 'string' && userId.length > 0))
+  )
+  const organizerMap = await getOrganizerPublicProfiles(supabase as any, organizerIds)
   const applicationMap = new Map<string, any>((applications ?? []).map((row: any) => [row.offer_id, row]))
 
   const data = (offers ?? []).map((offer: any) => ({
@@ -46,5 +42,5 @@ export async function GET(req: NextRequest) {
     my_application: applicationMap.get(offer.id) ?? null,
   }))
 
-  return NextResponse.json({ data })
+  return apiOk(data)
 }

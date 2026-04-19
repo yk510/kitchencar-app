@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { PlansReferenceApiPayload } from '@/types/api-payloads'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,11 +24,11 @@ export async function GET(req: NextRequest) {
       ])
 
     if (locationError) {
-      return NextResponse.json({ error: locationError.message }, { status: 500 })
+      return apiError(locationError.message)
     }
 
     if (eventError) {
-      return NextResponse.json({ error: eventError.message }, { status: 500 })
+      return apiError(eventError.message)
     }
 
     const eventNames = Array.from(
@@ -37,12 +39,14 @@ export async function GET(req: NextRequest) {
       )
     )
 
-    return NextResponse.json({
+    const payload: PlansReferenceApiPayload = {
       locations: locations ?? [],
       eventNames,
-    })
+    }
+
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans/reference GET]', error)
-    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+    return apiError('サーバーエラー')
   }
 }

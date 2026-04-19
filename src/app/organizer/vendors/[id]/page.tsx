@@ -2,17 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-
-type VendorPublicProfile = {
-  user_id: string
-  business_name: string
-  owner_name: string | null
-  main_menu: string | null
-  logo_image_url: string | null
-  instagram_url: string | null
-  x_url: string | null
-  description: string | null
-}
+import { ApiClientError, fetchApi } from '@/lib/api-client'
+import PublicProfileCard from '@/components/PublicProfileCard'
+import type { VendorPublicProfile } from '@/types/marketplace'
 
 export default function OrganizerVendorDetailPage({ params }: { params: { id: string } }) {
   const [profile, setProfile] = useState<VendorPublicProfile | null>(null)
@@ -21,18 +13,11 @@ export default function OrganizerVendorDetailPage({ params }: { params: { id: st
 
   async function loadProfile() {
     try {
-      const res = await fetch(`/api/organizer/vendors/${params.id}`, { cache: 'no-store' })
-      const json = await res.json()
-
-      if (!res.ok) {
-        setError(json.error ?? 'ベンダー情報の取得に失敗しました')
-        return
-      }
-
-      setProfile(json.data ?? null)
+      const data = await fetchApi<VendorPublicProfile | null>(`/api/organizer/vendors/${params.id}`, { cache: 'no-store' })
+      setProfile(data)
       setError(null)
-    } catch {
-      setError('ベンダー情報の取得に失敗しました')
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'ベンダー情報の取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -72,59 +57,18 @@ export default function OrganizerVendorDetailPage({ params }: { params: { id: st
         ) : error ? (
           <p className="alert-danger px-4 py-3 text-sm text-red-700">{error}</p>
         ) : profile ? (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc]">
-                {profile.logo_image_url ? (
-                  <img src={profile.logo_image_url} alt="ベンダーロゴ" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-xs text-gray-400">未設定</span>
-                )}
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-800">{profile.business_name}</h2>
-                <p className="mt-1 text-sm text-gray-500">担当者 {profile.owner_name || '-'}</p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl bg-[#f8fafc] p-4">
-                <p className="text-sm font-semibold text-gray-800">主なメニュー</p>
-                <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">{profile.main_menu || '-'}</p>
-              </div>
-              <div className="rounded-2xl bg-[#f8fafc] p-4">
-                <p className="text-sm font-semibold text-gray-800">SNS・外部情報</p>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  {profile.instagram_url ? (
-                    <a
-                      href={profile.instagram_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
-                    >
-                      Instagramを見る
-                    </a>
-                  ) : null}
-                  {profile.x_url ? (
-                    <a
-                      href={profile.x_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
-                    >
-                      Xを見る
-                    </a>
-                  ) : null}
-                  {!profile.instagram_url && !profile.x_url ? <p className="text-sm text-gray-500">未設定</p> : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-[#f8fafc] p-5">
-              <p className="text-sm font-semibold text-gray-800">紹介文</p>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-gray-700">{profile.description || '未設定'}</p>
-            </div>
-          </div>
+          <PublicProfileCard
+            title="ベンダー情報"
+            nameLabel="事業者名"
+            name={profile.business_name}
+            contactLabel="担当者"
+            contactName={profile.owner_name}
+            logoImageUrl={profile.logo_image_url}
+            mainMenu={profile.main_menu}
+            instagramUrl={profile.instagram_url}
+            xUrl={profile.x_url}
+            description={profile.description}
+          />
         ) : (
           <p className="text-sm text-gray-500">ベンダー情報が見つかりませんでした。</p>
         )}

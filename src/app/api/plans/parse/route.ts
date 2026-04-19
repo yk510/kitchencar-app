@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { parseCalendarImageToDraft } from '@/lib/openai'
+import { apiError, apiOk } from '@/lib/api-response'
+import type { PlansParseApiPayload } from '@/types/api-payloads'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,19 +12,17 @@ export async function POST(req: NextRequest) {
     const { imageDataUrl, knownLocations } = await req.json()
 
     if (!imageDataUrl || typeof imageDataUrl !== 'string') {
-      return NextResponse.json({ error: '画像データがありません' }, { status: 400 })
+      return apiError('画像データがありません', 400)
     }
 
     const draft = await parseCalendarImageToDraft(
       imageDataUrl,
       Array.isArray(knownLocations) ? knownLocations : []
     )
-    return NextResponse.json({ draft })
+    const payload: PlansParseApiPayload = { draft }
+    return apiOk(payload)
   } catch (error) {
     console.error('[plans/parse POST]', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '予測案の作成に失敗しました' },
-      { status: 500 }
-    )
+    return apiError(error instanceof Error ? error.message : '予測案の作成に失敗しました')
   }
 }

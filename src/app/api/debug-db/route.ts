@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
     .from('product_master')
     .select('*', { count: 'exact', head: true })
 
-  return NextResponse.json({
+  return apiOk({
     url: process.env.NEXT_PUBLIC_SUPABASE_URL,
     txnCount,
     salesCount,

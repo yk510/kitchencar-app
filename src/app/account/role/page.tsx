@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
-import { usePersistentDraft } from '@/lib/usePersistentDraft'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { useDraftForm } from '@/lib/use-draft-form'
+import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import type { UserProfileUpdatePayload } from '@/types/api-payloads'
 
 type Role = 'vendor' | 'organizer'
 
@@ -33,15 +36,13 @@ const roleCards: Array<{
 export default function AccountRolePage() {
   const router = useRouter()
   const { role, refreshProfile } = useAuth()
-  const draftState = usePersistentDraft('draft:account-role-form', {
+  const { form: draft, setForm: setDraft, clearDraft } = useDraftForm('draft:account-role-form', {
     selectedRole: (role ?? 'vendor') as Role,
     displayName: '',
   })
-  const { value: draft, setValue: setDraft, clearDraft } = draftState
   const [selectedRole, setSelectedRole] = useState<Role>(draft.selectedRole)
   const [displayName, setDisplayName] = useState(draft.displayName)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { pending: saving, error, setError, start, stop } = useSubmissionFeedback()
 
   useEffect(() => {
     setSelectedRole(draft.selectedRole)
@@ -53,11 +54,10 @@ export default function AccountRolePage() {
   }, [displayName, selectedRole, setDraft])
 
   async function handleSave() {
-    setSaving(true)
-    setError(null)
+    start()
 
     try {
-      const res = await fetch('/api/user/profile', {
+      await fetchApi<UserProfileUpdatePayload>('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,19 +66,12 @@ export default function AccountRolePage() {
         }),
       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? '利用タイプの保存に失敗しました')
-        return
-      }
-
       await refreshProfile()
       clearDraft()
       router.replace(selectedRole === 'organizer' ? '/organizer' : '/')
-    } catch {
-      setError('通信エラーが発生しました')
-    } finally {
-      setSaving(false)
+    } catch (err) {
+      stop()
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     }
   }
 

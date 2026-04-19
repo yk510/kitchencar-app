@@ -1,30 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-
-interface Location {
-  id: string
-  name: string
-  address: string
-}
-
-interface StallLogResponse {
-  stall_log: {
-    id: string
-    log_date: string
-    location_id: string
-    event_id: string | null
-  }
-  updated_transactions: number
-  updated_product_sales: number
-  event_id?: string | null
-}
-
-interface StallLogSummaryResponse {
-  unmatched_dates: string[]
-  count: number
-}
+import type { Location, StallLogPayload, StallLogSummaryPayload } from '@/types/operations'
 
 export default function StallLogsPage() {
   const stallDraft = usePersistentDraft('draft:stall-logs-form', {
@@ -43,38 +22,23 @@ export default function StallLogsPage() {
 
   async function loadUnmatchedDates() {
     try {
-      const res = await fetch('/api/stall-logs', { cache: 'no-store' })
-      const json: StallLogSummaryResponse | { error?: string } = await res.json()
-
-      if (!res.ok) {
-        setError((json as { error?: string }).error ?? '未登録日付の取得に失敗しました')
-        return
-      }
-
-      setUnmatchedDates((json as StallLogSummaryResponse).unmatched_dates ?? [])
-    } catch (e) {
-      setError('未登録日付の取得に失敗しました')
+      const data = await fetchApi<StallLogSummaryPayload>('/api/stall-logs', { cache: 'no-store' })
+      setUnmatchedDates(data.unmatched_dates ?? [])
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '未登録日付の取得に失敗しました')
     }
   }
 
   async function loadLocations() {
     try {
-      const res = await fetch('/api/locations', { cache: 'no-store' })
-      const json = await res.json()
-
-      if (!res.ok) {
-        setError(json.error ?? '出店場所一覧の取得に失敗しました')
-        return
-      }
-
-      const fetched = json.data ?? []
+      const fetched = await fetchApi<Location[]>('/api/locations', { cache: 'no-store' })
       setLocations(fetched)
 
       if (fetched.length === 1 && !draft.locationId) {
         setDraft((prev) => ({ ...prev, locationId: fetched[0].id }))
       }
-    } catch (e) {
-      setError('出店場所一覧の取得に失敗しました')
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '出店場所一覧の取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -98,7 +62,7 @@ export default function StallLogsPage() {
     setError(null)
 
     try {
-      const res = await fetch('/api/stall-logs', {
+      const payload = await fetchApi<StallLogPayload>('/api/stall-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,29 +71,21 @@ export default function StallLogsPage() {
           event_name: eventName.trim() || null,
         }),
       })
-
-      const json: StallLogResponse | { error?: string } = await res.json()
-
-      if (!res.ok) {
-        setError((json as any).error ?? '出店ログの登録に失敗しました')
-        return
-      }
-
       const selectedLocation = locations.find((loc) => loc.id === locationId)
       const hasEvent = eventName.trim().length > 0
 
       setResult(
         `出店ログを保存しました。${selectedLocation?.name ?? ''} / ${logDate}` +
-          ` / 売上 ${(json as StallLogResponse).updated_transactions}件` +
-          ` / 商品 ${(json as StallLogResponse).updated_product_sales}件 を紐付けました。` +
+          ` / 売上 ${payload.updated_transactions ?? 0}件` +
+          ` / 商品 ${payload.updated_product_sales ?? 0}件 を紐付けました。` +
           (hasEvent ? ' / イベント情報も登録しました。' : '') +
           ' / 天候情報も更新しました。'
       )
 
       setDraft((prev) => ({ ...prev, eventName: '' }))
       await loadUnmatchedDates()
-    } catch (e) {
-      setError('通信エラーが発生しました')
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     } finally {
       setSubmitting(false)
     }

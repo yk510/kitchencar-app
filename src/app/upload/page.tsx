@@ -1,19 +1,13 @@
 'use client'
 
 import { useState, useRef } from 'react'
-
-interface UploadResult {
-  inserted: number
-  updated: number
-  skipped: number
-  newProducts: string[]
-  errors: string[]
-}
+import { ApiClientError, fetchApi } from '@/lib/api-client'
+import type { UploadResultPayload } from '@/types/operations'
 
 export default function UploadPage() {
   const [file, setFile]       = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const [result, setResult]   = useState<UploadResult | null>(null)
+  const [result, setResult]   = useState<UploadResultPayload | null>(null)
   const [error, setError]     = useState<string | null>(null)
   const inputRef              = useRef<HTMLInputElement>(null)
 
@@ -30,20 +24,14 @@ export default function UploadPage() {
       const decoder = new TextDecoder('shift-jis')
       const text    = decoder.decode(buffer)
 
-      const res = await fetch('/api/upload-csv', {
+      const data = await fetchApi<UploadResultPayload>('/api/upload-csv', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ csvText: text }),
       })
-
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? 'アップロードに失敗しました')
-        return
-      }
-      setResult(json)
-    } catch (e) {
-      setError('通信エラーが発生しました')
+      setResult(data)
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '通信エラーが発生しました')
     } finally {
       setLoading(false)
     }
