@@ -5,6 +5,14 @@ import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { fetchApi } from '@/lib/api-client'
+import {
+  BRAND_CONCEPT,
+  BRAND_NAME,
+  BRAND_NAME_LATIN,
+  BRAND_STAGE,
+  getBoardTitle,
+  getWorkspaceLabel,
+} from '@/lib/brand'
 import { getHomePathByRole } from '@/lib/user-role'
 import type { NotificationsUnreadCountPayload } from '@/types/api-payloads'
 
@@ -127,18 +135,25 @@ export default function HeaderNav() {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-700">
-            {role === 'organizer' ? 'Event Organizer Workspace' : 'Food Truck Business'}
+            {BRAND_NAME_LATIN} / {getWorkspaceLabel(role)}
           </p>
           <div className="mt-0.5 flex items-center gap-2">
             <h1 className="truncate text-lg font-semibold text-main">
-              {role === 'organizer' ? 'イベント主催ボード' : 'キッチンカー営業ボード'}
+              {BRAND_NAME}
             </h1>
+            <span className="inline-flex rounded-full bg-[#eef4ff] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
+              {BRAND_STAGE}
+            </span>
+            <span className="hidden rounded-full bg-[#f6f1e8] px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#9a7a45] lg:inline-flex">
+              {getBoardTitle(role)}
+            </span>
             {activeItem && (
               <span className="hidden rounded-full bg-white/85 px-2.5 py-1 text-xs text-sub ring-1 ring-[#ebe7df] sm:inline-flex">
                 {activeItem.label}
               </span>
             )}
           </div>
+          <p className="mt-1 hidden text-xs text-[#7b7266] md:block">{BRAND_CONCEPT}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="hidden rounded-full bg-white/90 px-3 py-1.5 text-xs text-[#616b7c] ring-1 ring-[#ebe7df] sm:block">

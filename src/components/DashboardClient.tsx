@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import DashboardPanelPicker from '@/components/DashboardPanelPicker'
+import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import {
   DASHBOARD_PANEL_STORAGE_KEY,
   DEFAULT_VISIBLE_PANELS,
@@ -74,8 +75,14 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
     <div>
       <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <div className="badge-blue badge-soft inline-block mb-3">出店サポート</div>
-          <h1 className="section-title text-3xl font-bold mb-2">今日の営業ボード</h1>
+          <div className="mb-3 flex items-center gap-2">
+            <div className="badge-blue badge-soft inline-block">{BRAND_NAME}</div>
+            <span className="rounded-full bg-[#eef4ff] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[var(--accent-blue)]">
+              {BRAND_STAGE_LABEL}
+            </span>
+          </div>
+          <h1 className="section-title text-3xl font-bold mb-2">今日の営業ダッシュボード</h1>
+          <p className="text-sm font-semibold text-[var(--accent-blue)] mb-2">{BRAND_CONCEPT}</p>
           <p className="section-subtitle text-sm">
             出店前の準備、営業中の確認、あとで見返したい数字をひとまとめにしています。
           </p>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
+import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import { getHostScopeFromWindow, getScopedLoginRole } from '@/lib/domain'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
@@ -84,18 +85,30 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center">
       <div className="grid w-full gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="soft-panel rounded-[28px] px-7 py-8 lg:px-10 lg:py-10">
-          <span className="badge-soft badge-blue">
-            {hostScope === 'organizer' ? 'イベント主催者向け' : 'キッチンカー向け'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="badge-soft badge-blue">
+              {BRAND_NAME}
+            </span>
+            <span className="rounded-full bg-[#eef4ff] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[var(--accent-blue)]">
+              {BRAND_STAGE_LABEL}
+            </span>
+          </div>
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-700">
+            {hostScope === 'organizer' ? 'ORGANIZER WORKSPACE' : 'VENDOR WORKSPACE'}
+          </p>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-main)]">
             {hostScope === 'organizer'
-              ? '募集作成と応募管理を、ひとつの画面で進められます'
-              : '売上と営業予定を、ひとつの画面で管理できます'}
+              ? 'イベント募集と応募対応を、経営目線で前に進める'
+              : '日々の営業を、経営判断につながる数字へ変える'}
           </h1>
+          <p className="mt-3 text-sm font-semibold text-[var(--accent-blue)]">{BRAND_CONCEPT}</p>
           <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
             {hostScope === 'organizer'
-              ? 'イベント主催者向けの入口です。募集作成、応募確認、主催者プロフィール管理を、主催者専用の導線で進められます。'
-              : '売上CSVの取り込み、出店場所の整理、営業予測、分析までをひとまとめにした業務アプリです。まずはログインして、ご自身のデータだけが見える状態で使い始めましょう。'}
+              ? '主催者向けの専用入口です。募集作成、応募確認、主催者プロフィール管理を、ひと続きの業務として整理できます。'
+              : '売上CSVの取り込み、出店場所の整理、営業予測、分析までをひとまとめにしたキッチンカーOSです。まずはログインして、ご自身のデータだけが見える状態で使い始めましょう。'}
+          </p>
+          <p className="mt-3 text-xs text-[var(--text-sub)]">
+            現在は{BRAND_STAGE_LABEL}です。機能や画面は改善のため更新されることがあります。
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">

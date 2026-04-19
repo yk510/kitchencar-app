@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import AppShell from '@/components/AppShell'
 import { AuthProvider } from '@/components/AuthProvider'
+import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE } from '@/lib/brand'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'キッチンカー売上分析',
-  description: 'Airレジデータをもとに出店判断を最適化するツール',
+  title: `${BRAND_NAME} ${BRAND_STAGE} | ${BRAND_CONCEPT}`,
+  description: BRAND_CONCEPT,
+  applicationName: BRAND_NAME,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
