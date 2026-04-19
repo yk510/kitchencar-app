@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import { AUTH_COOKIE_NAME } from '@/lib/auth-cookie'
+import { AUTH_COOKIE_NAME, getAuthCookieDomain } from '@/lib/auth-cookie'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
 import type { Database } from '@/types/database'
@@ -23,13 +23,15 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 function syncAuthCookie(accessToken?: string | null) {
   if (typeof document === 'undefined') return
+  const domain = getAuthCookieDomain()
+  const domainPart = domain ? `; domain=${domain}` : ''
 
   if (accessToken) {
-    document.cookie = `${AUTH_COOKIE_NAME}=${accessToken}; path=/; max-age=604800; samesite=lax`
+    document.cookie = `${AUTH_COOKIE_NAME}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
     return
   }
 
-  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; samesite=lax`
+  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; samesite=lax${domainPart}`
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

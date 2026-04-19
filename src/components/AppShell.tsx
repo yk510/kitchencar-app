@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
+import { getHostScopeFromWindow } from '@/lib/domain'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole } from '@/lib/user-role'
 
@@ -21,7 +22,8 @@ function LoadingScreen({ message }: { message: string }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { loading, user, role, profileReady } = useAuth()
+  const { loading, supabase, user, role, profileReady } = useAuth()
+  const hostScope = useMemo(() => getHostScopeFromWindow(), [])
 
   const isLoginPage = pathname === '/login'
   const isOrganizerPath = pathname === '/organizer' || pathname.startsWith('/organizer/')
@@ -37,6 +39,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     if (user && !profileReady) {
+      return
+    }
+
+    if (user && role && hostScope && role !== hostScope) {
+      void supabase?.auth.signOut()
+      router.replace('/login')
       return
     }
 
@@ -58,7 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (user && role === 'organizer' && isVendorPath) {
       router.replace('/organizer')
     }
-  }, [homePath, isLoginPage, isOrganizerPath, isVendorPath, loading, pathname, profileReady, role, router, user])
+  }, [homePath, hostScope, isLoginPage, isOrganizerPath, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 

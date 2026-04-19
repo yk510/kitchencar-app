@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
+import { getHostScopeFromWindow, getScopedLoginRole } from '@/lib/domain'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 
 type AuthMode = 'signin' | 'signup'
@@ -9,6 +10,8 @@ type Role = 'vendor' | 'organizer'
 
 export default function LoginPage() {
   const { supabase, loading } = useAuth()
+  const hostScope = useMemo(() => getHostScopeFromWindow(), [])
+  const lockedRole = getScopedLoginRole(hostScope)
   const authDraft = usePersistentDraft('draft:login-form', {
     mode: 'signin' as AuthMode,
     email: '',
@@ -21,6 +24,12 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!lockedRole) return
+    if (draft.role === lockedRole) return
+    setDraft((prev) => ({ ...prev, role: lockedRole }))
+  }, [draft.role, lockedRole, setDraft])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -75,21 +84,32 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center">
       <div className="grid w-full gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="soft-panel rounded-[28px] px-7 py-8 lg:px-10 lg:py-10">
-          <span className="badge-soft badge-blue">キッチンカー向け</span>
+          <span className="badge-soft badge-blue">
+            {hostScope === 'organizer' ? 'イベント主催者向け' : 'キッチンカー向け'}
+          </span>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-main)]">
-            売上と営業予定を、ひとつの画面で管理できます
+            {hostScope === 'organizer'
+              ? '募集作成と応募管理を、ひとつの画面で進められます'
+              : '売上と営業予定を、ひとつの画面で管理できます'}
           </h1>
           <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
-            売上CSVの取り込み、出店場所の整理、営業予測、分析までをひとまとめにした業務アプリです。
-            まずはログインして、ご自身のデータだけが見える状態で使い始めましょう。
+            {hostScope === 'organizer'
+              ? 'イベント主催者向けの入口です。募集作成、応募確認、主催者プロフィール管理を、主催者専用の導線で進められます。'
+              : '売上CSVの取り込み、出店場所の整理、営業予測、分析までをひとまとめにした業務アプリです。まずはログインして、ご自身のデータだけが見える状態で使い始めましょう。'}
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            {[
-              ['1', '売上データ取込', 'AirレジのCSVを入れるだけで日々の数字を整理します。'],
-              ['2', '営業予定と予測', 'カレンダー画像から翌月予定を作り、予測までつなげます。'],
-              ['3', '分析とふり返り', '場所・曜日・商品ごとの見え方を比較できます。'],
-            ].map(([step, title, description]) => (
+            {(hostScope === 'organizer'
+              ? [
+                  ['1', '主催者プロフィール', 'ベンダーに伝わる主催者情報を整えます。'],
+                  ['2', '募集作成', 'イベントや会場の魅力を写真つきで募集ページにまとめます。'],
+                  ['3', '応募管理', '応募や質問への返答、出店決定まで進められます。'],
+                ]
+              : [
+                  ['1', '売上データ取込', 'AirレジのCSVを入れるだけで日々の数字を整理します。'],
+                  ['2', '営業予定と予測', 'カレンダー画像から翌月予定を作り、予測までつなげます。'],
+                  ['3', '分析とふり返り', '場所・曜日・商品ごとの見え方を比較できます。'],
+                ]).map(([step, title, description]) => (
               <div key={step} className="rounded-2xl border border-[var(--line-soft)] bg-white/80 p-4">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-blue-soft)] text-sm font-bold text-[var(--accent-blue)]">
                   {step}
@@ -137,7 +157,7 @@ export default function LoginPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {mode === 'signup' && (
+            {mode === 'signup' && !lockedRole && (
               <>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[var(--text-main)]">利用者区分</label>
@@ -179,6 +199,17 @@ export default function LoginPage() {
                   />
                 </div>
               </>
+            )}
+
+            {mode === 'signup' && lockedRole && (
+              <div className="rounded-2xl border border-[var(--line-soft)] bg-[var(--bg-main)] px-4 py-4">
+                <p className="text-sm font-semibold text-[var(--text-main)]">利用者区分</p>
+                <p className="mt-1 text-sm text-[var(--text-sub)]">
+                  {lockedRole === 'organizer'
+                    ? 'このサブドメインでは、イベント主催者アカウントを作成します。'
+                    : 'このサブドメインでは、キッチンカー事業者アカウントを作成します。'}
+                </p>
+              </div>
             )}
 
             <div>
