@@ -8,6 +8,8 @@ drop table if exists sales_forecasts    cascade;
 drop table if exists weather_forecasts  cascade;
 drop table if exists operation_plan_days cascade;
 drop table if exists operation_plans    cascade;
+drop table if exists vendor_weekly_reports cascade;
+drop table if exists vendor_daily_memos cascade;
 drop table if exists stall_logs         cascade;
 drop table if exists cost_history       cascade;
 drop table if exists product_sales      cascade;
@@ -231,6 +233,45 @@ create table sales_forecasts (
 create index idx_sales_forecasts_plan_day_id on sales_forecasts(plan_day_id);
 
 -- ------------------------------------------------------------
+-- 13. vendor_daily_memos（ベンダー営業メモ）
+-- ------------------------------------------------------------
+create table vendor_daily_memos (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null,
+  memo_date           date not null,
+  memo_text           text not null default '',
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique(user_id, memo_date)
+);
+
+create index idx_vendor_daily_memos_user_id on vendor_daily_memos(user_id);
+create index idx_vendor_daily_memos_memo_date on vendor_daily_memos(memo_date);
+
+-- ------------------------------------------------------------
+-- 14. vendor_weekly_reports（AI週報）
+-- ------------------------------------------------------------
+create table vendor_weekly_reports (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null,
+  week_start_date     date not null,
+  week_end_date       date not null,
+  report_title        text not null,
+  weekly_summary      text not null,
+  ai_feedback         text not null,
+  source_note_count   integer not null default 0,
+  source_sales        integer not null default 0,
+  helpful_feedback    boolean,
+  helpful_marked_at   timestamptz,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique(user_id, week_start_date, week_end_date)
+);
+
+create index idx_vendor_weekly_reports_user_id on vendor_weekly_reports(user_id);
+create index idx_vendor_weekly_reports_week_start_date on vendor_weekly_reports(week_start_date);
+
+-- ------------------------------------------------------------
 -- ヘルパー関数：updated_at を自動更新するトリガー
 -- ------------------------------------------------------------
 create or replace function set_updated_at()
@@ -273,6 +314,14 @@ create trigger trg_sales_forecasts_updated_at
   before update on sales_forecasts
   for each row execute function set_updated_at();
 
+create trigger trg_vendor_daily_memos_updated_at
+  before update on vendor_daily_memos
+  for each row execute function set_updated_at();
+
+create trigger trg_vendor_weekly_reports_updated_at
+  before update on vendor_weekly_reports
+  for each row execute function set_updated_at();
+
 -- ------------------------------------------------------------
 -- Row Level Security（RLS）: MVP は全公開（認証なし）
 -- 将来の認証追加に備えてRLSは有効化だけしておく
@@ -289,6 +338,8 @@ alter table operation_plans enable row level security;
 alter table operation_plan_days enable row level security;
 alter table weather_forecasts enable row level security;
 alter table sales_forecasts enable row level security;
+alter table vendor_daily_memos enable row level security;
+alter table vendor_weekly_reports enable row level security;
 
 -- MVP用: 全操作を anon ロールに許可
 create policy "public_all" on locations      for all to anon using (true) with check (true);
@@ -303,6 +354,8 @@ create policy "public_all" on operation_plans for all to anon using (true) with 
 create policy "public_all" on operation_plan_days for all to anon using (true) with check (true);
 create policy "public_all" on weather_forecasts for all to anon using (true) with check (true);
 create policy "public_all" on sales_forecasts for all to anon using (true) with check (true);
+create policy "public_all" on vendor_daily_memos for all to anon using (true) with check (true);
+create policy "public_all" on vendor_weekly_reports for all to anon using (true) with check (true);
 
 -- ------------------------------------------------------------
 -- 動作確認用：テーブル一覧を表示

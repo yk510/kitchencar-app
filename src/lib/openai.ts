@@ -11,6 +11,12 @@ export interface ParsedScheduleDraftDay {
   ai_confidence: number | null
 }
 
+export interface VendorWeeklyReportDraft {
+  report_title: string
+  weekly_summary: string
+  ai_feedback: string
+}
+
 interface KnownLocation {
   name: string
   address?: string | null
@@ -294,5 +300,80 @@ export async function parseCalendarImageToDraft(
     title: parsed.title ?? null,
     plan_month: normalizedPlanMonth,
     days: normalizedDays,
+  }
+}
+
+export async function generateVendorWeeklyReport(input: {
+  weekStart: string
+  weekEnd: string
+  rows: Array<{
+    date: string
+    sales: number
+    txnCount: number
+    avgTicket: number
+    grossProfit: number
+    locationName: string
+    eventName: string
+    weatherType: string
+    memoText: string
+  }>
+}): Promise<VendorWeeklyReportDraft> {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY が未設定です')
+  }
+
+  const prompt = [
+    'あなたはキッチンカー事業者の週次ふり返りを手伝うアシスタントです。',
+    '与えられた日別の売上成績と営業メモを読み、経営者目線の週報を日本語で作成してください。',
+    '返答はJSONのみ。説明文は禁止です。',
+    '形式は {"report_title": string, "weekly_summary": string, "ai_feedback": string} としてください。',
+    'weekly_summary は以下を含めてください。',
+    '- 今週の営業サマリー',
+    '- 良かった日とその要因',
+    '- 伸び悩んだ日とその要因',
+    '- 来週に持ち越したい学び',
+    'ai_feedback は、客観的で前向きな改善提案を3点前後でまとめてください。',
+    '押し付けがましくなく、実行しやすい提案にしてください。',
+    `対象期間: ${input.weekStart} 〜 ${input.weekEnd}`,
+    '日別データ:',
+    JSON.stringify(input.rows, null, 2),
+  ].join('\n')
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4.1-mini',
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: prompt }],
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const outputText =
+    data.output_text ??
+    data.output?.flatMap((item: any) => item.content ?? []).map((item: any) => item.text ?? '').join('\n') ??
+    ''
+
+  const parsed = JSON.parse(extractJsonObject(outputText))
+
+  return {
+    report_title: String(parsed.report_title ?? `週報 ${input.weekStart} 〜 ${input.weekEnd}`).trim(),
+    weekly_summary: String(parsed.weekly_summary ?? '').trim(),
+    ai_feedback: String(parsed.ai_feedback ?? '').trim(),
   }
 }

@@ -1,15 +1,17 @@
-import DailySalesAnalyticsClient from '@/components/DailySalesAnalyticsClient'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
+import WeeklyReportsClient from '@/components/WeeklyReportsClient'
 import { requireServerSession } from '@/lib/auth'
 import {
   getMonthRange,
   getVendorDailyAnalytics,
   getVendorDailyMemos,
+  getVendorWeeklyReports,
+  getWeekRanges,
 } from '@/lib/vendor-reflection'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DailyAnalyticsPage({
+export default async function WeeklyReportsPage({
   searchParams,
 }: {
   searchParams?: { start?: string; end?: string; month?: string }
@@ -18,25 +20,26 @@ export default async function DailyAnalyticsPage({
   const range = getMonthRange(searchParams?.month)
   const start = searchParams?.start ?? range.start
   const end = searchParams?.end ?? range.end
-  const [rows, memos] = await Promise.all([
+
+  const [rows, memos, weeklyReports] = await Promise.all([
     getVendorDailyAnalytics(supabase, start, end),
     getVendorDailyMemos(supabase, start, end),
+    getVendorWeeklyReports(supabase, start, end),
   ])
+  const weeks = getWeekRanges(start, end)
 
   return (
     <div>
       <AnalyticsPageHeader
-        title="日別売上"
-        description="その月の売上を日ごとに確認しながら、営業メモを残せます。週ごとの振り返りは週報ページで確認できます。"
-        basePath="/analytics/daily"
+        title="週報"
+        description="営業メモと売上成績をもとに、週ごとの振り返りとAIフィードバックを確認できます。"
+        basePath="/reports/weekly"
         currentStart={start}
         currentEnd={end}
         showScopeTabs={false}
       />
-      <DailySalesAnalyticsClient
-        rows={rows}
-        memos={memos}
-      />
+
+      <WeeklyReportsClient rows={rows} memos={memos} weeklyReports={weeklyReports} weeks={weeks} />
     </div>
   )
 }

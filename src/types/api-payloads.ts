@@ -12,6 +12,10 @@ import type {
   PlansReferencePayload,
   PlansSavePayload,
   ProductMaster,
+  VendorDailyMemo,
+  VendorDailySalesRow,
+  VendorWeekRange,
+  VendorWeeklyReport,
   WeatherPreviewPayload,
 } from '@/types/operations'
 
@@ -122,3 +126,20 @@ export type PlanListItem = {
 export type PlansListPayload = PlanListItem[]
 
 export type PlanForecastRunPayload = MutationSuccessPayload
+
+export type VendorDailyMemoListPayload = VendorDailyMemo[]
+
+export type VendorDailyMemoMutationPayload = VendorDailyMemo
+
+export type VendorWeeklyReportListPayload = VendorWeeklyReport[]
+
+export type VendorWeeklyReportGeneratePayload = VendorWeeklyReport
+
+export type VendorWeeklyReportFeedbackPayload = VendorWeeklyReport
+
+export type VendorDailyAnalyticsPagePayload = {
+  rows: VendorDailySalesRow[]
+  memos: VendorDailyMemo[]
+  weeklyReports: VendorWeeklyReport[]
+  weeks: VendorWeekRange[]
+}

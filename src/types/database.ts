@@ -67,6 +67,16 @@ export interface Database {
         Insert: Omit<SalesForecast, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<SalesForecast, 'id' | 'created_at'>>
       }
+      vendor_daily_memos: {
+        Row: VendorDailyMemo
+        Insert: Omit<VendorDailyMemo, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<VendorDailyMemo, 'id' | 'created_at'>>
+      }
+      vendor_weekly_reports: {
+        Row: VendorWeeklyReport
+        Insert: Omit<VendorWeeklyReport, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<VendorWeeklyReport, 'id' | 'created_at'>>
+      }
       user_profiles: {
         Row: UserProfile
         Insert: Omit<UserProfile, 'created_at' | 'updated_at'>
@@ -257,6 +267,31 @@ export interface SalesForecast {
   predicted_gross_profit: number
   confidence_score: number | null
   forecast_basis: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VendorDailyMemo {
+  id: string
+  user_id: string
+  memo_date: string
+  memo_text: string
+  created_at: string
+  updated_at: string
+}
+
+export interface VendorWeeklyReport {
+  id: string
+  user_id: string
+  week_start_date: string
+  week_end_date: string
+  report_title: string
+  weekly_summary: string
+  ai_feedback: string
+  source_note_count: number
+  source_sales: number
+  helpful_feedback: boolean | null
+  helpful_marked_at: string | null
   created_at: string
   updated_at: string
 }
