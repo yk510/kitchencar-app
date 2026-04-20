@@ -1,15 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import { getHostScopeFromWindow } from '@/lib/domain'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
+import type { AppRole } from '@/lib/user-role'
 
 export default function LoginPage() {
   const { supabase, loading } = useAuth()
   const hostScope = getHostScopeFromWindow()
+  const roleParam = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get('role')
+  }, [])
+  const scopedRole: AppRole | null =
+    roleParam === 'organizer' || roleParam === 'vendor'
+      ? roleParam
+      : hostScope
   const authDraft = usePersistentDraft('draft:login-form', {
     email: '',
     password: '',
@@ -60,22 +69,22 @@ export default function LoginPage() {
             </span>
           </div>
           <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-700">
-            {hostScope === 'organizer' ? 'ORGANIZER WORKSPACE' : 'VENDOR WORKSPACE'}
+            {scopedRole === 'organizer' ? 'ORGANIZER WORKSPACE' : 'VENDOR WORKSPACE'}
           </p>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-main)]">
-            {hostScope === 'organizer'
+            {scopedRole === 'organizer'
               ? 'イベント募集と応募対応を、経営目線で前に進める'
               : '日々の営業を、経営判断につながる数字へ変える'}
           </h1>
           <p className="mt-3 text-sm font-semibold text-[var(--accent-blue)]">{BRAND_CONCEPT}</p>
           <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
-            {hostScope === 'organizer'
+            {scopedRole === 'organizer'
               ? '主催者向けの専用入口です。募集作成、応募確認、主催者プロフィール管理を、ひと続きの業務として整理できます。'
               : '売上CSVの取り込み、出店場所の整理、営業予測、分析までをひとまとめにしたキッチンカーOSです。ログインすると、ご自身のデータだけが見える状態で使い始められます。'}
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            {(hostScope === 'organizer'
+            {(scopedRole === 'organizer'
               ? [
                   ['1', '主催者プロフィール', 'ベンダーに伝わる主催者情報を整えます。'],
                   ['2', '募集作成', 'イベントや会場の魅力を写真つきで募集ページにまとめます。'],
@@ -156,11 +165,11 @@ export default function LoginPage() {
               LPから役割ごとの登録画面へ進めます。登録後は、そのまま初期プロフィール入力まで続けて進められます。
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              {hostScope === 'organizer' ? (
+              {scopedRole === 'organizer' ? (
                 <Link href="/signup/organizer?from=login" className="soft-button rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]">
                   主催者として新規登録
                 </Link>
-              ) : hostScope === 'vendor' ? (
+              ) : scopedRole === 'vendor' ? (
                 <Link href="/signup/vendor?from=login" className="soft-button rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]">
                   事業者として新規登録
                 </Link>

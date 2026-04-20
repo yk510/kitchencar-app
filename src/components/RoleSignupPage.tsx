@@ -683,7 +683,7 @@ export default function RoleSignupPage({
               <h2 className="mt-2 text-xl font-bold text-[var(--text-main)]">{currentStep.title}</h2>
               <p className="mt-2 text-sm text-[var(--text-sub)]">{currentStep.description}</p>
             </div>
-            <Link href="/login" className="text-sm font-semibold text-[var(--accent-blue)]">
+            <Link href={`/login?role=${role}`} className="text-sm font-semibold text-[var(--accent-blue)]">
               すでにアカウントを持っている
             </Link>
           </div>

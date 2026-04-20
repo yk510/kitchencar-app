@@ -83,6 +83,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const [confirmationError, setConfirmationError] = useState<string | null>(null)
   const [profileBootstrapStatus, setProfileBootstrapStatus] = useState<'idle' | 'bootstrapping' | 'done' | 'error'>('idle')
   const [profileBootstrapError, setProfileBootstrapError] = useState<string | null>(null)
+  const [hasConfirmedSession, setHasConfirmedSession] = useState(false)
   const [hashParsed, setHashParsed] = useState(false)
   const [hashSessionParams, setHashSessionParams] = useState<{
     accessToken: string | null
@@ -99,7 +100,10 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const hashRefreshToken = hashSessionParams?.refreshToken ?? null
   const sessionAccessToken = queryAccessToken ?? hashAccessToken
   const sessionRefreshToken = queryRefreshToken ?? hashRefreshToken
-  const sessionReady = confirmationStatus === 'confirmed' && !loading && !!user
+  const sessionReady =
+    confirmationStatus === 'confirmed' &&
+    !loading &&
+    (hasConfirmedSession || !!user)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -176,6 +180,9 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
     if (!hashParsed) return
     if (!needsExchange) {
       setConfirmationStatus('confirmed')
+      if (user) {
+        setHasConfirmedSession(true)
+      }
       return
     }
 
@@ -214,6 +221,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
 
         if (cancelled) return
         window.history.replaceState({}, '', pathname)
+        setHasConfirmedSession(true)
         setConfirmationStatus('confirmed')
         if (!serverSessionReady) {
           setConfirmationError(
@@ -445,7 +453,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
           </button>
           {!user && (
             <Link
-              href="/login"
+              href={`/login?role=${role}`}
               className="soft-button rounded-full bg-white px-6 py-3 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
             >
               ログイン画面へ

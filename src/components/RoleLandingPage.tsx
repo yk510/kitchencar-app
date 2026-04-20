@@ -82,7 +82,7 @@ export default function RoleLandingPage({ role }: { role: AppRole }) {
                 {isVendor ? 'キッチンカー事業者として登録する' : 'イベント主催者として登録する'}
               </Link>
               <Link
-                href={`/login?from=${isVendor ? 'vendor-lp' : 'organizer-lp'}`}
+                href={`/login?role=${isVendor ? 'vendor' : 'organizer'}&from=${isVendor ? 'vendor-lp' : 'organizer-lp'}`}
                 className="soft-button rounded-full bg-white px-6 py-3 text-sm font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
               >
                 すでにアカウントを持っている
