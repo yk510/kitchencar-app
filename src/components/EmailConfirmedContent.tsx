@@ -99,7 +99,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const hashRefreshToken = hashSessionParams?.refreshToken ?? null
   const sessionAccessToken = queryAccessToken ?? hashAccessToken
   const sessionRefreshToken = queryRefreshToken ?? hashRefreshToken
-  const sessionReady = confirmationStatus === 'confirmed' && !loading && !!user && profileReady
+  const sessionReady = confirmationStatus === 'confirmed' && !loading && !!user
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -406,7 +406,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
             : confirmationStatus === 'error'
               ? '確認リンクの処理でエラーがありました。下の案内を確認して、必要ならログイン画面から入り直してください。'
             : loading || (user && !profileReady)
-              ? 'ログイン状態を確認しています。数秒たってから下のボタンを押してください。'
+              ? 'ログイン状態を確認しています。プロフィール反映は続けながら進められるので、数秒たっても変わらない場合はそのまま進んで大丈夫です。'
             : !user
               ? '同じブラウザでログイン状態を引き継げなかったため、もう一度ログインして続きから進めてください。'
             : !hasProfile && profileBootstrapStatus === 'done'
