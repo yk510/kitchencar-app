@@ -99,6 +99,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const hashRefreshToken = hashSessionParams?.refreshToken ?? null
   const sessionAccessToken = queryAccessToken ?? hashAccessToken
   const sessionRefreshToken = queryRefreshToken ?? hashRefreshToken
+  const sessionReady = confirmationStatus === 'confirmed' && !loading && !!user && profileReady
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -167,11 +168,8 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
     [authCode, sessionAccessToken, supabase, tokenHash]
   )
   const dashboardReady =
-    confirmationStatus === 'confirmed' &&
-    !loading &&
-    !!user &&
-    profileReady &&
-    (hasProfile || profileBootstrapStatus === 'done')
+    sessionReady &&
+    (hasProfile || profileBootstrapStatus === 'done' || profileBootstrapStatus === 'error')
 
   useEffect(() => {
     if (!supabase) return
@@ -281,6 +279,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
     const sourceProfile = draftProfile ?? fallbackProfile
 
     if (!sourceProfile) {
+      setProfileBootstrapStatus('done')
       return
     }
 
@@ -401,7 +400,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
         <h2 className="text-xl font-bold text-[var(--text-main)]">次にやること</h2>
         <p className="mt-3 text-sm leading-7 text-[var(--text-sub)]">
           {confirmationStatus === 'confirming'
-            ? 'メール確認を完了して、ログイン状態を準備しています。数秒だけお待ちください。'
+          ? 'メール確認を完了して、ログイン状態を準備しています。数秒だけお待ちください。'
             : profileBootstrapStatus === 'bootstrapping'
               ? '登録時に入力したプロフィールを反映しています。数秒だけお待ちください。'
             : confirmationStatus === 'error'
@@ -410,6 +409,8 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
               ? 'ログイン状態を確認しています。数秒たってから下のボタンを押してください。'
             : !user
               ? '同じブラウザでログイン状態を引き継げなかったため、もう一度ログインして続きから進めてください。'
+            : !hasProfile && profileBootstrapStatus === 'done'
+              ? 'ログイン状態の引き継ぎは完了しています。プロフィール反映はダッシュボードから続けて確認できます。'
             : role === 'organizer'
               ? 'まずは主催者プロフィールを確認し、そのあと最初の募集作成へ進むのがおすすめです。'
               : 'まずは売上データ取込や事業者設定の確認から始めるのがおすすめです。'}
@@ -436,7 +437,11 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
               dashboardReady ? 'bg-[var(--accent-blue)] hover:bg-[#2f59d9]' : 'cursor-not-allowed bg-[#9db4ef] opacity-75'
             }`}
           >
-            {dashboardReady ? 'ダッシュボードへ進む' : 'ログイン状態を準備しています'}
+            {dashboardReady
+              ? 'ダッシュボードへ進む'
+              : profileBootstrapStatus === 'bootstrapping'
+                ? 'プロフィールを反映しています'
+                : 'ログイン状態を準備しています'}
           </button>
           {!user && (
             <Link
