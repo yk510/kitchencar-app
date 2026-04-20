@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { detectHostAppScope, isOrganizerOnlyPath } from '@/lib/domain'
+import { detectHostAppScope, isOrganizerOnlyPath, isPublicEntryPath } from '@/lib/domain'
 
 function redirectTo(request: NextRequest, pathname: string) {
   const url = request.nextUrl.clone()
@@ -30,17 +30,34 @@ export function middleware(request: NextRequest) {
 
   if (scope === 'organizer') {
     if (pathname === '/') {
-      return redirectTo(request, '/organizer')
+      return redirectTo(request, '/lp/organizer')
     }
 
-    if (pathname === '/login' || isOrganizerOnlyPath(pathname)) {
+    if (pathname === '/signup/vendor') {
+      return redirectTo(request, '/signup/organizer')
+    }
+
+    if (
+      pathname === '/login' ||
+      pathname === '/signup/organizer' ||
+      pathname === '/lp/organizer' ||
+      isOrganizerOnlyPath(pathname)
+    ) {
       return NextResponse.next()
     }
 
     return redirectTo(request, '/organizer')
   }
 
-  if (scope === 'vendor' && isOrganizerOnlyPath(pathname)) {
+  if (scope === 'vendor' && pathname === '/signup/organizer') {
+    return redirectTo(request, '/signup/vendor')
+  }
+
+  if (scope === 'vendor' && pathname === '/organizer') {
+    return redirectTo(request, '/')
+  }
+
+  if (scope === 'vendor' && isOrganizerOnlyPath(pathname) && !isPublicEntryPath(pathname)) {
     return redirectTo(request, '/')
   }
 

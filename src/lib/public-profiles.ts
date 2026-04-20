@@ -52,6 +52,7 @@ export async function getVendorPublicProfile(supabase: any, userId: string): Pro
     owner_name: data.owner_name ?? null,
     contact_email: data.contact_email ?? null,
     phone: data.phone ?? null,
+    genre: data.genre ?? null,
     main_menu: data.main_menu ?? null,
     logo_image_url: data.logo_image_url ?? null,
     instagram_url: data.instagram_url ?? null,

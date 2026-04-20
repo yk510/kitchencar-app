@@ -43,6 +43,18 @@ export function isOrganizerOnlyPath(pathname: string) {
   return pathname === '/organizer' || pathname.startsWith('/organizer/')
 }
 
+export function isPublicEntryPath(pathname: string) {
+  return (
+    pathname === '/lp/vendor' ||
+    pathname === '/lp/organizer' ||
+    pathname === '/login' ||
+    pathname === '/auth/confirmed' ||
+    pathname.startsWith('/auth/confirmed/') ||
+    pathname === '/signup/vendor' ||
+    pathname === '/signup/organizer'
+  )
+}
+
 export function isVendorPrimaryPath(pathname: string) {
   return (
     pathname === '/' ||
@@ -63,4 +75,3 @@ export function isVendorPrimaryPath(pathname: string) {
     pathname.startsWith('/vendor/')
   )
 }
-

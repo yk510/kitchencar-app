@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import DashboardClient from '@/components/DashboardClient'
-import { requireServerSession } from '@/lib/auth'
+import { getServerSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
 type TaskTone = 'danger' | 'warn'
 
@@ -239,7 +240,12 @@ async function getDashboardData(supabase: any) {
 }
 
 export default async function DashboardPage() {
-  const { supabase } = await requireServerSession()
+  const session = await getServerSession()
+  if (!session) {
+    redirect('/lp/vendor')
+  }
+
+  const { supabase } = session
   const data = await getDashboardData(supabase)
   return <DashboardClient data={data} />
 }

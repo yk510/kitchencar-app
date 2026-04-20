@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { getBrowserSupabaseStorageKey } from '@/lib/auth-cookie'
 import type { Database } from '@/types/database'
 
 const supabaseUrl =
@@ -16,7 +17,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const resolvedSupabaseUrl = supabaseUrl
 const resolvedSupabaseAnonKey = supabaseAnonKey
 
-let browserClient: SupabaseClient<Database> | null = null
+const browserClients = new Map<string, SupabaseClient<Database>>()
 
 export function createServerSupabaseClient(accessToken?: string) {
   return createClient<Database>(resolvedSupabaseUrl, resolvedSupabaseAnonKey, {
@@ -35,11 +36,21 @@ export function createServerSupabaseClient(accessToken?: string) {
 }
 
 export function createBrowserSupabaseClient() {
-  if (!browserClient) {
-    browserClient = createClient<Database>(resolvedSupabaseUrl, resolvedSupabaseAnonKey)
+  const storageKey = getBrowserSupabaseStorageKey()
+  const existingClient = browserClients.get(storageKey)
+
+  if (existingClient) {
+    return existingClient
   }
 
-  return browserClient as SupabaseClient<Database>
+  const client = createClient<Database>(resolvedSupabaseUrl, resolvedSupabaseAnonKey, {
+    auth: {
+      storageKey,
+    },
+  })
+
+  browserClients.set(storageKey, client)
+  return client
 }
 
 export const supabase = createServerSupabaseClient()

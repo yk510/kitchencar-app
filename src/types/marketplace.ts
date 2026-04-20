@@ -28,6 +28,7 @@ export type VendorProfile = {
   owner_name: string | null
   contact_email: string | null
   phone: string | null
+  genre: string | null
   main_menu: string | null
   logo_image_url: string | null
   instagram_url: string | null
@@ -51,6 +52,7 @@ export type VendorPublicProfile = {
   owner_name: string | null
   contact_email: string | null
   phone: string | null
+  genre: string | null
   main_menu: string | null
   logo_image_url: string | null
   instagram_url: string | null

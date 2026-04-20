@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import PublicProfileCard from '@/components/PublicProfileCard'
+import { getVendorGenreLabel } from '@/lib/vendor-genres'
 import type { VendorPublicProfile } from '@/types/marketplace'
 
 export default function OrganizerVendorDetailPage({ params }: { params: { id: string } }) {
@@ -63,6 +64,7 @@ export default function OrganizerVendorDetailPage({ params }: { params: { id: st
             name={profile.business_name}
             contactLabel="担当者"
             contactName={profile.owner_name}
+            genreLabel={getVendorGenreLabel(profile.genre)}
             logoImageUrl={profile.logo_image_url}
             mainMenu={profile.main_menu}
             instagramUrl={profile.instagram_url}

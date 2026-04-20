@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import EventOfferPreviewCard from '@/components/EventOfferPreviewCard'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { compressImageFile } from '@/lib/client-image'
@@ -132,6 +132,10 @@ function offerToForm(offer: OrganizerEventOffer): OfferForm {
 }
 
 export default function OrganizerOffersPage() {
+  const guideMode = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get('guide')
+  }, [])
   const offerDraft = usePersistentDraft<{
     editingOfferId: string | null
     form: OfferForm
@@ -267,6 +271,44 @@ export default function OrganizerOffersPage() {
         </p>
       </div>
 
+      {guideMode === 'onboarding-organizer' && !editingOfferId && (
+        <div className="soft-panel border border-[var(--accent-blue)]/20 bg-[var(--accent-blue-soft)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">はじめての募集ガイド</p>
+              <h2 className="mt-2 text-lg font-bold text-[var(--text-main)]">最初の募集は、基本情報から埋めれば大丈夫です</h2>
+              <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+                まずは募集名、開催日、場所、募集台数を入れて、そのあと写真や背景・目的を足していくと、ベンダーに伝わりやすい募集ページになります。
+              </p>
+            </div>
+            <a
+              href="#offer-basic-info"
+              className="soft-button rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+            >
+              入力を始める
+            </a>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 1</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">まずは基本情報</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">募集名、開催日、場所、募集台数を入れて、募集の骨組みを作ります。</p>
+            </div>
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 2</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">写真と背景を追加</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">会場写真や募集背景があると、応募判断がしやすくなります。</p>
+            </div>
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 3</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">右側プレビューで確認</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">ベンダーにどう見えるかを見ながら、文言や条件を調整できます。</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <div className="soft-panel p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -292,7 +334,7 @@ export default function OrganizerOffersPage() {
                 </div>
               </div>
             )}
-            <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
+            <div id="offer-basic-info" className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
               <h2 className="text-lg font-semibold text-gray-800">基本情報</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>

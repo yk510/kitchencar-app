@@ -44,10 +44,6 @@ export async function POST(req: NextRequest) {
       return apiError('担当者名、連絡用メール、電話番号は入力してください', 400)
     }
 
-    if (!description || description.length < 80) {
-      return apiError('紹介文は80文字以上を目安に入力してください', 400)
-    }
-
     const { data, error } = await (supabase as any)
       .from('organizer_profiles')
       .upsert(

@@ -25,6 +25,7 @@ export async function GET(
     user_id: params.id,
     business_name: data.business_name ?? '事業者',
     owner_name: data.owner_name ?? null,
+    genre: data.genre ?? null,
     main_menu: data.main_menu ?? null,
     logo_image_url: data.logo_image_url ?? null,
     instagram_url: data.instagram_url ?? null,

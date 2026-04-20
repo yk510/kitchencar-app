@@ -1,9 +1,9 @@
 import type { User } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { AUTH_COOKIE_NAME } from '@/lib/auth-cookie'
+import { getAuthCookieCandidateNames, getScopeFromHost } from '@/lib/auth-cookie'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type { AppRole } from '@/lib/user-role'
 
@@ -45,7 +45,12 @@ function getRoleFromMetadata(session: Awaited<ReturnType<typeof getUserFromAcces
 
 export async function getServerSession() {
   const cookieStore = await cookies()
-  const accessToken = cookieStore.get(AUTH_COOKIE_NAME)?.value
+  const headerStore = await headers()
+  const scope = getScopeFromHost(headerStore.get('host') ?? '')
+  const accessToken =
+    getAuthCookieCandidateNames(scope)
+      .map((name) => cookieStore.get(name)?.value)
+      .find(Boolean) ?? null
   const session = await getUserFromAccessToken(accessToken)
   const profile = await getUserProfileForSession(session)
 
@@ -69,7 +74,11 @@ export async function requireServerSession() {
 }
 
 export async function getRouteSession(request: NextRequest) {
-  const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value
+  const scope = getScopeFromHost(request.headers.get('host') ?? '')
+  const accessToken =
+    getAuthCookieCandidateNames(scope)
+      .map((name) => request.cookies.get(name)?.value)
+      .find(Boolean) ?? null
   const session = await getUserFromAccessToken(accessToken)
   const profile = await getUserProfileForSession(session)
 

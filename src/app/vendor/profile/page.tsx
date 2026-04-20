@@ -8,6 +8,7 @@ import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
 import { useDraftForm } from '@/lib/use-draft-form'
 import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import { VENDOR_GENRE_OPTIONS } from '@/lib/vendor-genres'
 import type { VendorProfile } from '@/types/marketplace'
 
 export default function VendorProfilePage() {
@@ -18,6 +19,7 @@ export default function VendorProfilePage() {
     owner_name: '',
     contact_email: '',
     phone: '',
+    genre: '',
     main_menu: '',
     logo_image_url: '',
     instagram_url: '',
@@ -46,6 +48,7 @@ export default function VendorProfilePage() {
             owner_name: data.owner_name ?? '',
             contact_email: data.contact_email ?? '',
             phone: data.phone ?? '',
+            genre: data.genre ?? '',
             main_menu: data.main_menu ?? '',
             logo_image_url: data.logo_image_url ?? '',
             instagram_url: data.instagram_url ?? '',
@@ -193,6 +196,23 @@ export default function VendorProfilePage() {
                   placeholder="例: 090-1234-5678"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">ジャンル</label>
+              <select
+                value={form.genre}
+                onChange={(event) => setForm((prev) => ({ ...prev, genre: event.target.value }))}
+                className="w-full px-4 py-3"
+              >
+                <option value="">選択してください</option>
+                {VENDOR_GENRE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-gray-500">将来的な主催者検索やスカウトのために使う情報です。</p>
             </div>
 
             <div>

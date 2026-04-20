@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
-import { getHostScopeFromWindow } from '@/lib/domain'
+import { getHostScopeFromWindow, isPublicEntryPath } from '@/lib/domain'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole } from '@/lib/user-role'
 
@@ -22,18 +22,21 @@ function LoadingScreen({ message }: { message: string }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { loading, supabase, user, role, profileReady } = useAuth()
+  const { loading, supabase, user, role, hasProfile, profileReady } = useAuth()
   const hostScope = useMemo(() => getHostScopeFromWindow(), [])
 
   const isLoginPage = pathname === '/login'
+  const isEmailConfirmedPage = pathname === '/auth/confirmed' || pathname.startsWith('/auth/confirmed/')
+  const isSignupPage = pathname.startsWith('/signup/')
   const isOrganizerPath = pathname === '/organizer' || pathname.startsWith('/organizer/')
   const isVendorPath = pathname === '/vendor' || pathname.startsWith('/vendor/')
+  const isPublicPage = isPublicEntryPath(pathname)
   const homePath = getHomePathByRole(role)
 
   useEffect(() => {
     if (loading) return
 
-    if (!user && !isLoginPage) {
+    if (!user && !isPublicPage) {
       router.replace('/login')
       return
     }
@@ -53,6 +56,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return
     }
 
+    if (user && isSignupPage && profileReady && hasProfile) {
+      router.replace(homePath)
+      return
+    }
+
     if (user && role === 'organizer' && pathname === '/') {
       router.replace('/organizer')
       return
@@ -66,11 +74,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (user && role === 'organizer' && isVendorPath) {
       router.replace('/organizer')
     }
-  }, [homePath, hostScope, isLoginPage, isOrganizerPath, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
+  }, [hasProfile, homePath, hostScope, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 
-  if (isLoginPage) {
+  if (isLoginPage || isSignupPage || isEmailConfirmedPage || (!user && isPublicPage)) {
     return <main className="min-h-screen px-4 py-8 lg:px-6">{children}</main>
   }
 
@@ -78,7 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <LoadingScreen message="ログイン状態を確認しています..." />
   }
 
-  if (!user && !isLoginPage) {
+  if (!user && !isPublicPage) {
     return <LoadingScreen message="ログイン画面へ移動しています..." />
   }
 

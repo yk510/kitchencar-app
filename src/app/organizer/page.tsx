@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { requireServerSession } from '@/lib/auth'
+import { getServerSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
 async function getOrganizerDashboardData(supabase: any, userId: string) {
   const [{ data: profile }, { data: offers }, { data: applications }] = await Promise.all([
@@ -48,7 +49,12 @@ async function getOrganizerDashboardData(supabase: any, userId: string) {
 }
 
 export default async function OrganizerDashboardPage() {
-  const { supabase, user, role } = await requireServerSession()
+  const session = await getServerSession()
+  if (!session) {
+    redirect('/lp/organizer')
+  }
+
+  const { supabase, user, role } = session
   const data = await getOrganizerDashboardData(supabase, user.id)
 
   if (role !== 'organizer') {

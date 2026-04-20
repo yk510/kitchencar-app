@@ -17,6 +17,10 @@ export interface VendorWeeklyReportDraft {
   ai_feedback: string
 }
 
+export interface ProfileCopyDraft {
+  text: string
+}
+
 interface KnownLocation {
   name: string
   address?: string | null
@@ -376,4 +380,66 @@ export async function generateVendorWeeklyReport(input: {
     weekly_summary: String(parsed.weekly_summary ?? '').trim(),
     ai_feedback: String(parsed.ai_feedback ?? '').trim(),
   }
+}
+
+export async function generateProfileCopyDraft(input: {
+  role: 'vendor' | 'organizer'
+  field: 'main_menu' | 'description'
+  name: string
+  genreLabel?: string | null
+  mainMenu?: string | null
+  description?: string | null
+  notes?: string | null
+}): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY が未設定です')
+  }
+
+  const prompt = [
+    'あなたはキッチンカー向けSaaSの登録導線を手伝う、日本語のプロフィール文サポートアシスタントです。',
+    `対象ロール: ${input.role === 'vendor' ? 'キッチンカー事業者' : 'イベント主催者'}`,
+    `作成対象: ${input.field === 'main_menu' ? '主なメニュー' : '紹介文'}`,
+    `名称: ${input.name}`,
+    `ジャンル: ${input.genreLabel ?? '未指定'}`,
+    `現在の主なメニュー: ${input.mainMenu ?? ''}`,
+    `現在の紹介文: ${input.description ?? ''}`,
+    `補足メモ: ${input.notes ?? ''}`,
+    input.field === 'main_menu'
+      ? '短くてもよいので、提供内容が伝わる自然な一文か、読点区切りのメニュー紹介にしてください。'
+      : '相手に信頼感が伝わり、活動イメージが湧く紹介文を80文字から160文字程度で作成してください。',
+    '返答はJSONのみ。形式は {"text": string} です。',
+  ].join('\n')
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4.1-mini',
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: prompt }],
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const outputText =
+    data.output_text ??
+    data.output?.flatMap((item: any) => item.content ?? []).map((item: any) => item.text ?? '').join('\n') ??
+    ''
+
+  const parsed = JSON.parse(extractJsonObject(outputText)) as ProfileCopyDraft
+  return String(parsed.text ?? '').trim()
 }

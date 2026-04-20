@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type { UploadResultPayload } from '@/types/operations'
 
@@ -10,6 +10,10 @@ export default function UploadPage() {
   const [result, setResult]   = useState<UploadResultPayload | null>(null)
   const [error, setError]     = useState<string | null>(null)
   const inputRef              = useRef<HTMLInputElement>(null)
+  const guideMode = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get('guide')
+  }, [])
 
   async function handleUpload() {
     if (!file) return
@@ -47,6 +51,44 @@ export default function UploadPage() {
           すでに入っている同じ取引は、最新の内容で上書きされます。
         </p>
       </div>
+
+      {guideMode === 'onboarding-vendor' && (
+        <div className="soft-panel mb-6 border border-[var(--accent-blue)]/20 bg-[var(--accent-blue-soft)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">はじめての設定ガイド</p>
+              <h2 className="mt-2 text-lg font-bold text-[var(--text-main)]">まずは AirレジのCSVを1本取り込んでみましょう</h2>
+              <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+                ここで売上データを入れると、日別売上、場所分析、AI週報まで一気に使い始められます。最初は直近1か月分だけでも十分です。
+              </p>
+            </div>
+            <a
+              href="#csv-upload-area"
+              className="soft-button rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+            >
+              すぐ取り込む
+            </a>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 1</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">AirレジでCSVを出す</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">取引履歴から、まずは直近1か月分のCSVをダウンロードします。</p>
+            </div>
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 2</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">この画面で取り込む</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">下のアップロードエリアからCSVを選んで、そのまま取り込みます。</p>
+            </div>
+            <div className="rounded-2xl bg-white/90 p-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold text-orange-700">STEP 3</p>
+              <p className="mt-2 font-semibold text-[var(--text-main)]">次は原価登録</p>
+              <p className="mt-2 text-sm text-[var(--text-sub)]">新規商品が出たら、そのまま原価登録へ進むと分析の精度が上がります。</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="soft-panel mb-6 p-5">
         <p className="text-sm font-semibold text-gray-700">現在対応中のPOSデータ：Airレジ</p>
@@ -109,7 +151,7 @@ export default function UploadPage() {
       </div>
 
       {/* アップロードエリア */}
-      <div className="bg-white rounded-2xl border-2 border-dashed border-[#d9cbbd] p-10 text-center mb-6
+      <div id="csv-upload-area" className="bg-white rounded-2xl border-2 border-dashed border-[#d9cbbd] p-10 text-center mb-6
         hover:border-blue-400 transition cursor-pointer"
         onClick={() => inputRef.current?.click()}>
         <div className="text-4xl mb-3">🧾</div>

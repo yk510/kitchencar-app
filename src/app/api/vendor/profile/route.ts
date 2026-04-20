@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     const owner_name = String(body.owner_name ?? '').trim() || null
     const contact_email = String(body.contact_email ?? '').trim() || user.email || null
     const phone = String(body.phone ?? '').trim() || null
+    const genre = String(body.genre ?? '').trim() || null
     const main_menu = String(body.main_menu ?? '').trim() || null
     const logo_image_url = String(body.logo_image_url ?? '').trim() || null
     const instagram_url = String(body.instagram_url ?? '').trim() || null
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
             owner_name,
             contact_email,
             phone,
+            genre,
             main_menu,
             logo_image_url,
             instagram_url,

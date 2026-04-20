@@ -6,6 +6,7 @@ type PublicProfileCardProps = {
   name: string
   contactLabel: string
   contactName?: string | null
+  genreLabel?: string | null
   logoImageUrl?: string | null
   mainMenu?: string | null
   instagramUrl?: string | null
@@ -19,6 +20,7 @@ export default function PublicProfileCard({
   name,
   contactLabel,
   contactName,
+  genreLabel,
   logoImageUrl,
   mainMenu,
   instagramUrl,
@@ -53,6 +55,7 @@ export default function PublicProfileCard({
           <p>
             {contactLabel} {contactName || '-'}
           </p>
+          {genreLabel ? <p>ジャンル {genreLabel}</p> : null}
         </div>
 
         {mainMenu != null ? (

@@ -3,7 +3,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import { AUTH_COOKIE_NAME, getAuthCookieDomain } from '@/lib/auth-cookie'
+import {
+  getAllKnownAuthCookieNames,
+  getBrowserAuthCookieDomain,
+  getBrowserAuthCookieName,
+} from '@/lib/auth-cookie'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
 import type { Database } from '@/types/database'
@@ -14,6 +18,7 @@ type AuthContextValue = {
   session: Session | null
   user: User | null
   role: 'vendor' | 'organizer' | null
+  hasProfile: boolean
   profileReady: boolean
   loading: boolean
   refreshProfile: () => Promise<void>
@@ -23,15 +28,21 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 function syncAuthCookie(accessToken?: string | null) {
   if (typeof document === 'undefined') return
-  const domain = getAuthCookieDomain()
+  const domain = getBrowserAuthCookieDomain()
+  const cookieName = getBrowserAuthCookieName()
   const domainPart = domain ? `; domain=${domain}` : ''
 
+  for (const knownCookieName of getAllKnownAuthCookieNames()) {
+    if (knownCookieName === cookieName && accessToken) continue
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+  }
+
   if (accessToken) {
-    document.cookie = `${AUTH_COOKIE_NAME}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
+    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
     return
   }
 
-  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; samesite=lax${domainPart}`
+  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -43,11 +54,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [role, setRole] = useState<'vendor' | 'organizer' | null>(null)
+  const [hasProfile, setHasProfile] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
 
   async function refreshProfile() {
     if (!supabase) {
       setRole('vendor')
+      setHasProfile(true)
       setProfileReady(true)
       return
     }
@@ -61,9 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signal: controller.signal,
       })
       setRole(data.role ?? 'vendor')
+      setHasProfile(!!data.profile)
       setProfileReady(true)
     } catch {
       setRole('vendor')
+      setHasProfile(false)
       setProfileReady(true)
     } finally {
       window.clearTimeout(timeoutId)
@@ -95,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           void refreshProfile()
         } else {
           setRole(null)
+          setHasProfile(false)
           setProfileReady(true)
         }
         setLoading(false)
@@ -104,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null)
         syncAuthCookie(null)
         setRole(null)
+        setHasProfile(false)
         setProfileReady(true)
         setLoading(false)
       })
@@ -116,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         void refreshProfile()
       } else {
         setRole(null)
+        setHasProfile(false)
         setProfileReady(true)
       }
       setLoading(false)
@@ -136,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user: session?.user ?? null,
         role,
+        hasProfile,
         profileReady,
         loading,
         refreshProfile,
