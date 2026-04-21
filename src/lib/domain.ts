@@ -24,8 +24,8 @@ export function detectHostAppScope(host: string): AppHostScope {
   if (organizerHost && normalizedHost === organizerHost) return 'organizer'
   if (vendorHost && normalizedHost === vendorHost) return 'vendor'
 
-  if (normalizedHost.startsWith('organizer.')) return 'organizer'
-  if (normalizedHost.startsWith('vendor.')) return 'vendor'
+  if (normalizedHost.startsWith('organizer.') || normalizedHost.startsWith('org.')) return 'organizer'
+  if (normalizedHost.startsWith('vendor.') || normalizedHost.startsWith('vnd.')) return 'vendor'
 
   return null
 }
