@@ -156,6 +156,14 @@ function isRecoverableSignupError(message: string) {
   )
 }
 
+function buildVendorWelcomePath(source?: string | null, returnOfferId?: string | null) {
+  const params = new URLSearchParams()
+  if (source) params.set('from', source)
+  if (returnOfferId) params.set('offer', returnOfferId)
+  const query = params.toString()
+  return query ? `/vendor/welcome?${query}` : '/vendor/welcome'
+}
+
 function CopyAssistBlock({
   role,
   field,
@@ -212,9 +220,11 @@ function CopyAssistBlock({
 export default function RoleSignupPage({
   role,
   source,
+  returnOfferId,
 }: {
   role: AppRole
   source?: string | null
+  returnOfferId?: string | null
 }) {
   const router = useRouter()
   const { supabase, user, hasProfile, refreshProfile } = useAuth()
@@ -415,10 +425,34 @@ export default function RoleSignupPage({
 
       const email = form.email.trim()
       const password = form.password
+      const onboardingProfile = isVendor
+        ? {
+            business_name: form.business_name.trim(),
+            owner_name: form.owner_name.trim(),
+            contact_email: form.contact_email.trim() || email,
+            phone: form.phone.trim(),
+            genre: form.genre,
+            main_menu: form.main_menu.trim(),
+            logo_image_url: form.logo_image_url || null,
+            instagram_url: form.instagram_url.trim() || null,
+            x_url: form.x_url.trim() || null,
+            description: form.description.trim(),
+          }
+        : {
+            organizer_name: form.organizer_name.trim(),
+            contact_name: form.contact_name.trim(),
+            contact_email: form.contact_email.trim() || email,
+            phone: form.phone.trim(),
+            logo_image_url: form.logo_image_url || null,
+            instagram_url: form.instagram_url.trim() || null,
+            x_url: form.x_url.trim() || null,
+            description: form.description.trim(),
+          }
       const emailRedirectTo =
         typeof window !== 'undefined'
           ? buildRoleAppUrl(role, `/auth/confirmed/${role}`, {
               origin: window.location.origin,
+              searchParams: returnOfferId && role === 'vendor' ? { offer: returnOfferId } : undefined,
             })
           : undefined
       let activeUser = user
@@ -436,6 +470,7 @@ export default function RoleSignupPage({
             data: {
               role,
               display_name: isVendor ? form.business_name.trim() : form.organizer_name.trim(),
+              onboarding_profile: onboardingProfile,
             },
           },
         })
@@ -568,7 +603,7 @@ export default function RoleSignupPage({
         router.replace(
           role === 'organizer'
             ? `/organizer/welcome${signupSource ? `?from=${encodeURIComponent(signupSource)}` : ''}`
-            : `/vendor/welcome${signupSource ? `?from=${encodeURIComponent(signupSource)}` : ''}`
+            : buildVendorWelcomePath(signupSource, returnOfferId)
         )
         return
       }

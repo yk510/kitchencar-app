@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function VendorWelcomePage({
   searchParams,
 }: {
-  searchParams?: { from?: string }
+  searchParams?: { from?: string; offer?: string }
 }) {
   const { role } = await requireServerSession()
 
@@ -17,6 +17,7 @@ export default async function VendorWelcomePage({
   }
 
   const sourceLabel = getSignupSourceLabel(searchParams?.from ?? null, 'vendor')
+  const returnOfferId = searchParams?.offer ?? null
 
   return (
     <div className="space-y-6">
@@ -29,6 +30,22 @@ export default async function VendorWelcomePage({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
+        {returnOfferId && (
+          <div className="soft-panel rounded-[28px] border border-[var(--accent-blue)]/20 bg-[var(--accent-blue-soft)] p-6 lg:col-span-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">応募導線</p>
+            <h2 className="mt-3 text-lg font-semibold text-[var(--text-main)]">気になっていた募集へ戻れます</h2>
+            <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+              登録が完了しました。外部公開ページで見ていた募集詳細へ戻り、応募メッセージを送信できます。
+            </p>
+            <Link
+              href={`/vendor/offers/${returnOfferId}`}
+              className="mt-5 inline-flex rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+            >
+              募集詳細へ戻って応募する
+            </Link>
+          </div>
+        )}
+
         <div className="soft-panel rounded-[28px] p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">STEP 1</p>
           <h2 className="mt-3 text-lg font-semibold text-[var(--text-main)]">事業者設定を確認する</h2>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import EventOfferPreviewCard from '@/components/EventOfferPreviewCard'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { buildRoleAppUrl } from '@/lib/app-url'
 import { compressImageFile } from '@/lib/client-image'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
@@ -258,6 +259,23 @@ export default function OrganizerOffersPage() {
             ? '募集の更新に失敗しました'
             : '募集の作成に失敗しました'
       )
+    }
+  }
+
+  function getExternalOfferUrl(offerId: string) {
+    if (typeof window === 'undefined') return `/public/offers/${offerId}`
+    return buildRoleAppUrl('vendor', `/public/offers/${offerId}`, {
+      origin: window.location.origin,
+    })
+  }
+
+  async function handleCopyExternalUrl(offer: OrganizerEventOffer) {
+    const url = getExternalOfferUrl(offer.id)
+    try {
+      await navigator.clipboard.writeText(url)
+      succeed('外部公開URLをコピーしました')
+    } catch {
+      setError(`コピーできませんでした。URL: ${url}`)
     }
   }
 
@@ -721,6 +739,23 @@ export default function OrganizerOffersPage() {
                       <p>応募: {offer.application_count} 件 / 出店決定: {offer.accepted_count} 件</p>
                       <p>公開設定: {offer.is_public ? '公開' : '非公開'}</p>
                     </div>
+                    {offer.status === 'open' && offer.is_public ? (
+                      <div className="mt-4 rounded-2xl border border-[var(--line-soft)] bg-[#f8fbff] p-3">
+                        <p className="text-xs font-semibold text-[var(--accent-blue)]">外部公開URL</p>
+                        <p className="mt-2 break-all text-xs text-gray-500">{getExternalOfferUrl(offer.id)}</p>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyExternalUrl(offer)}
+                          className="mt-3 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--line-soft)]"
+                        >
+                          URLをコピー
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+                        外部公開URLは、募集状態が「募集中」かつ公開設定が「公開」のときに利用できます。
+                      </div>
+                    )}
                     <div className="mt-4 flex gap-2">
                       <button
                         type="button"

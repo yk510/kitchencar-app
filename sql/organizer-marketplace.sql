@@ -214,7 +214,7 @@ as $$
   where user_id = target_user_id
 $$;
 
-grant execute on function get_organizer_public_profile(uuid) to authenticated;
+grant execute on function get_organizer_public_profile(uuid) to authenticated, anon;
 
 create or replace function get_vendor_public_profile(target_user_id uuid)
 returns table (
@@ -269,6 +269,11 @@ for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = u
 drop policy if exists "vendors_can_view_public_offers" on event_offers;
 create policy "vendors_can_view_public_offers" on event_offers
 for select to authenticated
+using (is_public = true and status = 'open');
+
+drop policy if exists "anon_can_view_public_open_offers" on event_offers;
+create policy "anon_can_view_public_open_offers" on event_offers
+for select to anon
 using (is_public = true and status = 'open');
 
 drop policy if exists "application_access" on event_applications;

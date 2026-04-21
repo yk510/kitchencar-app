@@ -96,10 +96,13 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const otpType = searchParams.get('type')
   const queryAccessToken = searchParams.get('access_token')
   const queryRefreshToken = searchParams.get('refresh_token')
+  const returnOfferId = searchParams.get('offer')
   const hashAccessToken = hashSessionParams?.accessToken ?? null
   const hashRefreshToken = hashSessionParams?.refreshToken ?? null
   const sessionAccessToken = queryAccessToken ?? hashAccessToken
   const sessionRefreshToken = queryRefreshToken ?? hashRefreshToken
+  const targetDashboardHref =
+    role === 'vendor' && returnOfferId ? `/vendor/offers/${returnOfferId}` : dashboardHref
   const sessionReady =
     confirmationStatus === 'confirmed' &&
     !loading &&
@@ -439,7 +442,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
             disabled={!dashboardReady}
             onClick={() => {
               if (!dashboardReady) return
-              router.push(dashboardHref)
+              router.push(targetDashboardHref)
             }}
             className={`soft-button rounded-full px-6 py-3 text-sm font-semibold text-white ${
               dashboardReady ? 'bg-[var(--accent-blue)] hover:bg-[#2f59d9]' : 'cursor-not-allowed bg-[#9db4ef] opacity-75'

@@ -23,7 +23,7 @@ function readRoleHost(role: AppRole) {
 export function buildRoleAppUrl(
   role: AppRole,
   pathname: string,
-  options?: { origin?: string | null }
+  options?: { origin?: string | null; searchParams?: Record<string, string | null | undefined> }
 ) {
   const origin = options?.origin ?? null
 
@@ -39,14 +39,27 @@ export function buildRoleAppUrl(
 
     baseUrl.pathname = pathname
     baseUrl.search = ''
+    for (const [key, value] of Object.entries(options?.searchParams ?? {})) {
+      if (value) baseUrl.searchParams.set(key, value)
+    }
     baseUrl.hash = ''
     return baseUrl.toString()
   }
 
   const configuredHost = readRoleHost(role)
   if (configuredHost) {
-    return `https://${normalizeHost(configuredHost)}${pathname}`
+    const baseUrl = new URL(`https://${normalizeHost(configuredHost)}`)
+    baseUrl.pathname = pathname
+    for (const [key, value] of Object.entries(options?.searchParams ?? {})) {
+      if (value) baseUrl.searchParams.set(key, value)
+    }
+    return baseUrl.toString()
   }
 
-  return pathname
+  const fallbackUrl = new URL(pathname, 'https://example.local')
+  for (const [key, value] of Object.entries(options?.searchParams ?? {})) {
+    if (value) fallbackUrl.searchParams.set(key, value)
+  }
+
+  return `${fallbackUrl.pathname}${fallbackUrl.search}`
 }

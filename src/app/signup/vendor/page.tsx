@@ -3,7 +3,7 @@ import RoleSignupPage from '@/components/RoleSignupPage'
 export default function VendorSignupPage({
   searchParams,
 }: {
-  searchParams?: { from?: string }
+  searchParams?: { from?: string; offer?: string }
 }) {
-  return <RoleSignupPage role="vendor" source={searchParams?.from ?? null} />
+  return <RoleSignupPage role="vendor" source={searchParams?.from ?? null} returnOfferId={searchParams?.offer ?? null} />
 }
