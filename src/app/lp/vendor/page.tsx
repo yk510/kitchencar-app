@@ -1,7 +1,7 @@
-import RoleLandingPage from '@/components/RoleLandingPage'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default function VendorLandingPage() {
-  return <RoleLandingPage role="vendor" />
+  redirect('/lp')
 }

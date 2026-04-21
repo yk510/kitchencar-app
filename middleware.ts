@@ -30,7 +30,11 @@ export function middleware(request: NextRequest) {
 
   if (scope === 'organizer') {
     if (pathname === '/') {
-      return redirectTo(request, '/lp/organizer')
+      return redirectTo(request, '/lp')
+    }
+
+    if (pathname === '/lp/vendor' || pathname === '/lp/organizer') {
+      return redirectTo(request, '/lp')
     }
 
     if (pathname === '/signup/vendor') {
@@ -40,7 +44,7 @@ export function middleware(request: NextRequest) {
     if (
       pathname === '/login' ||
       pathname === '/signup/organizer' ||
-      pathname === '/lp/organizer' ||
+      pathname === '/lp' ||
       isOrganizerOnlyPath(pathname)
     ) {
       return NextResponse.next()
@@ -51,6 +55,10 @@ export function middleware(request: NextRequest) {
 
   if (scope === 'vendor' && pathname === '/signup/organizer') {
     return redirectTo(request, '/signup/vendor')
+  }
+
+  if (scope === 'vendor' && (pathname === '/lp/vendor' || pathname === '/lp/organizer')) {
+    return redirectTo(request, '/lp')
   }
 
   if (scope === 'vendor' && pathname === '/organizer') {

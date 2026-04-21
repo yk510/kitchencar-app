@@ -45,6 +45,7 @@ export function isOrganizerOnlyPath(pathname: string) {
 
 export function isPublicEntryPath(pathname: string) {
   return (
+    pathname === '/lp' ||
     pathname === '/lp/vendor' ||
     pathname === '/lp/organizer' ||
     pathname === '/login' ||

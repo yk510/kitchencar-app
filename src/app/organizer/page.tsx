@@ -51,7 +51,7 @@ async function getOrganizerDashboardData(supabase: any, userId: string) {
 export default async function OrganizerDashboardPage() {
   const session = await getServerSession()
   if (!session) {
-    redirect('/lp/organizer')
+    redirect('/lp')
   }
 
   const { supabase, user, role } = session

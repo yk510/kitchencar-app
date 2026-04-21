@@ -242,7 +242,7 @@ async function getDashboardData(supabase: any) {
 export default async function DashboardPage() {
   const session = await getServerSession()
   if (!session) {
-    redirect('/lp/vendor')
+    redirect('/lp')
   }
 
   const { supabase } = session
