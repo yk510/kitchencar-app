@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { unstable_noStore as noStore } from 'next/cache'
 import { apiError, apiOk } from '@/lib/api-response'
 import {
   getInventoryStatus,
@@ -18,6 +19,7 @@ import type {
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 function resolveSchedules(schedules: StoreOrderScheduleRow[]) {
   const now = Date.now()
@@ -99,6 +101,7 @@ export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
+  noStore()
   const { token } = await context.params
   const supabase = createServerSupabaseClient()
 
