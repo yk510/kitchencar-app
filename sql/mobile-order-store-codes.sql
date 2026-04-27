@@ -9,6 +9,18 @@ alter table vendor_stores
 alter table mobile_orders
   add column if not exists order_daily_sequence integer;
 
+alter table vendor_stores
+  drop constraint if exists chk_vendor_stores_order_number_prefix;
+
+alter table vendor_stores
+  drop constraint if exists chk_vendor_stores_store_code;
+
+alter table mobile_orders
+  drop constraint if exists chk_mobile_orders_order_number;
+
+alter table mobile_orders
+  drop constraint if exists chk_mobile_orders_order_daily_sequence;
+
 with ranked_stores as (
   select
     id,
@@ -52,24 +64,12 @@ create unique index if not exists idx_vendor_stores_store_code
   on vendor_stores(store_code);
 
 alter table vendor_stores
-  drop constraint if exists chk_vendor_stores_order_number_prefix;
-
-alter table vendor_stores
-  drop constraint if exists chk_vendor_stores_store_code;
-
-alter table vendor_stores
   add constraint chk_vendor_stores_store_code
   check (store_code ~ '^[0-9]{4}$');
 
 alter table mobile_orders
-  drop constraint if exists chk_mobile_orders_order_number;
-
-alter table mobile_orders
   add constraint chk_mobile_orders_order_number
   check (order_number ~ '^[0-9]{4}-[0-9]{4}$');
-
-alter table mobile_orders
-  drop constraint if exists chk_mobile_orders_order_daily_sequence;
 
 alter table mobile_orders
   add constraint chk_mobile_orders_order_daily_sequence
