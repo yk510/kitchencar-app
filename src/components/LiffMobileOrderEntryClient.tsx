@@ -5,6 +5,21 @@ import liff from '@line/liff'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
+
+function persistLiffOrderContext(context: { lineUserId: string; lineDisplayName: string | null }) {
+  if (typeof window === 'undefined') return
+
+  window.sessionStorage.setItem(
+    LIFF_ORDER_CONTEXT_STORAGE_KEY,
+    JSON.stringify({
+      lineUserId: context.lineUserId,
+      lineDisplayName: context.lineDisplayName,
+      savedAt: Date.now(),
+    })
+  )
+}
+
 function extractTokenFromLiffState(rawState: string | null) {
   const state = String(rawState ?? '').trim()
   if (!state) return ''
@@ -100,6 +115,10 @@ export default function LiffMobileOrderEntryClient() {
 
         try {
           const profile = await liff.getProfile()
+          persistLiffOrderContext({
+            lineUserId: profile.userId,
+            lineDisplayName: profile.displayName || null,
+          })
           const nextParams = new URLSearchParams()
           nextParams.set('line_user_id', profile.userId)
           if (profile.displayName) {

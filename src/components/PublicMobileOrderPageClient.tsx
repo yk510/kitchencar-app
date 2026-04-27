@@ -11,6 +11,8 @@ import type {
   PublicMobileOrderProduct,
 } from '@/types/api-payloads'
 
+const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
+
 type ProductSelection = {
   selectedChoiceIdsByGroup: Record<string, string[]>
   quantity: number
@@ -163,6 +165,40 @@ function getInventoryBadge(product: PublicMobileOrderProduct) {
     return { label: `残り ${product.current_remaining_quantity}`, className: 'bg-emerald-50 text-emerald-700' }
   }
   return null
+}
+
+function getStoredLiffOrderContext() {
+  if (typeof window === 'undefined') {
+    return {
+      lineUserId: '',
+      lineDisplayName: '',
+    }
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(LIFF_ORDER_CONTEXT_STORAGE_KEY)
+    if (!rawValue) {
+      return {
+        lineUserId: '',
+        lineDisplayName: '',
+      }
+    }
+
+    const parsed = JSON.parse(rawValue) as {
+      lineUserId?: string | null
+      lineDisplayName?: string | null
+    }
+
+    return {
+      lineUserId: String(parsed.lineUserId ?? '').trim(),
+      lineDisplayName: String(parsed.lineDisplayName ?? '').trim(),
+    }
+  } catch {
+    return {
+      lineUserId: '',
+      lineDisplayName: '',
+    }
+  }
 }
 
 export default function PublicMobileOrderPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
@@ -344,8 +380,11 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     setCheckoutError(null)
 
     try {
-      const lineUserId = searchParams.get('line_user_id')?.trim() ?? ''
-      const lineDisplayName = searchParams.get('line_display_name')?.trim() ?? ''
+      const lineUserIdFromQuery = searchParams.get('line_user_id')?.trim() ?? ''
+      const lineDisplayNameFromQuery = searchParams.get('line_display_name')?.trim() ?? ''
+      const storedLiffContext = getStoredLiffOrderContext()
+      const lineUserId = lineUserIdFromQuery || storedLiffContext.lineUserId
+      const lineDisplayName = lineDisplayNameFromQuery || storedLiffContext.lineDisplayName
       const response = await fetchApi<PublicMobileOrderCreateResponse>('/api/public/mobile-order/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
