@@ -20,6 +20,45 @@ function persistLiffOrderContext(context: { lineUserId: string; lineDisplayName:
   )
 }
 
+function decodeJwtPayload<T>(token: string | null) {
+  const rawToken = String(token ?? '').trim()
+  if (!rawToken) return null
+
+  const parts = rawToken.split('.')
+  if (parts.length < 2) return null
+
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const json = window.atob(padded)
+    return JSON.parse(json) as T
+  } catch {
+    return null
+  }
+}
+
+function extractLineContextFromHash() {
+  if (typeof window === 'undefined') {
+    return {
+      lineUserId: '',
+      lineDisplayName: '',
+    }
+  }
+
+  const hash = window.location.hash.replace(/^#/, '')
+  const hashParams = new URLSearchParams(hash)
+  const idTokenPayload = decodeJwtPayload<{ sub?: string; name?: string }>(hashParams.get('id_token'))
+  const contextTokenPayload = decodeJwtPayload<{ userId?: string }>(hashParams.get('context_token'))
+
+  const lineUserId = String(idTokenPayload?.sub ?? contextTokenPayload?.userId ?? '').trim()
+  const lineDisplayName = String(idTokenPayload?.name ?? '').trim()
+
+  return {
+    lineUserId,
+    lineDisplayName,
+  }
+}
+
 function extractTokenFromLiffState(rawState: string | null) {
   const state = String(rawState ?? '').trim()
   if (!state) return ''
@@ -151,6 +190,34 @@ export default function LiffMobileOrderEntryClient() {
       } catch (nextError) {
         console.error('[LIFF bootstrap]', nextError)
         const errorMessage = nextError instanceof Error ? nextError.message : 'unknown error'
+        const fallbackContext = extractLineContextFromHash()
+
+        if (fallbackContext.lineUserId) {
+          persistLiffOrderContext({
+            lineUserId: fallbackContext.lineUserId,
+            lineDisplayName: fallbackContext.lineDisplayName || null,
+          })
+
+          const nextParams = new URLSearchParams()
+          nextParams.set('line_user_id', fallbackContext.lineUserId)
+          if (fallbackContext.lineDisplayName) {
+            nextParams.set('line_display_name', fallbackContext.lineDisplayName)
+          }
+
+          const fallbackDestination = `/order/${token}?${nextParams.toString()}`
+          setDebugDetail((current) => {
+            const suffix = ` / error=${errorMessage} / fallbackUserId=${fallbackContext.lineUserId}`
+            return current ? `${current}${suffix}` : suffix
+          })
+          setStatusText('LIFF認証情報を読み取り、注文ページへ移動しています...')
+
+          const timeoutId = window.setTimeout(() => {
+            if (!disposed) router.replace(fallbackDestination)
+          }, 300)
+
+          return () => window.clearTimeout(timeoutId)
+        }
+
         setError('LINE初期化に失敗しました。LINEからもう一度開いてください。')
         setDebugDetail((current) => {
           const suffix = ` / error=${errorMessage}`
