@@ -16,6 +16,9 @@ import type {
   StoreOrderScheduleRow,
 } from '@/types/api-payloads'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 function resolveSchedules(schedules: StoreOrderScheduleRow[]) {
   const now = Date.now()
   const sorted = [...schedules].sort((a, b) => new Date(a.opens_at).getTime() - new Date(b.opens_at).getTime())
