@@ -76,6 +76,7 @@ export default function LiffMobileOrderEntryClient() {
   const token = useMemo(() => resolveToken(searchParams), [searchParams])
   const [statusText, setStatusText] = useState('LINEの認証状態を確認しています...')
   const [error, setError] = useState<string | null>(null)
+  const [debugDetail, setDebugDetail] = useState<string | null>(null)
 
   const destination = useMemo(() => {
     if (!token) return null
@@ -101,7 +102,19 @@ export default function LiffMobileOrderEntryClient() {
 
       try {
         setStatusText('LINE LIFFを初期化しています...')
-        await liff.init({ liffId })
+        setDebugDetail(`liffId=${liffId} / href=${window.location.href}`)
+
+        await Promise.race([
+          liff.init({ liffId, withLoginOnExternalBrowser: true }),
+          new Promise((_, reject) => {
+            window.setTimeout(() => reject(new Error('LIFF init timeout (10s)')), 10000)
+          }),
+        ])
+
+        setDebugDetail((current) => {
+          const suffix = ` / inClient=${String(liff.isInClient())} / loggedIn=${String(liff.isLoggedIn())}`
+          return current ? `${current}${suffix}` : suffix
+        })
 
         if (!liff.isLoggedIn()) {
           setStatusText('LINEログインへ移動しています...')
@@ -137,7 +150,12 @@ export default function LiffMobileOrderEntryClient() {
         return () => window.clearTimeout(timeoutId)
       } catch (nextError) {
         console.error('[LIFF bootstrap]', nextError)
+        const errorMessage = nextError instanceof Error ? nextError.message : 'unknown error'
         setError('LINE初期化に失敗しました。LINEからもう一度開いてください。')
+        setDebugDetail((current) => {
+          const suffix = ` / error=${errorMessage}`
+          return current ? `${current}${suffix}` : suffix
+        })
         setStatusText('注文ページへ移動できませんでした')
         return () => {}
       }
@@ -190,6 +208,11 @@ export default function LiffMobileOrderEntryClient() {
         <p className="mt-3 text-sm font-medium text-[var(--accent-blue)]">{statusText}</p>
         <p className="mt-3 break-all text-xs text-[var(--text-soft)]">{destination}</p>
         {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        {debugDetail && (
+          <p className="mt-3 break-all rounded-2xl bg-slate-50 px-4 py-3 text-left text-[11px] text-slate-500">
+            {debugDetail}
+          </p>
+        )}
       </div>
     </div>
   )
