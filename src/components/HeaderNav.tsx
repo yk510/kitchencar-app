@@ -44,6 +44,13 @@ const vendorNavGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'モバイルオーダー',
+    items: [
+      { href: '/vendor/mobile-order', label: '設定', shortLabel: '設定' },
+      { href: '/vendor/mobile-order/orders', label: '注文管理', shortLabel: '受注' },
+    ],
+  },
+  {
     label: 'ふり返り',
     items: [
       { href: '/analytics/cross', label: 'クロス分析' },
@@ -70,6 +77,9 @@ const organizerNavGroups: NavGroup[] = [
 ]
 
 function isActivePath(pathname: string, href: string) {
+  if (href === '/vendor/mobile-order') {
+    return pathname === href
+  }
   if (href === '/') return pathname === '/'
   return pathname === href || pathname.startsWith(`${href}/`)
 }

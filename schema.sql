@@ -8,6 +8,20 @@ drop table if exists sales_forecasts    cascade;
 drop table if exists weather_forecasts  cascade;
 drop table if exists operation_plan_days cascade;
 drop table if exists operation_plans    cascade;
+drop table if exists mobile_order_audit_logs cascade;
+drop table if exists mobile_order_notifications cascade;
+drop table if exists mobile_order_item_option_choices cascade;
+drop table if exists mobile_order_inventory_adjustments cascade;
+drop table if exists store_order_schedule_inventories cascade;
+drop table if exists mobile_order_items cascade;
+drop table if exists mobile_orders cascade;
+drop table if exists mobile_order_product_option_groups cascade;
+drop table if exists mobile_order_option_choices cascade;
+drop table if exists mobile_order_option_groups cascade;
+drop table if exists mobile_order_products cascade;
+drop table if exists store_order_schedules cascade;
+drop table if exists store_order_pages cascade;
+drop table if exists vendor_stores cascade;
 drop table if exists vendor_weekly_reports cascade;
 drop table if exists vendor_daily_memos cascade;
 drop table if exists stall_logs         cascade;
@@ -272,6 +286,275 @@ create index idx_vendor_weekly_reports_user_id on vendor_weekly_reports(user_id)
 create index idx_vendor_weekly_reports_week_start_date on vendor_weekly_reports(week_start_date);
 
 -- ------------------------------------------------------------
+-- 15. vendor_stores（モバイルオーダー店舗設定）
+-- ------------------------------------------------------------
+create table vendor_stores (
+  id                        uuid primary key default gen_random_uuid(),
+  vendor_user_id            uuid not null,
+  store_name                text not null,
+  slug                      text not null unique,
+  order_number_prefix       text not null,
+  description               text,
+  hero_image_url            text,
+  is_mobile_order_enabled   boolean not null default false,
+  is_accepting_orders       boolean not null default true,
+  line_official_account_id  text,
+  created_at                timestamptz not null default now(),
+  updated_at                timestamptz not null default now(),
+  constraint chk_vendor_stores_order_number_prefix
+    check (order_number_prefix ~ '^[A-Z]$')
+);
+
+create index idx_vendor_stores_vendor_user_id on vendor_stores(vendor_user_id);
+
+-- ------------------------------------------------------------
+-- 16. store_order_pages（固定公開注文ページ）
+-- ------------------------------------------------------------
+create table store_order_pages (
+  id            uuid primary key default gen_random_uuid(),
+  store_id      uuid not null references vendor_stores(id) on delete cascade,
+  page_title    text not null,
+  public_token  text not null unique,
+  status        text not null default 'published',
+  is_primary    boolean not null default true,
+  notes         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint chk_store_order_pages_status
+    check (status in ('draft', 'published', 'archived'))
+);
+
+create index idx_store_order_pages_store_id on store_order_pages(store_id);
+
+-- ------------------------------------------------------------
+-- 17. store_order_schedules（注文受付営業枠）
+-- ------------------------------------------------------------
+create table store_order_schedules (
+  id             uuid primary key default gen_random_uuid(),
+  store_id       uuid not null references vendor_stores(id) on delete cascade,
+  order_page_id  uuid not null references store_order_pages(id) on delete cascade,
+  business_date  date not null,
+  opens_at       timestamptz not null,
+  closes_at      timestamptz not null,
+  status         text not null default 'scheduled',
+  notes          text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  constraint chk_store_order_schedules_time_range check (opens_at < closes_at),
+  constraint chk_store_order_schedules_status
+    check (status in ('scheduled', 'open', 'closed', 'cancelled')),
+  unique(order_page_id, business_date, opens_at)
+);
+
+create index idx_store_order_schedules_store_id on store_order_schedules(store_id);
+create index idx_store_order_schedules_business_date on store_order_schedules(business_date);
+create index idx_store_order_schedules_opens_at on store_order_schedules(opens_at);
+create index idx_store_order_schedules_closes_at on store_order_schedules(closes_at);
+
+-- ------------------------------------------------------------
+-- 18. mobile_order_products（公開注文商品）
+-- ------------------------------------------------------------
+create table mobile_order_products (
+  id            uuid primary key default gen_random_uuid(),
+  store_id      uuid not null references vendor_stores(id) on delete cascade,
+  name          text not null,
+  description   text,
+  price         integer not null,
+  image_url     text,
+  sort_order    integer not null default 0,
+  tracks_inventory boolean not null default false,
+  inventory_quantity integer,
+  low_stock_threshold integer not null default 3,
+  is_published  boolean not null default true,
+  is_sold_out   boolean not null default false,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint chk_mobile_order_products_inventory_quantity
+    check (inventory_quantity is null or inventory_quantity >= 0),
+  constraint chk_mobile_order_products_low_stock_threshold
+    check (low_stock_threshold >= 0)
+);
+
+create index idx_mobile_order_products_store_id on mobile_order_products(store_id);
+create index idx_mobile_order_products_sort_order on mobile_order_products(store_id, sort_order);
+
+-- ------------------------------------------------------------
+-- 19. store_order_schedule_inventories（営業枠ごとの初期在庫）
+-- ------------------------------------------------------------
+create table store_order_schedule_inventories (
+  id                uuid primary key default gen_random_uuid(),
+  schedule_id       uuid not null references store_order_schedules(id) on delete cascade,
+  product_id        uuid not null references mobile_order_products(id) on delete cascade,
+  initial_quantity  integer not null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint chk_store_order_schedule_inventories_initial_quantity
+    check (initial_quantity >= 0),
+  unique(schedule_id, product_id)
+);
+
+create index idx_store_order_schedule_inventories_schedule_id on store_order_schedule_inventories(schedule_id);
+create index idx_store_order_schedule_inventories_product_id on store_order_schedule_inventories(product_id);
+
+-- ------------------------------------------------------------
+-- 20. mobile_order_inventory_adjustments（営業中の在庫調整履歴）
+-- ------------------------------------------------------------
+create table mobile_order_inventory_adjustments (
+  id                    uuid primary key default gen_random_uuid(),
+  schedule_inventory_id uuid not null references store_order_schedule_inventories(id) on delete cascade,
+  schedule_id           uuid not null references store_order_schedules(id) on delete cascade,
+  product_id            uuid not null references mobile_order_products(id) on delete cascade,
+  adjustment_quantity   integer not null,
+  reason                text,
+  created_by            uuid,
+  created_at            timestamptz not null default now(),
+  constraint chk_mobile_order_inventory_adjustments_non_zero
+    check (adjustment_quantity <> 0)
+);
+
+create index idx_mobile_order_inventory_adjustments_schedule_id on mobile_order_inventory_adjustments(schedule_id);
+create index idx_mobile_order_inventory_adjustments_product_id on mobile_order_inventory_adjustments(product_id);
+create index idx_mobile_order_inventory_adjustments_schedule_inventory_id on mobile_order_inventory_adjustments(schedule_inventory_id);
+
+-- ------------------------------------------------------------
+-- 21. mobile_order_option_groups（商品オプショングループ）
+-- ------------------------------------------------------------
+create table mobile_order_option_groups (
+  id              uuid primary key default gen_random_uuid(),
+  store_id        uuid not null references vendor_stores(id) on delete cascade,
+  name            text not null,
+  is_required     boolean not null default false,
+  selection_type  text not null,
+  min_select      integer,
+  max_select      integer,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint chk_mobile_order_option_groups_selection_type
+    check (selection_type in ('single', 'multiple'))
+);
+
+-- ------------------------------------------------------------
+-- 22. mobile_order_option_choices（オプション選択肢）
+-- ------------------------------------------------------------
+create table mobile_order_option_choices (
+  id            uuid primary key default gen_random_uuid(),
+  group_id      uuid not null references mobile_order_option_groups(id) on delete cascade,
+  name          text not null,
+  price_delta   integer not null default 0,
+  sort_order    integer not null default 0,
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- 23. mobile_order_product_option_groups（商品・オプション紐付け）
+-- ------------------------------------------------------------
+create table mobile_order_product_option_groups (
+  id               uuid primary key default gen_random_uuid(),
+  product_id       uuid not null references mobile_order_products(id) on delete cascade,
+  option_group_id  uuid not null references mobile_order_option_groups(id) on delete cascade,
+  sort_order       integer not null default 0,
+  unique(product_id, option_group_id)
+);
+
+-- ------------------------------------------------------------
+-- 24. mobile_orders（モバイルオーダー注文ヘッダ）
+-- ------------------------------------------------------------
+create table mobile_orders (
+  id                          uuid primary key default gen_random_uuid(),
+  store_id                    uuid not null references vendor_stores(id) on delete restrict,
+  order_page_id               uuid not null references store_order_pages(id) on delete restrict,
+  schedule_id                 uuid not null references store_order_schedules(id) on delete restrict,
+  order_number                text not null unique,
+  customer_line_user_id       text,
+  customer_line_display_name  text,
+  pickup_nickname             text not null,
+  status                      text not null default 'placed',
+  payment_status              text not null default 'pending',
+  payment_provider            text not null default 'credit_card',
+  payment_reference           text,
+  subtotal_amount             integer not null default 0,
+  tax_amount                  integer not null default 0,
+  total_amount                integer not null default 0,
+  ordered_at                  timestamptz not null default now(),
+  ready_notified_at           timestamptz,
+  picked_up_at                timestamptz,
+  cancelled_at                timestamptz,
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now(),
+  constraint chk_mobile_orders_status
+    check (status in ('placed', 'preparing', 'ready', 'picked_up', 'cancelled')),
+  constraint chk_mobile_orders_payment_status
+    check (payment_status in ('pending', 'authorized', 'paid', 'failed', 'refunded')),
+  constraint chk_mobile_orders_order_number
+    check (order_number ~ '^[A-Z][0-9]{4}$')
+);
+
+create index idx_mobile_orders_store_id on mobile_orders(store_id);
+create index idx_mobile_orders_schedule_id on mobile_orders(schedule_id);
+create index idx_mobile_orders_ordered_at on mobile_orders(ordered_at desc);
+create index idx_mobile_orders_status on mobile_orders(store_id, status);
+
+-- ------------------------------------------------------------
+-- 25. mobile_order_items（注文商品明細）
+-- ------------------------------------------------------------
+create table mobile_order_items (
+  id                           uuid primary key default gen_random_uuid(),
+  order_id                     uuid not null references mobile_orders(id) on delete cascade,
+  product_id                   uuid not null references mobile_order_products(id) on delete restrict,
+  product_name_snapshot        text not null,
+  unit_price_snapshot          integer not null,
+  quantity                     integer not null default 1,
+  line_total_amount            integer not null default 0,
+  created_at                   timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- 26. mobile_order_item_option_choices（注文時オプション明細）
+-- ------------------------------------------------------------
+create table mobile_order_item_option_choices (
+  id                           uuid primary key default gen_random_uuid(),
+  order_item_id                uuid not null references mobile_order_items(id) on delete cascade,
+  option_group_name_snapshot   text not null,
+  option_choice_name_snapshot  text not null,
+  price_delta_snapshot         integer not null default 0,
+  created_at                   timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- 27. mobile_order_notifications（通知送信履歴）
+-- ------------------------------------------------------------
+create table mobile_order_notifications (
+  id                uuid primary key default gen_random_uuid(),
+  order_id          uuid not null references mobile_orders(id) on delete cascade,
+  notification_type text not null,
+  delivery_status   text not null default 'pending',
+  line_message_id   text,
+  sent_at           timestamptz,
+  failed_at         timestamptz,
+  error_message     text,
+  created_at        timestamptz not null default now(),
+  constraint chk_mobile_order_notifications_type
+    check (notification_type in ('order_completed', 'order_ready'))
+);
+
+-- ------------------------------------------------------------
+-- 28. mobile_order_audit_logs（注文監査ログ）
+-- ------------------------------------------------------------
+create table mobile_order_audit_logs (
+  id            uuid primary key default gen_random_uuid(),
+  order_id      uuid not null references mobile_orders(id) on delete cascade,
+  actor_user_id uuid,
+  action_type   text not null,
+  before_status text,
+  after_status  text,
+  payload       jsonb,
+  created_at    timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
 -- ヘルパー関数：updated_at を自動更新するトリガー
 -- ------------------------------------------------------------
 create or replace function set_updated_at()
@@ -322,6 +605,38 @@ create trigger trg_vendor_weekly_reports_updated_at
   before update on vendor_weekly_reports
   for each row execute function set_updated_at();
 
+create trigger trg_vendor_stores_updated_at
+  before update on vendor_stores
+  for each row execute function set_updated_at();
+
+create trigger trg_store_order_pages_updated_at
+  before update on store_order_pages
+  for each row execute function set_updated_at();
+
+create trigger trg_store_order_schedules_updated_at
+  before update on store_order_schedules
+  for each row execute function set_updated_at();
+
+create trigger trg_mobile_order_products_updated_at
+  before update on mobile_order_products
+  for each row execute function set_updated_at();
+
+create trigger trg_store_order_schedule_inventories_updated_at
+  before update on store_order_schedule_inventories
+  for each row execute function set_updated_at();
+
+create trigger trg_mobile_order_option_groups_updated_at
+  before update on mobile_order_option_groups
+  for each row execute function set_updated_at();
+
+create trigger trg_mobile_order_option_choices_updated_at
+  before update on mobile_order_option_choices
+  for each row execute function set_updated_at();
+
+create trigger trg_mobile_orders_updated_at
+  before update on mobile_orders
+  for each row execute function set_updated_at();
+
 -- ------------------------------------------------------------
 -- Row Level Security（RLS）: MVP は全公開（認証なし）
 -- 将来の認証追加に備えてRLSは有効化だけしておく
@@ -340,6 +655,20 @@ alter table weather_forecasts enable row level security;
 alter table sales_forecasts enable row level security;
 alter table vendor_daily_memos enable row level security;
 alter table vendor_weekly_reports enable row level security;
+alter table vendor_stores enable row level security;
+alter table store_order_pages enable row level security;
+alter table store_order_schedules enable row level security;
+alter table mobile_order_products enable row level security;
+alter table store_order_schedule_inventories enable row level security;
+alter table mobile_order_inventory_adjustments enable row level security;
+alter table mobile_order_option_groups enable row level security;
+alter table mobile_order_option_choices enable row level security;
+alter table mobile_order_product_option_groups enable row level security;
+alter table mobile_orders enable row level security;
+alter table mobile_order_items enable row level security;
+alter table mobile_order_item_option_choices enable row level security;
+alter table mobile_order_notifications enable row level security;
+alter table mobile_order_audit_logs enable row level security;
 
 -- MVP用: 全操作を anon ロールに許可
 create policy "public_all" on locations      for all to anon using (true) with check (true);
@@ -356,6 +685,20 @@ create policy "public_all" on weather_forecasts for all to anon using (true) wit
 create policy "public_all" on sales_forecasts for all to anon using (true) with check (true);
 create policy "public_all" on vendor_daily_memos for all to anon using (true) with check (true);
 create policy "public_all" on vendor_weekly_reports for all to anon using (true) with check (true);
+create policy "public_all" on vendor_stores for all to anon using (true) with check (true);
+create policy "public_all" on store_order_pages for all to anon using (true) with check (true);
+create policy "public_all" on store_order_schedules for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_products for all to anon using (true) with check (true);
+create policy "public_all" on store_order_schedule_inventories for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_inventory_adjustments for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_option_groups for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_option_choices for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_product_option_groups for all to anon using (true) with check (true);
+create policy "public_all" on mobile_orders for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_items for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_item_option_choices for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_notifications for all to anon using (true) with check (true);
+create policy "public_all" on mobile_order_audit_logs for all to anon using (true) with check (true);
 
 -- ------------------------------------------------------------
 -- 動作確認用：テーブル一覧を表示

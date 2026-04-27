@@ -51,6 +51,8 @@ export function isPublicEntryPath(pathname: string) {
     pathname === '/login' ||
     pathname === '/auth/confirmed' ||
     pathname.startsWith('/auth/confirmed/') ||
+    pathname === '/liff/mobile-order' ||
+    pathname.startsWith('/order/') ||
     pathname.startsWith('/public/offers/') ||
     pathname === '/signup/vendor' ||
     pathname === '/signup/organizer'
