@@ -3,6 +3,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import {
   generateNextOrderNumber,
   getInventoryStatus,
+  insertMobileOrderWithGeneratedNumber,
   loadOrderedQuantityByProductForSchedule,
   loadScheduleInventoryState,
   resolveActiveSchedule,
@@ -194,34 +195,27 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    const orderNumber = await generateNextOrderNumber(supabase, {
-      id: store.id,
-      order_number_prefix: store.order_number_prefix,
-    })
-
-    const { data: order, error: orderError } = await (supabase as any)
-      .from('mobile_orders')
-      .insert([
-        {
-          store_id: store.id,
-          order_page_id: orderPage.id,
-          schedule_id: activeSchedule.id,
-          order_number: orderNumber,
-          customer_line_user_id: customerLineUserId,
-          customer_line_display_name: customerLineDisplayName,
-          pickup_nickname: pickupNickname,
-          status: 'placed',
-          payment_status: 'pending',
-          payment_provider: 'web_pending',
-          subtotal_amount: subtotalAmount,
-          tax_amount: 0,
-          total_amount: subtotalAmount,
-        },
-      ])
-      .select('*')
-      .single()
-
-    if (orderError) return apiError(orderError.message)
+    const order = await insertMobileOrderWithGeneratedNumber(
+      supabase,
+      {
+        id: store.id,
+        order_number_prefix: store.order_number_prefix,
+      },
+      {
+        store_id: store.id,
+        order_page_id: orderPage.id,
+        schedule_id: activeSchedule.id,
+        customer_line_user_id: customerLineUserId,
+        customer_line_display_name: customerLineDisplayName,
+        pickup_nickname: pickupNickname,
+        status: 'placed',
+        payment_status: 'pending',
+        payment_provider: 'web_pending',
+        subtotal_amount: subtotalAmount,
+        tax_amount: 0,
+        total_amount: subtotalAmount,
+      }
+    )
 
     try {
       const { error: notificationError } = await (supabase as any)

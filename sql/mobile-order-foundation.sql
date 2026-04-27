@@ -37,6 +37,7 @@ create table if not exists vendor_stores (
 );
 
 create index if not exists idx_vendor_stores_vendor_user_id on vendor_stores(vendor_user_id);
+create unique index if not exists idx_vendor_stores_order_number_prefix on vendor_stores(order_number_prefix);
 
 -- ------------------------------------------------------------
 -- 2. store_order_pages（固定公開注文ページ）

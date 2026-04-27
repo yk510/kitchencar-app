@@ -306,6 +306,7 @@ create table vendor_stores (
 );
 
 create index idx_vendor_stores_vendor_user_id on vendor_stores(vendor_user_id);
+create unique index idx_vendor_stores_order_number_prefix on vendor_stores(order_number_prefix);
 
 -- ------------------------------------------------------------
 -- 16. store_order_pages（固定公開注文ページ）
