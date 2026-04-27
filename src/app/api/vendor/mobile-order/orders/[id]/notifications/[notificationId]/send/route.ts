@@ -35,20 +35,6 @@ export async function POST(
       return apiError('対象の通知が見つかりません', 404)
     }
 
-    const { data: store, error: storeError } = await (supabase as any)
-      .from('vendor_stores')
-      .select('id')
-      .eq('id', notification.mobile_orders.store_id)
-      .eq('vendor_user_id', user.id)
-      .maybeSingle()
-
-    if (storeError) {
-      return apiError(storeError.message)
-    }
-    if (!store) {
-      return apiError('対象の通知にアクセスできません', 403)
-    }
-
     const { data: order, error: orderError } = await (supabase as any)
       .from('mobile_orders')
       .select('id, store_id, order_number, pickup_nickname, total_amount, customer_line_user_id, customer_line_display_name')
@@ -57,6 +43,20 @@ export async function POST(
 
     if (orderError || !order) {
       return apiError('対象の注文が見つかりません', 404)
+    }
+
+    const { data: store, error: storeError } = await (supabase as any)
+      .from('vendor_stores')
+      .select('id')
+      .eq('id', order.store_id)
+      .eq('vendor_user_id', user.id)
+      .maybeSingle()
+
+    if (storeError) {
+      return apiError(storeError.message)
+    }
+    if (!store) {
+      return apiError('対象の通知にアクセスできません', 403)
     }
 
     const { data: storeProfile, error: storeProfileError } = await (supabase as any)
