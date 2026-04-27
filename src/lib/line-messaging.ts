@@ -8,6 +8,11 @@ type SendLinePushMessageInput = {
   messages: LineTextMessage[]
 }
 
+type LineOrderSummaryItem = {
+  productName: string
+  quantity: number
+}
+
 function getLineChannelAccessToken() {
   return process.env.LINE_MESSAGING_API_CHANNEL_ACCESS_TOKEN?.trim() || null
 }
@@ -47,21 +52,40 @@ export async function sendLinePushMessage(input: SendLinePushMessageInput) {
   }
 }
 
+function formatLineOrderItems(items: LineOrderSummaryItem[]) {
+  const mergedItems = new Map<string, number>()
+
+  for (const item of items) {
+    const key = item.productName.trim()
+    if (!key) continue
+    mergedItems.set(key, (mergedItems.get(key) ?? 0) + item.quantity)
+  }
+
+  return Array.from(mergedItems.entries())
+    .map(([productName, quantity]) => `・${productName} × ${quantity}`)
+    .join('\n')
+}
+
 export function buildOrderCompletedLineMessages(input: {
   storeName: string
   orderNumber: string
   pickupNickname: string
   totalAmount: number
+  items: LineOrderSummaryItem[]
 }) {
+  const itemsText = formatLineOrderItems(input.items)
+
   return [
     {
       type: 'text' as const,
       text:
-        `${input.storeName}でのご注文を受け付けました。\n` +
+        `${input.storeName}でのご注文ありがとうございます!\n` +
+        `以下の内容で受け付けました。\n\n` +
+        `${itemsText}\n\n` +
         `注文番号: ${input.orderNumber}\n` +
-        `ニックネーム: ${input.pickupNickname}\n` +
-        `合計: ${input.totalAmount.toLocaleString()}円\n` +
-        `商品が完成したらLINEでお知らせします。`,
+        `受け取り名: ${input.pickupNickname}\n` +
+        `お会計: ${input.totalAmount.toLocaleString()}円\n\n` +
+        `商品ができあがったら、LINEでお呼びします。`,
     },
   ]
 }
@@ -75,10 +99,11 @@ export function buildOrderReadyLineMessages(input: {
     {
       type: 'text' as const,
       text:
+        `お待たせしました!\n` +
         `${input.storeName}のご注文ができあがりました。\n` +
         `注文番号: ${input.orderNumber}\n` +
-        `ニックネーム: ${input.pickupNickname}\n` +
-        `店頭で注文番号とニックネームをお伝えください。`,
+        `受け取り名: ${input.pickupNickname}\n\n` +
+        `店頭で注文番号と受け取り名をお伝えください。`,
     },
   ]
 }

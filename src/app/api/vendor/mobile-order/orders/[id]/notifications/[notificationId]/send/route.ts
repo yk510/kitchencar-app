@@ -45,6 +45,16 @@ export async function POST(
       return apiError('対象の注文が見つかりません', 404)
     }
 
+    const { data: orderItems, error: orderItemsError } = await (supabase as any)
+      .from('mobile_order_items')
+      .select('product_name_snapshot, quantity')
+      .eq('order_id', id)
+      .order('created_at', { ascending: true })
+
+    if (orderItemsError) {
+      return apiError(orderItemsError.message)
+    }
+
     const { data: store, error: storeError } = await (supabase as any)
       .from('vendor_stores')
       .select('id')
@@ -124,6 +134,10 @@ export async function POST(
             orderNumber: order.order_number,
             pickupNickname: order.pickup_nickname,
             totalAmount: order.total_amount,
+            items: (orderItems ?? []).map((item: any) => ({
+              productName: String(item.product_name_snapshot ?? '').trim(),
+              quantity: Number(item.quantity ?? 0),
+            })),
           })
         : buildOrderReadyLineMessages({
             storeName,
