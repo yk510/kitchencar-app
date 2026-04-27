@@ -39,11 +39,7 @@ set
   order_daily_sequence = ranked_orders.next_daily_sequence,
   order_number = ranked_orders.store_code || '-' || lpad(ranked_orders.next_daily_sequence::text, 4, '0')
 from ranked_orders
-where mo.id = ranked_orders.id
-  and (
-    mo.order_daily_sequence is null
-    or mo.order_number !~ '^[0-9]{4}-[0-9]{4}$'
-  );
+where mo.id = ranked_orders.id;
 
 alter table vendor_stores
   alter column store_code set not null;
