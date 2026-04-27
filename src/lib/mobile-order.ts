@@ -30,29 +30,37 @@ function buildDefaultSlug(storeName: string, userId: string) {
   return normalized ? `${normalized}-${suffix}` : `store-${suffix}`
 }
 
-const ORDER_NUMBER_PREFIXES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+function formatStoreCode(value: number) {
+  return String(value).padStart(4, '0')
+}
 
-async function allocateOrderNumberPrefix(supabase: any) {
+function formatDailySequence(value: number) {
+  return String(value).padStart(4, '0')
+}
+
+async function allocateStoreCode(supabase: any) {
   const { data, error } = await supabase
     .from('vendor_stores')
-    .select('order_number_prefix')
+    .select('store_code')
 
   if (error) {
     throw new Error(error.message)
   }
 
-  const usedPrefixes = new Set(
-    ((data ?? []) as Array<{ order_number_prefix: string | null }>).
-      map((row) => String(row.order_number_prefix ?? '').trim().toUpperCase()).
-      filter(Boolean)
+  const usedCodes = new Set(
+    ((data ?? []) as Array<{ store_code: string | null }>)
+      .map((row) => String(row.store_code ?? '').trim())
+      .filter(Boolean)
   )
 
-  const nextPrefix = ORDER_NUMBER_PREFIXES.find((prefix) => !usedPrefixes.has(prefix))
-  if (!nextPrefix) {
-    throw new Error('注文番号プレフィックスの上限に達しました')
+  for (let nextValue = 1; nextValue <= 9999; nextValue += 1) {
+    const nextCode = formatStoreCode(nextValue)
+    if (!usedCodes.has(nextCode)) {
+      return nextCode
+    }
   }
 
-  return nextPrefix
+  throw new Error('店舗コードの上限に達しました')
 }
 
 export async function ensureVendorStoreResources(
@@ -77,7 +85,7 @@ export async function ensureVendorStoreResources(
   if (!store) {
     const storeName = buildDefaultStoreName(options?.businessName, user.email)
     const slug = buildDefaultSlug(storeName, user.id)
-    const orderNumberPrefix = await allocateOrderNumberPrefix(supabase)
+    const storeCode = await allocateStoreCode(supabase)
 
     const { data: insertedStore, error: insertStoreError } = await supabase
       .from('vendor_stores')
@@ -86,7 +94,7 @@ export async function ensureVendorStoreResources(
           vendor_user_id: user.id,
           store_name: storeName,
           slug,
-          order_number_prefix: orderNumberPrefix,
+          store_code: storeCode,
           is_mobile_order_enabled: false,
           is_accepting_orders: true,
         },
@@ -174,14 +182,15 @@ export function resolveActiveSchedule<T extends { opens_at: string; closes_at: s
 
 export async function generateNextOrderNumber(
   supabase: any,
-  store: { id: string; order_number_prefix: string }
+  store: { id: string; store_code: string },
+  businessDate: string
 ) {
   const { data, error } = await supabase
     .from('mobile_orders')
-    .select('order_number')
+    .select('order_daily_sequence, store_order_schedules!inner(business_date)')
     .eq('store_id', store.id)
-    .like('order_number', `${store.order_number_prefix}%`)
-    .order('order_number', { ascending: false })
+    .eq('store_order_schedules.business_date', businessDate)
+    .order('order_daily_sequence', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -189,24 +198,27 @@ export async function generateNextOrderNumber(
     throw new Error(error.message)
   }
 
-  const latestNumber = String(data?.order_number ?? '')
-  const latestSequence = Number(latestNumber.slice(1)) || 0
+  const latestSequence = Number(data?.order_daily_sequence ?? 0) || 0
   const nextSequence = latestSequence + 1
 
   if (nextSequence > 9999) {
     throw new Error('注文番号の上限に達しました')
   }
 
-  return `${store.order_number_prefix}${String(nextSequence).padStart(4, '0')}`
+  return {
+    orderNumber: `${store.store_code}-${formatDailySequence(nextSequence)}`,
+    dailySequence: nextSequence,
+  }
 }
 
 export async function insertMobileOrderWithGeneratedNumber(
   supabase: any,
-  store: { id: string; order_number_prefix: string },
+  store: { id: string; store_code: string },
+  businessDate: string,
   payload: Record<string, unknown>
 ) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const orderNumber = await generateNextOrderNumber(supabase, store)
+    const { orderNumber, dailySequence } = await generateNextOrderNumber(supabase, store, businessDate)
 
     const { data, error } = await supabase
       .from('mobile_orders')
@@ -214,6 +226,7 @@ export async function insertMobileOrderWithGeneratedNumber(
         {
           ...payload,
           order_number: orderNumber,
+          order_daily_sequence: dailySequence,
         },
       ])
       .select('*')
@@ -223,7 +236,13 @@ export async function insertMobileOrderWithGeneratedNumber(
       return data
     }
 
-    if (error.code === '23505' && String(error.message ?? '').includes('mobile_orders_order_number_key')) {
+    if (
+      error.code === '23505' &&
+      (
+        String(error.message ?? '').includes('mobile_orders_order_number_key') ||
+        String(error.message ?? '').includes('mobile_orders_schedule_id_order_daily_sequence_key')
+      )
+    ) {
       continue
     }
 

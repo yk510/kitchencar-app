@@ -24,7 +24,7 @@ create table if not exists vendor_stores (
   vendor_user_id            uuid not null,
   store_name                text not null,
   slug                      text not null unique,
-  order_number_prefix       text not null,
+  store_code                text not null,
   description               text,
   hero_image_url            text,
   is_mobile_order_enabled   boolean not null default false,
@@ -32,12 +32,12 @@ create table if not exists vendor_stores (
   line_official_account_id  text,
   created_at                timestamptz not null default now(),
   updated_at                timestamptz not null default now(),
-  constraint chk_vendor_stores_order_number_prefix
-    check (order_number_prefix ~ '^[A-Z]$')
+  constraint chk_vendor_stores_store_code
+    check (store_code ~ '^[0-9]{4}$')
 );
 
 create index if not exists idx_vendor_stores_vendor_user_id on vendor_stores(vendor_user_id);
-create unique index if not exists idx_vendor_stores_order_number_prefix on vendor_stores(order_number_prefix);
+create unique index if not exists idx_vendor_stores_store_code on vendor_stores(store_code);
 
 -- ------------------------------------------------------------
 -- 2. store_order_pages（固定公開注文ページ）
@@ -200,6 +200,7 @@ create table if not exists mobile_orders (
   order_page_id               uuid not null references store_order_pages(id) on delete restrict,
   schedule_id                 uuid not null references store_order_schedules(id) on delete restrict,
   order_number                text not null unique,
+  order_daily_sequence        integer not null,
   customer_line_user_id       text,
   customer_line_display_name  text,
   pickup_nickname             text not null,
@@ -221,7 +222,10 @@ create table if not exists mobile_orders (
   constraint chk_mobile_orders_payment_status
     check (payment_status in ('pending', 'authorized', 'paid', 'failed', 'refunded')),
   constraint chk_mobile_orders_order_number
-    check (order_number ~ '^[A-Z][0-9]{4}$')
+    check (order_number ~ '^[0-9]{4}-[0-9]{4}$'),
+  constraint chk_mobile_orders_order_daily_sequence
+    check (order_daily_sequence >= 1 and order_daily_sequence <= 9999),
+  unique(schedule_id, order_daily_sequence)
 );
 
 create index if not exists idx_mobile_orders_store_id on mobile_orders(store_id);

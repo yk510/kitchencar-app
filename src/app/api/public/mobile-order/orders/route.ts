@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
 import {
-  generateNextOrderNumber,
   getInventoryStatus,
   insertMobileOrderWithGeneratedNumber,
   loadOrderedQuantityByProductForSchedule,
@@ -199,8 +198,9 @@ export async function POST(req: NextRequest) {
       supabase,
       {
         id: store.id,
-        order_number_prefix: store.order_number_prefix,
+        store_code: store.store_code,
       },
+      activeSchedule.business_date,
       {
         store_id: store.id,
         order_page_id: orderPage.id,

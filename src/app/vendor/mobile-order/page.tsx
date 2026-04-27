@@ -131,7 +131,7 @@ export default function VendorMobileOrderPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">店舗</p>
               <h2 className="mt-2 text-lg font-semibold text-gray-800">{data.store.store_name}</h2>
               <p className="mt-2 text-sm text-gray-500">
-                注文番号プレフィックス: <span className="font-semibold text-gray-700">{data.store.order_number_prefix}</span>
+                店舗コード: <span className="font-semibold text-gray-700">{data.store.store_code}</span>
               </p>
             </section>
 

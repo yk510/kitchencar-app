@@ -371,7 +371,7 @@ export interface VendorStore {
   vendor_user_id: string
   store_name: string
   slug: string
-  order_number_prefix: string
+  store_code: string
   description: string | null
   hero_image_url: string | null
   is_mobile_order_enabled: boolean
@@ -469,6 +469,7 @@ export interface MobileOrder {
   order_page_id: string
   schedule_id: string
   order_number: string
+  order_daily_sequence: number
   customer_line_user_id: string | null
   customer_line_display_name: string | null
   pickup_nickname: string
