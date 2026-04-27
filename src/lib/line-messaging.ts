@@ -107,3 +107,21 @@ export function buildOrderReadyLineMessages(input: {
     },
   ]
 }
+
+export function buildOrderPreparingLineMessages(input: {
+  storeName: string
+  orderNumber: string
+  pickupNickname: string
+}) {
+  return [
+    {
+      type: 'text' as const,
+      text:
+        `ただいま調理を始めました!\n` +
+        `${input.storeName}で順番にご用意しています。\n` +
+        `注文番号: ${input.orderNumber}\n` +
+        `受け取り名: ${input.pickupNickname}\n\n` +
+        `できあがったら、もう一度LINEでお知らせします。`,
+    },
+  ]
+}

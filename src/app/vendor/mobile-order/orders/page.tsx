@@ -57,7 +57,9 @@ function formatPrice(value: number) {
 }
 
 function getNotificationTypeLabel(type: MobileOrderNotificationRow['notification_type']) {
-  return type === 'order_completed' ? '注文完了通知' : '完成通知'
+  if (type === 'order_completed') return '注文完了通知'
+  if (type === 'order_preparing') return '調理開始通知'
+  return '完成通知'
 }
 
 function getNotificationStatusLabel(notification: MobileOrderNotificationRow) {

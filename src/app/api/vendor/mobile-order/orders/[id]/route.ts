@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
+import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
 import type { VendorMobileOrderOrderMutationPayload } from '@/types/api-payloads'
 
 const ALLOWED_STATUSES = ['placed', 'preparing', 'ready', 'picked_up', 'cancelled'] as const
@@ -77,33 +78,44 @@ export async function PATCH(
       return apiError(updateError?.message ?? '注文更新に失敗しました')
     }
 
-    if (nextStatus === 'ready') {
-      const { data: existingReadyNotification, error: readyNotificationError } = await (supabase as any)
+    let createdNotificationType: 'order_preparing' | 'order_ready' | null = null
+    let notificationToSendId: string | null = null
+
+    if (nextStatus === 'preparing' || nextStatus === 'ready') {
+      const notificationType = nextStatus === 'preparing' ? 'order_preparing' : 'order_ready'
+      const { data: existingNotification, error: notificationLookupError } = await (supabase as any)
         .from('mobile_order_notifications')
-        .select('id')
+        .select('id, delivery_status')
         .eq('order_id', currentOrder.id)
-        .eq('notification_type', 'order_ready')
+        .eq('notification_type', notificationType)
         .maybeSingle()
 
-      if (readyNotificationError) {
-        return apiError(readyNotificationError.message)
+      if (notificationLookupError) {
+        return apiError(notificationLookupError.message)
       }
 
-      if (!existingReadyNotification) {
-        const { error: insertReadyNotificationError } = await (supabase as any)
+      if (!existingNotification) {
+        const { data: insertedNotification, error: insertNotificationError } = await (supabase as any)
           .from('mobile_order_notifications')
           .insert([
             {
               order_id: currentOrder.id,
-              notification_type: 'order_ready',
+              notification_type: notificationType,
               delivery_status: 'pending',
-              error_message: 'LINE連携未実装のため未送信',
+              error_message: null,
             },
           ])
+          .select('id')
+          .single()
 
-        if (insertReadyNotificationError) {
-          return apiError(insertReadyNotificationError.message)
+        if (insertNotificationError || !insertedNotification) {
+          return apiError(insertNotificationError?.message ?? '通知の作成に失敗しました')
         }
+
+        createdNotificationType = notificationType
+        notificationToSendId = insertedNotification.id
+      } else if (existingNotification.delivery_status !== 'sent') {
+        notificationToSendId = existingNotification.id
       }
     }
 
@@ -120,20 +132,33 @@ export async function PATCH(
       },
     ])
 
-    if (nextStatus === 'ready') {
+    if (createdNotificationType) {
       await (supabase as any).from('mobile_order_audit_logs').insert([
         {
           order_id: currentOrder.id,
           actor_user_id: user.id,
           action_type: 'notification_queued',
           before_status: null,
-          after_status: 'order_ready',
+          after_status: createdNotificationType,
           payload: {
-            notification_type: 'order_ready',
+            notification_type: createdNotificationType,
             delivery_status: 'pending',
           },
         },
       ])
+    }
+
+    if (notificationToSendId) {
+      try {
+        await sendMobileOrderLineNotification({
+          supabase,
+          orderId: currentOrder.id,
+          notificationId: notificationToSendId,
+          actorUserId: user.id,
+        })
+      } catch (notificationSendError) {
+        console.error('[vendor/mobile-order/orders/:id PATCH] failed to auto-send notification', notificationSendError)
+      }
     }
 
     const payload: VendorMobileOrderOrderMutationPayload = updatedOrder

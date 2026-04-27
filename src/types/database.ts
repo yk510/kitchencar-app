@@ -522,7 +522,7 @@ export interface MobileOrderInventoryAdjustment {
 export interface MobileOrderNotification {
   id: string
   order_id: string
-  notification_type: 'order_completed' | 'order_ready'
+  notification_type: 'order_completed' | 'order_preparing' | 'order_ready'
   delivery_status: string
   line_message_id: string | null
   sent_at: string | null

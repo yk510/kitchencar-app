@@ -542,7 +542,7 @@ create table mobile_order_notifications (
   error_message     text,
   created_at        timestamptz not null default now(),
   constraint chk_mobile_order_notifications_type
-    check (notification_type in ('order_completed', 'order_ready'))
+    check (notification_type in ('order_completed', 'order_preparing', 'order_ready'))
 );
 
 -- ------------------------------------------------------------

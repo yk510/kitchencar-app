@@ -7,6 +7,7 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
+import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type {
   MobileOrderOptionChoiceRow,
@@ -218,21 +219,6 @@ export async function POST(req: NextRequest) {
     )
 
     try {
-      const { error: notificationError } = await (supabase as any)
-        .from('mobile_order_notifications')
-        .insert([
-          {
-            order_id: order.id,
-            notification_type: 'order_completed',
-            delivery_status: 'pending',
-            error_message: 'LINE連携未実装のため未送信',
-          },
-        ])
-
-      if (notificationError) {
-        throw new Error(notificationError.message)
-      }
-
       for (const item of normalizedItems) {
         const { data: insertedItem, error: itemError } = await (supabase as any)
           .from('mobile_order_items')
@@ -274,6 +260,34 @@ export async function POST(req: NextRequest) {
             throw new Error(optionInsertError.message)
           }
         }
+      }
+
+      const { data: insertedNotification, error: notificationError } = await (supabase as any)
+        .from('mobile_order_notifications')
+        .insert([
+          {
+            order_id: order.id,
+            notification_type: 'order_completed',
+            delivery_status: 'pending',
+            error_message: null,
+          },
+        ])
+        .select('*')
+        .single()
+
+      if (notificationError || !insertedNotification) {
+        throw new Error(notificationError?.message ?? '注文通知の作成に失敗しました')
+      }
+
+      try {
+        await sendMobileOrderLineNotification({
+          supabase,
+          orderId: order.id,
+          notificationId: insertedNotification.id,
+          actorUserId: null,
+        })
+      } catch (notificationSendError) {
+        console.error('[public/mobile-order/orders POST] failed to auto-send order_completed notification', notificationSendError)
       }
     } catch (nestedError) {
       await (supabase as any).from('mobile_orders').delete().eq('id', order.id)
