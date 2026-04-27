@@ -5,6 +5,43 @@ import liff from '@line/liff'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+function extractTokenFromLiffState(rawState: string | null) {
+  const state = String(rawState ?? '').trim()
+  if (!state) return ''
+
+  const decodedState = decodeURIComponent(state)
+  const candidates = [state, decodedState]
+
+  for (const candidate of candidates) {
+    try {
+      const asUrl = new URL(candidate, 'https://dummy.local')
+      const token = asUrl.searchParams.get('token')?.trim()
+      if (token) return token
+    } catch {
+      // Ignore and continue to the fallback parsing below.
+    }
+
+    const queryIndex = candidate.indexOf('?')
+    if (queryIndex >= 0) {
+      const params = new URLSearchParams(candidate.slice(queryIndex + 1))
+      const token = params.get('token')?.trim()
+      if (token) return token
+    }
+  }
+
+  return ''
+}
+
+function resolveToken(searchParams: URLSearchParams) {
+  const directToken = searchParams.get('token')?.trim()
+  if (directToken) return directToken
+
+  const tokenFromState = extractTokenFromLiffState(searchParams.get('liff.state'))
+  if (tokenFromState) return tokenFromState
+
+  return ''
+}
+
 function buildOrderDestination(token: string, searchParams: URLSearchParams) {
   const nextParams = new URLSearchParams()
 
@@ -21,7 +58,7 @@ function buildOrderDestination(token: string, searchParams: URLSearchParams) {
 export default function LiffMobileOrderEntryClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const token = searchParams.get('token')?.trim() ?? ''
+  const token = useMemo(() => resolveToken(searchParams), [searchParams])
   const [statusText, setStatusText] = useState('LINEの認証状態を確認しています...')
   const [error, setError] = useState<string | null>(null)
 
