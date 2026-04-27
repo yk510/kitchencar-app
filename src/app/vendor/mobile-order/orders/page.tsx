@@ -72,6 +72,13 @@ function getNotificationStatusTone(notification: MobileOrderNotificationRow) {
   return 'bg-amber-100 text-amber-800'
 }
 
+function maskLineUserId(value: string | null | undefined) {
+  const userId = String(value ?? '').trim()
+  if (!userId) return '未保存'
+  if (userId.length <= 8) return userId
+  return `${userId.slice(0, 4)}...${userId.slice(-4)}`
+}
+
 export default function VendorMobileOrderOrdersPage() {
   const [data, setData] = useState<VendorMobileOrderOrdersPayload | null>(null)
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
@@ -280,7 +287,7 @@ export default function VendorMobileOrderOrdersPage() {
     setMessage(null)
 
     try {
-      await fetchApi<MobileOrderNotificationRow>(
+      const updatedNotification = await fetchApi<MobileOrderNotificationRow>(
         `/api/vendor/mobile-order/orders/${orderId}/notifications/${notification.id}/send`,
         {
           method: 'POST',
@@ -289,7 +296,9 @@ export default function VendorMobileOrderOrdersPage() {
         }
       )
 
-      setMessage(`${getNotificationTypeLabel(notification.notification_type)}をLINEへ送信しました`)
+      setMessage(
+        `${getNotificationTypeLabel(notification.notification_type)}を処理しました（結果: ${updatedNotification.delivery_status}）`
+      )
       await load(selectedScheduleId)
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '通知送信に失敗しました')
@@ -537,6 +546,14 @@ export default function VendorMobileOrderOrdersPage() {
                     <p className="mt-2 text-sm text-gray-500">
                       送信待ちの通知は、ここから手動でLINE送信できます。LIFF連携前は userId 未取得のため失敗理由もここに残ります。
                     </p>
+                    <div className="mt-4 rounded-2xl border border-[var(--line-soft)] bg-[#fafafa] px-4 py-4 text-xs text-gray-600">
+                      <p>
+                        customer_line_user_id: <span className="font-semibold text-gray-800">{maskLineUserId(selectedOrder.customer_line_user_id)}</span>
+                      </p>
+                      <p className="mt-1">
+                        LINE表示名: <span className="font-semibold text-gray-800">{selectedOrder.customer_line_display_name || '未保存'}</span>
+                      </p>
+                    </div>
                     <div className="mt-4 space-y-3">
                       {selectedOrder.mobile_order_notifications.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-[var(--line-soft)] bg-[#fafafa] px-4 py-4 text-sm text-gray-500">
@@ -569,6 +586,10 @@ export default function VendorMobileOrderOrdersPage() {
                                   {notification.error_message && (
                                     <p className="mt-2 text-xs text-gray-500">{notification.error_message}</p>
                                   )}
+                                  <div className="mt-2 text-[11px] text-gray-400">
+                                    <p>delivery_status: {notification.delivery_status}</p>
+                                    <p>line_message_id: {notification.line_message_id || '未設定'}</p>
+                                  </div>
                                   {!notification.sent_at && (
                                     <button
                                       type="button"
