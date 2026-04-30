@@ -13,7 +13,23 @@ export function usePersistentDraft<T>(storageKey: string, initialValue: T) {
     try {
       const raw = window.localStorage.getItem(storageKey)
       if (raw) {
-        setValue(JSON.parse(raw) as T)
+        const parsed = JSON.parse(raw) as T
+
+        if (
+          parsed &&
+          initialValue &&
+          typeof parsed === 'object' &&
+          typeof initialValue === 'object' &&
+          !Array.isArray(parsed) &&
+          !Array.isArray(initialValue)
+        ) {
+          setValue({
+            ...(initialValue as Record<string, unknown>),
+            ...(parsed as Record<string, unknown>),
+          } as T)
+        } else {
+          setValue(parsed)
+        }
         setHasStoredDraft(true)
       }
     } catch {

@@ -4,8 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
+import {
+  getAllKnownAuthCookieNames,
+  getBrowserAuthCookieDomain,
+  getBrowserAuthCookieName,
+} from '@/lib/auth-cookie'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
-import { buildRoleAppUrl } from '@/lib/app-url'
 import { compressImageFile } from '@/lib/client-image'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
@@ -102,7 +106,7 @@ const ORGANIZER_STEPS: SignupStep[] = [
 ]
 
 function countFilled(values: string[]) {
-  return values.filter((value) => value.trim()).length
+  return values.filter((value) => String(value ?? '').trim()).length
 }
 
 function validatePassword(password: string) {
@@ -154,6 +158,44 @@ function isRecoverableSignupError(message: string) {
     lower.includes('user already registered') ||
     lower.includes('email rate limit exceeded')
   )
+}
+
+function syncBrowserAccessToken(accessToken?: string | null) {
+  if (typeof document === 'undefined') return
+  const domain = getBrowserAuthCookieDomain()
+  const cookieName = getBrowserAuthCookieName()
+  const domainPart = domain ? `; domain=${domain}` : ''
+
+  for (const knownCookieName of getAllKnownAuthCookieNames()) {
+    if (knownCookieName === cookieName && accessToken) continue
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
+  }
+
+  if (accessToken) {
+    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
+    return
+  }
+
+  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+}
+
+async function waitForServerSessionReady() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const response = await fetch('/api/user/profile', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    })
+
+    if (response.ok) {
+      return true
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+  }
+
+  return false
 }
 
 function buildVendorWelcomePath(source?: string | null, returnOfferId?: string | null) {
@@ -233,6 +275,8 @@ export default function RoleSignupPage({
   const [generatingField, setGeneratingField] = useState<CopyField | null>(null)
   const [step, setStep] = useState(1)
   const [confirmationEmailSent, setConfirmationEmailSent] = useState(false)
+  const [confirmationCode, setConfirmationCode] = useState('')
+  const [confirmationEmail, setConfirmationEmail] = useState('')
 
   const isVendor = role === 'vendor'
   const isCompletingExistingAccount = !!user && !hasProfile
@@ -404,6 +448,87 @@ export default function RoleSignupPage({
     }
   }
 
+  async function finalizeConfirmedSignup(confirmedUser: { id: string }, email: string) {
+    if (!supabase) {
+      throw new Error('登録機能の準備中です。少し待ってからもう一度お試しください。')
+    }
+
+    const signupSource = source ?? null
+    const displayName = isVendor ? form.business_name.trim() : form.organizer_name.trim()
+
+    const { error: profileError } = await (supabase as any)
+      .from('user_profiles')
+      .upsert([{ user_id: confirmedUser.id, role, display_name: displayName }], {
+        onConflict: 'user_id',
+      })
+
+    if (profileError) {
+      throw new Error(profileError.message)
+    }
+
+    if (isVendor) {
+      const { error: vendorError } = await (supabase as any)
+        .from('vendor_profiles')
+        .upsert(
+          [
+            {
+              user_id: confirmedUser.id,
+              business_name: form.business_name.trim(),
+              owner_name: form.owner_name.trim() || null,
+              contact_email: form.contact_email.trim() || email,
+              phone: form.phone.trim() || null,
+              genre: form.genre || null,
+              main_menu: form.main_menu.trim() || null,
+              logo_image_url: form.logo_image_url || null,
+              instagram_url: form.instagram_url.trim() || null,
+              x_url: form.x_url.trim() || null,
+              description: form.description.trim() || null,
+            },
+          ],
+          { onConflict: 'user_id' }
+        )
+
+      if (vendorError) {
+        throw new Error(vendorError.message)
+      }
+    } else {
+      const { error: organizerError } = await (supabase as any)
+        .from('organizer_profiles')
+        .upsert(
+          [
+            {
+              user_id: confirmedUser.id,
+              organizer_name: form.organizer_name.trim(),
+              contact_name: form.contact_name.trim() || null,
+              contact_email: form.contact_email.trim() || email,
+              phone: form.phone.trim() || null,
+              logo_image_url: form.logo_image_url || null,
+              instagram_url: form.instagram_url.trim() || null,
+              x_url: form.x_url.trim() || null,
+              description: form.description.trim() || null,
+            },
+          ],
+          { onConflict: 'user_id' }
+        )
+
+      if (organizerError) {
+        throw new Error(organizerError.message)
+      }
+    }
+
+    clearDraft()
+    setConfirmationEmailSent(false)
+    setConfirmationCode('')
+    setConfirmationEmail('')
+    await refreshProfile()
+    notifyProfileUpdated()
+    router.replace(
+      role === 'organizer'
+        ? `/organizer/welcome${signupSource ? `?from=${encodeURIComponent(signupSource)}` : ''}`
+        : buildVendorWelcomePath(signupSource, returnOfferId)
+    )
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (confirmationEmailSent) {
@@ -448,13 +573,6 @@ export default function RoleSignupPage({
             x_url: form.x_url.trim() || null,
             description: form.description.trim(),
           }
-      const emailRedirectTo =
-        typeof window !== 'undefined'
-          ? buildRoleAppUrl(role, `/auth/confirmed/${role}`, {
-              origin: window.location.origin,
-              searchParams: returnOfferId && role === 'vendor' ? { offer: returnOfferId } : undefined,
-            })
-          : undefined
       let activeUser = user
       let hasActiveSession = !!user
 
@@ -466,7 +584,6 @@ export default function RoleSignupPage({
           email,
           password,
           options: {
-            emailRedirectTo,
             data: {
               role,
               display_name: isVendor ? form.business_name.trim() : form.organizer_name.trim(),
@@ -501,17 +618,15 @@ export default function RoleSignupPage({
                 const { error: resendError } = await (supabase.auth as any).resend({
                   type: 'signup',
                   email,
-                  options: {
-                    emailRedirectTo,
-                  },
                 })
 
                 if (!resendError) {
                   setForm((prev) => ({ ...prev, password: '' }))
                   setMessage(
-                    '確認メールを再送しました。受信箱のリンクを開いたあと、この画面に戻ると続きのプロフィール入力を進められます。'
+                    '確認コードを再送しました。メールに届いたコードをこの画面に入力してください。'
                   )
                   setConfirmationEmailSent(true)
+                  setConfirmationEmail(email)
                   stop()
                   return
                 }
@@ -523,9 +638,10 @@ export default function RoleSignupPage({
 
               setForm((prev) => ({ ...prev, password: '' }))
               setMessage(
-                '確認メールは送信済みです。いまは再送の上限に達しているため、受信箱のリンクを開いたあと、この画面に戻ってプロフィール入力を続けてください。'
+                '確認コードは送信済みです。再送の上限に達しているため、すでに届いているコードを入力してください。'
               )
               setConfirmationEmailSent(true)
+              setConfirmationEmail(email)
               stop()
               return
             }
@@ -536,84 +652,17 @@ export default function RoleSignupPage({
       }
 
       if (activeUser && hasActiveSession) {
-        const signupSource = source ?? null
-        const displayName = isVendor ? form.business_name.trim() : form.organizer_name.trim()
-
-        const { error: profileError } = await (supabase as any)
-          .from('user_profiles')
-          .upsert([{ user_id: activeUser.id, role, display_name: displayName }], { onConflict: 'user_id' })
-
-        if (profileError) {
-          throw new Error(profileError.message)
-        }
-
-        if (isVendor) {
-          const { error: vendorError } = await (supabase as any)
-            .from('vendor_profiles')
-            .upsert(
-              [
-                {
-                  user_id: activeUser.id,
-                  business_name: form.business_name.trim(),
-                  owner_name: form.owner_name.trim() || null,
-                  contact_email: form.contact_email.trim() || email,
-                  phone: form.phone.trim() || null,
-                  genre: form.genre || null,
-                  main_menu: form.main_menu.trim() || null,
-                  logo_image_url: form.logo_image_url || null,
-                  instagram_url: form.instagram_url.trim() || null,
-                  x_url: form.x_url.trim() || null,
-                  description: form.description.trim() || null,
-                },
-              ],
-              { onConflict: 'user_id' }
-            )
-
-          if (vendorError) {
-            throw new Error(vendorError.message)
-          }
-        } else {
-          const { error: organizerError } = await (supabase as any)
-            .from('organizer_profiles')
-            .upsert(
-              [
-                {
-                  user_id: activeUser.id,
-                  organizer_name: form.organizer_name.trim(),
-                  contact_name: form.contact_name.trim() || null,
-                  contact_email: form.contact_email.trim() || email,
-                  phone: form.phone.trim() || null,
-                  logo_image_url: form.logo_image_url || null,
-                  instagram_url: form.instagram_url.trim() || null,
-                  x_url: form.x_url.trim() || null,
-                  description: form.description.trim() || null,
-                },
-              ],
-              { onConflict: 'user_id' }
-            )
-
-          if (organizerError) {
-            throw new Error(organizerError.message)
-          }
-        }
-
-        clearDraft()
-        await refreshProfile()
-        notifyProfileUpdated()
-        router.replace(
-          role === 'organizer'
-            ? `/organizer/welcome${signupSource ? `?from=${encodeURIComponent(signupSource)}` : ''}`
-            : buildVendorWelcomePath(signupSource, returnOfferId)
-        )
+        await finalizeConfirmedSignup(activeUser, email)
         return
       }
 
       setForm((prev) => ({ ...prev, password: '' }))
       if (signUpCreatedPending) {
         setMessage(
-          'アカウントを作成しました。確認メールの案内に沿ってログインすると、入力した下書きの続きから設定を進められます。'
+          'アカウントを作成しました。メールに届いた確認コードを入力すると、登録を完了できます。'
         )
         setConfirmationEmailSent(true)
+        setConfirmationEmail(email)
       }
       stop()
     } catch (submitError) {
@@ -622,6 +671,98 @@ export default function RoleSignupPage({
         submitError instanceof Error
           ? normalizeSignupErrorMessage(submitError.message)
           : '登録に失敗しました。時間をおいてもう一度お試しください。'
+      )
+    }
+  }
+
+  async function handleVerifyConfirmationCode() {
+    if (!supabase) {
+      setError('確認機能の準備中です。少し待ってからもう一度お試しください。')
+      return
+    }
+
+    const email = confirmationEmail || form.email.trim()
+    const code = confirmationCode.trim()
+
+    if (!email) {
+      setError('確認コードを送ったメールアドレスが見つかりません。もう一度登録をお試しください。')
+      return
+    }
+
+    if (!code) {
+      setError('確認コードを入力してください。')
+      return
+    }
+
+    start()
+
+    try {
+      const { data, error: verifyError } = await (supabase.auth as any).verifyOtp({
+        email,
+        token: code,
+        type: 'signup',
+      })
+
+      if (verifyError) {
+        throw verifyError
+      }
+
+      const confirmedUser = data?.user
+      if (!confirmedUser) {
+        throw new Error('確認コードの検証には成功しましたが、ユーザー情報の取得に失敗しました。')
+      }
+
+      const {
+        data: { session: confirmedSession },
+      } = await supabase.auth.getSession()
+
+      syncBrowserAccessToken(confirmedSession?.access_token ?? null)
+      await waitForServerSessionReady()
+      await refreshProfile()
+      setMessage('確認コードを認証しました。登録を完了しています...')
+      await finalizeConfirmedSignup(confirmedUser, email)
+    } catch (verifyError) {
+      stop()
+      setError(
+        verifyError instanceof Error
+          ? normalizeSignupErrorMessage(verifyError.message)
+          : '確認コードの検証に失敗しました。'
+      )
+    }
+  }
+
+  async function handleResendConfirmationCode() {
+    if (!supabase) {
+      setError('確認コード再送の準備中です。少し待ってからもう一度お試しください。')
+      return
+    }
+
+    const email = confirmationEmail || form.email.trim()
+    if (!email) {
+      setError('再送先のメールアドレスが見つかりません。')
+      return
+    }
+
+    start()
+
+    try {
+      const { error: resendError } = await (supabase.auth as any).resend({
+        type: 'signup',
+        email,
+      })
+
+      if (resendError) {
+        throw resendError
+      }
+
+      setMessage('確認コードを再送しました。メールに届いた最新のコードを入力してください。')
+      stop()
+    } catch (resendError) {
+      stop()
+      setError(
+        resendError instanceof Error
+          ? normalizeSignupErrorMessage(resendError.message)
+          : '確認コードの再送に失敗しました。'
       )
     }
   }
@@ -953,6 +1094,49 @@ export default function RoleSignupPage({
 
             {error && <p className="alert-danger px-4 py-3 text-sm text-red-700">{error}</p>}
             {message && <p className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
+
+            {confirmationEmailSent && (
+              <div className="rounded-3xl border border-[var(--accent-blue)]/20 bg-[var(--accent-blue-soft)] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+                  Confirm Code
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-[var(--text-main)]">メールで届いた確認コードを入力</h3>
+                <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+                  <span className="font-semibold text-[var(--text-main)]">{confirmationEmail || form.email.trim()}</span>
+                  に届いた確認コードを入力すると、そのまま登録完了まで進みます。
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={confirmationCode}
+                    onChange={(event) => setConfirmationCode(event.target.value.replace(/\s+/g, ''))}
+                    className="w-full px-4 py-3"
+                    placeholder="メールに届いた確認コード"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleVerifyConfirmationCode()}
+                    disabled={pending}
+                    className="soft-button rounded-full bg-[var(--accent-blue)] px-6 py-3 text-sm font-semibold text-white hover:bg-[#2f59d9] disabled:opacity-50"
+                  >
+                    {pending ? '確認中...' : 'コードを確認する'}
+                  </button>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => void handleResendConfirmationCode()}
+                    disabled={pending}
+                    className="font-semibold text-[var(--accent-blue)] disabled:opacity-50"
+                  >
+                    コードを再送する
+                  </button>
+                  <span className="text-[var(--text-sub)]">メールのリンクは使わず、コード入力で進めます。</span>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-3">
               <button

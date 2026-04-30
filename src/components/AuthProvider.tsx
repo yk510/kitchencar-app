@@ -1,10 +1,11 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import {
   getAllKnownAuthCookieNames,
+  getAllKnownSupabaseStorageKeys,
   getBrowserAuthCookieDomain,
   getBrowserAuthCookieName,
 } from '@/lib/auth-cookie'
@@ -26,6 +27,54 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
+
+function getRoleFromSupabaseUser(user?: User | null): 'vendor' | 'organizer' | null {
+  const metadataRole = user?.user_metadata?.role ?? user?.app_metadata?.role
+  return metadataRole === 'organizer'
+    ? 'organizer'
+    : metadataRole === 'vendor'
+      ? 'vendor'
+      : null
+}
+
+function clearLocalDraftsAndTransientState() {
+  if (typeof window === 'undefined') return
+
+  try {
+    const keysToRemove: string[] = []
+
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index)
+      if (!key) continue
+
+      if (
+        key.startsWith('draft:') ||
+        key === 'cross-analytics-presets' ||
+        key === 'vendor-mobile-order-audio-enabled'
+      ) {
+        keysToRemove.push(key)
+      }
+    }
+
+    for (const storageKey of getAllKnownSupabaseStorageKeys()) {
+      keysToRemove.push(storageKey)
+    }
+
+    for (const key of Array.from(new Set(keysToRemove))) {
+      window.localStorage.removeItem(key)
+    }
+  } catch {
+    // ブラウザ保存領域の掃除失敗でログアウト自体は止めない
+  }
+
+  try {
+    window.sessionStorage.removeItem(LIFF_ORDER_CONTEXT_STORAGE_KEY)
+  } catch {
+    // noop
+  }
+}
+
 function syncAuthCookie(accessToken?: string | null) {
   if (typeof document === 'undefined') return
   const domain = getBrowserAuthCookieDomain()
@@ -35,6 +84,7 @@ function syncAuthCookie(accessToken?: string | null) {
   for (const knownCookieName of getAllKnownAuthCookieNames()) {
     if (knownCookieName === cookieName && accessToken) continue
     document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
   }
 
   if (accessToken) {
@@ -56,10 +106,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<'vendor' | 'organizer' | null>(null)
   const [hasProfile, setHasProfile] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
+  const activeUserIdRef = useRef<string | null>(null)
 
   async function refreshProfile() {
     if (!supabase) {
-      setRole('vendor')
+      setRole(null)
       setHasProfile(true)
       setProfileReady(true)
       return
@@ -73,11 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: 'no-store',
         signal: controller.signal,
       })
-      setRole(data.role ?? 'vendor')
+      setRole(data.role ?? getRoleFromSupabaseUser(session?.user) ?? null)
       setHasProfile(!!data.profile)
       setProfileReady(true)
     } catch {
-      setRole('vendor')
+      const {
+        data: { session: nextSession },
+      } = await supabase.auth.getSession()
+      setRole(getRoleFromSupabaseUser(nextSession?.user) ?? getRoleFromSupabaseUser(session?.user) ?? null)
       setHasProfile(false)
       setProfileReady(true)
     } finally {
@@ -104,11 +158,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data }) => {
         if (!mounted) return
         setSession(data.session ?? null)
+        const nextUserId = data.session?.user?.id ?? null
+        activeUserIdRef.current = nextUserId
         syncAuthCookie(data.session?.access_token ?? null)
         if (data.session?.access_token) {
           setProfileReady(false)
           void refreshProfile()
         } else {
+          clearLocalDraftsAndTransientState()
           setRole(null)
           setHasProfile(false)
           setProfileReady(true)
@@ -118,7 +175,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (!mounted) return
         setSession(null)
+        activeUserIdRef.current = null
         syncAuthCookie(null)
+        clearLocalDraftsAndTransientState()
         setRole(null)
         setHasProfile(false)
         setProfileReady(true)
@@ -126,8 +185,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const nextUserId = nextSession?.user?.id ?? null
+      const shouldClearTransientState =
+        (!nextUserId && activeUserIdRef.current !== null) ||
+        (nextUserId !== null && activeUserIdRef.current !== null && nextUserId !== activeUserIdRef.current)
+
       setSession(nextSession ?? null)
+      activeUserIdRef.current = nextUserId
       syncAuthCookie(nextSession?.access_token ?? null)
+
+      if (shouldClearTransientState || !nextSession?.access_token) {
+        clearLocalDraftsAndTransientState()
+      }
+
       if (nextSession?.access_token) {
         setProfileReady(false)
         void refreshProfile()

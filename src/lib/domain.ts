@@ -6,6 +6,12 @@ function normalizeHost(rawHost: string) {
   return rawHost.trim().toLowerCase().replace(/:\d+$/, '')
 }
 
+function normalizePathname(pathname: string) {
+  if (!pathname) return '/'
+  if (pathname === '/') return pathname
+  return pathname.replace(/\/+$/, '') || '/'
+}
+
 function readConfiguredHost(value?: string) {
   return value ? normalizeHost(value) : null
 }
@@ -40,40 +46,45 @@ export function getScopedLoginRole(scope: AppHostScope): AppRole | null {
 }
 
 export function isOrganizerOnlyPath(pathname: string) {
-  return pathname === '/organizer' || pathname.startsWith('/organizer/')
+  const normalizedPathname = normalizePathname(pathname)
+  return normalizedPathname === '/organizer' || normalizedPathname.startsWith('/organizer/')
 }
 
 export function isPublicEntryPath(pathname: string) {
+  const normalizedPathname = normalizePathname(pathname)
   return (
-    pathname === '/lp' ||
-    pathname === '/lp/vendor' ||
-    pathname === '/lp/organizer' ||
-    pathname === '/login' ||
-    pathname === '/auth/confirmed' ||
-    pathname.startsWith('/auth/confirmed/') ||
-    pathname.startsWith('/public/offers/') ||
-    pathname === '/signup/vendor' ||
-    pathname === '/signup/organizer'
+    normalizedPathname === '/lp' ||
+    normalizedPathname === '/lp/vendor' ||
+    normalizedPathname === '/lp/organizer' ||
+    normalizedPathname === '/login' ||
+    normalizedPathname === '/auth/confirmed' ||
+    normalizedPathname.startsWith('/auth/confirmed/') ||
+    normalizedPathname === '/liff/mobile-order' ||
+    normalizedPathname.startsWith('/order/') ||
+    normalizedPathname.startsWith('/public/offers/') ||
+    normalizedPathname === '/signup/vendor' ||
+    normalizedPathname === '/signup/organizer'
   )
 }
 
 export function isVendorPrimaryPath(pathname: string) {
+  const normalizedPathname = normalizePathname(pathname)
   return (
-    pathname === '/' ||
-    pathname === '/upload' ||
-    pathname === '/locations' ||
-    pathname === '/products/master' ||
-    pathname === '/plans' ||
-    pathname === '/plans/new' ||
-    pathname === '/stall-logs' ||
-    pathname === '/analytics/cross' ||
-    pathname === '/analytics/daily' ||
-    pathname === '/analytics/locations' ||
-    pathname === '/analytics/weekday' ||
-    pathname === '/analytics/hourly' ||
-    pathname === '/analytics/products' ||
-    pathname === '/analytics/events' ||
-    pathname === '/vendor' ||
-    pathname.startsWith('/vendor/')
+    normalizedPathname === '/' ||
+    normalizedPathname === '/upload' ||
+    normalizedPathname === '/locations' ||
+    normalizedPathname === '/products/master' ||
+    normalizedPathname === '/plans' ||
+    normalizedPathname === '/plans/new' ||
+    normalizedPathname === '/stall-logs' ||
+    normalizedPathname === '/analytics/cross' ||
+    normalizedPathname === '/analytics/daily' ||
+    normalizedPathname === '/analytics/locations' ||
+    normalizedPathname === '/analytics/weekday' ||
+    normalizedPathname === '/analytics/hourly' ||
+    normalizedPathname === '/analytics/products' ||
+    normalizedPathname === '/analytics/events' ||
+    normalizedPathname === '/vendor' ||
+    normalizedPathname.startsWith('/vendor/')
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
 import { getHostScopeFromWindow, isPublicEntryPath } from '@/lib/domain'
@@ -17,6 +17,23 @@ function LoadingScreen({ message }: { message: string }) {
       </div>
     </div>
   )
+}
+
+function ScrollToTopOnNavigation() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.history.scrollRestoration = 'manual'
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname, searchParams])
+
+  return null
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -47,7 +64,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     if (user && role && hostScope && role !== hostScope) {
       void supabase?.auth.signOut()
-      router.replace('/login')
+      if (!isPublicPage) {
+        router.replace('/login')
+      }
       return
     }
 
@@ -79,7 +98,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 
   if (isLoginPage || isSignupPage || isEmailConfirmedPage || (!user && isPublicPage)) {
-    return <main className="min-h-screen px-4 py-8 lg:px-6">{children}</main>
+    return (
+      <>
+        <Suspense fallback={null}>
+          <ScrollToTopOnNavigation />
+        </Suspense>
+        <main className="min-h-screen px-4 py-8 lg:px-6">{children}</main>
+      </>
+    )
   }
 
   if (loading || (user && !profileReady)) {
@@ -92,6 +118,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <ScrollToTopOnNavigation />
+      </Suspense>
       <nav className="top-nav-wrap sticky top-0 z-30 px-4 py-2.5 lg:px-6">
         <div className="mx-auto max-w-7xl">
           <HeaderNav />

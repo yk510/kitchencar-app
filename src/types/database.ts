@@ -77,6 +77,76 @@ export interface Database {
         Insert: Omit<VendorWeeklyReport, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<VendorWeeklyReport, 'id' | 'created_at'>>
       }
+      vendor_stores: {
+        Row: VendorStore
+        Insert: Omit<VendorStore, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<VendorStore, 'id' | 'created_at'>>
+      }
+      store_order_pages: {
+        Row: StoreOrderPage
+        Insert: Omit<StoreOrderPage, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<StoreOrderPage, 'id' | 'created_at'>>
+      }
+      store_order_schedules: {
+        Row: StoreOrderSchedule
+        Insert: Omit<StoreOrderSchedule, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<StoreOrderSchedule, 'id' | 'created_at'>>
+      }
+      store_order_schedule_inventories: {
+        Row: StoreOrderScheduleInventory
+        Insert: Omit<StoreOrderScheduleInventory, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<StoreOrderScheduleInventory, 'id' | 'created_at'>>
+      }
+      mobile_order_products: {
+        Row: MobileOrderProduct
+        Insert: Omit<MobileOrderProduct, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<MobileOrderProduct, 'id' | 'created_at'>>
+      }
+      mobile_order_option_groups: {
+        Row: MobileOrderOptionGroup
+        Insert: Omit<MobileOrderOptionGroup, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<MobileOrderOptionGroup, 'id' | 'created_at'>>
+      }
+      mobile_order_option_choices: {
+        Row: MobileOrderOptionChoice
+        Insert: Omit<MobileOrderOptionChoice, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<MobileOrderOptionChoice, 'id' | 'created_at'>>
+      }
+      mobile_order_product_option_groups: {
+        Row: MobileOrderProductOptionGroup
+        Insert: Omit<MobileOrderProductOptionGroup, 'id'>
+        Update: Partial<Omit<MobileOrderProductOptionGroup, 'id'>>
+      }
+      mobile_orders: {
+        Row: MobileOrder
+        Insert: Omit<MobileOrder, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<MobileOrder, 'id' | 'created_at'>>
+      }
+      mobile_order_items: {
+        Row: MobileOrderItem
+        Insert: Omit<MobileOrderItem, 'id' | 'created_at'>
+        Update: never
+      }
+      mobile_order_item_option_choices: {
+        Row: MobileOrderItemOptionChoice
+        Insert: Omit<MobileOrderItemOptionChoice, 'id' | 'created_at'>
+        Update: never
+      }
+      mobile_order_inventory_adjustments: {
+        Row: MobileOrderInventoryAdjustment
+        Insert: Omit<MobileOrderInventoryAdjustment, 'id' | 'created_at'>
+        Update: never
+      }
+      mobile_order_notifications: {
+        Row: MobileOrderNotification
+        Insert: Omit<MobileOrderNotification, 'id' | 'created_at'>
+        Update: Partial<Omit<MobileOrderNotification, 'id' | 'created_at'>>
+      }
+      mobile_order_audit_logs: {
+        Row: MobileOrderAuditLog
+        Insert: Omit<MobileOrderAuditLog, 'id' | 'created_at'>
+        Update: never
+      }
       user_profiles: {
         Row: UserProfile
         Insert: Omit<UserProfile, 'created_at' | 'updated_at'>
@@ -294,6 +364,182 @@ export interface VendorWeeklyReport {
   helpful_marked_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface VendorStore {
+  id: string
+  vendor_user_id: string
+  store_name: string
+  slug: string
+  store_code: string
+  description: string | null
+  hero_image_url: string | null
+  is_mobile_order_enabled: boolean
+  is_accepting_orders: boolean
+  line_official_account_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StoreOrderPage {
+  id: string
+  store_id: string
+  page_title: string
+  public_token: string
+  status: 'draft' | 'published' | 'archived'
+  is_primary: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StoreOrderSchedule {
+  id: string
+  store_id: string
+  order_page_id: string
+  business_date: string
+  opens_at: string
+  closes_at: string
+  status: 'scheduled' | 'open' | 'closed' | 'cancelled'
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StoreOrderScheduleInventory {
+  id: string
+  schedule_id: string
+  product_id: string
+  initial_quantity: number
+  created_at: string
+  updated_at: string
+}
+
+export interface MobileOrderProduct {
+  id: string
+  store_id: string
+  name: string
+  description: string | null
+  price: number
+  image_url: string | null
+  sort_order: number
+  tracks_inventory: boolean
+  inventory_quantity: number | null
+  low_stock_threshold: number
+  is_published: boolean
+  is_sold_out: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MobileOrderOptionGroup {
+  id: string
+  store_id: string
+  name: string
+  is_required: boolean
+  selection_type: 'single' | 'multiple'
+  min_select: number | null
+  max_select: number | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface MobileOrderOptionChoice {
+  id: string
+  group_id: string
+  name: string
+  price_delta: number
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MobileOrderProductOptionGroup {
+  id: string
+  product_id: string
+  option_group_id: string
+  sort_order: number
+}
+
+export interface MobileOrder {
+  id: string
+  store_id: string
+  order_page_id: string
+  schedule_id: string
+  order_number: string
+  order_daily_sequence: number
+  customer_line_user_id: string | null
+  customer_line_display_name: string | null
+  pickup_nickname: string
+  status: 'placed' | 'preparing' | 'ready' | 'picked_up' | 'cancelled'
+  payment_status: 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded'
+  payment_provider: string
+  payment_reference: string | null
+  subtotal_amount: number
+  tax_amount: number
+  total_amount: number
+  ordered_at: string
+  ready_notified_at: string | null
+  picked_up_at: string | null
+  cancelled_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MobileOrderItem {
+  id: string
+  order_id: string
+  product_id: string
+  product_name_snapshot: string
+  unit_price_snapshot: number
+  quantity: number
+  line_total_amount: number
+  created_at: string
+}
+
+export interface MobileOrderItemOptionChoice {
+  id: string
+  order_item_id: string
+  option_group_name_snapshot: string
+  option_choice_name_snapshot: string
+  price_delta_snapshot: number
+  created_at: string
+}
+
+export interface MobileOrderInventoryAdjustment {
+  id: string
+  schedule_inventory_id: string
+  schedule_id: string
+  product_id: string
+  adjustment_quantity: number
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface MobileOrderNotification {
+  id: string
+  order_id: string
+  notification_type: 'order_completed' | 'order_preparing' | 'order_ready'
+  delivery_status: string
+  line_message_id: string | null
+  sent_at: string | null
+  failed_at: string | null
+  error_message: string | null
+  created_at: string
+}
+
+export interface MobileOrderAuditLog {
+  id: string
+  order_id: string
+  actor_user_id: string | null
+  action_type: string
+  before_status: string | null
+  after_status: string | null
+  payload: Json | null
+  created_at: string
 }
 
 export interface UserProfile {
