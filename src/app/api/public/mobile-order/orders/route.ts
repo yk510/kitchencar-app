@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
         id: store.id,
         store_code: store.store_code,
       },
-      activeSchedule.business_date,
+      activeSchedule.id,
       {
         store_id: store.id,
         order_page_id: orderPage.id,
