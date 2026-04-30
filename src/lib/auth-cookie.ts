@@ -125,3 +125,14 @@ export function getAllKnownAuthCookieNames() {
     ])
   )
 }
+
+export function getAllKnownSupabaseStorageKeys() {
+  return Array.from(
+    new Set([
+      DEFAULT_SUPABASE_STORAGE_KEY,
+      getSupabaseStorageKey('vendor'),
+      getSupabaseStorageKey('organizer'),
+      getSupabaseStorageKey(null),
+    ])
+  )
+}
