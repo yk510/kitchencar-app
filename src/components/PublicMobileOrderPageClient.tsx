@@ -290,16 +290,30 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
       params.set('step', 'review')
     } else {
       params.delete('step')
+      params.delete('checkout_session_id')
+      params.delete('order_id')
+      params.delete('checkout_cancelled')
     }
 
     const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    const nextUrl = query ? `${pathname}?${query}` : pathname
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', nextUrl)
+    }
+    router.replace(nextUrl, { scroll: false })
   }
 
   function resetToOrderPage() {
     setCompletedOrder(null)
     setCheckoutError(null)
     setIsVerifyingPayment(false)
+    setCartItems([])
+    setPickupNickname('')
+    setSelectionError(null)
+    if (typeof window !== 'undefined') {
+      window.location.replace(pathname)
+      return
+    }
     router.replace(pathname, { scroll: false })
   }
 
