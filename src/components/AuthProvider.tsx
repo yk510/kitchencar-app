@@ -29,6 +29,15 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
 
+function getRoleFromSupabaseUser(user?: User | null): 'vendor' | 'organizer' | null {
+  const metadataRole = user?.user_metadata?.role ?? user?.app_metadata?.role
+  return metadataRole === 'organizer'
+    ? 'organizer'
+    : metadataRole === 'vendor'
+      ? 'vendor'
+      : null
+}
+
 function clearLocalDraftsAndTransientState() {
   if (typeof window === 'undefined') return
 
@@ -101,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshProfile() {
     if (!supabase) {
-      setRole('vendor')
+      setRole(null)
       setHasProfile(true)
       setProfileReady(true)
       return
@@ -115,11 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: 'no-store',
         signal: controller.signal,
       })
-      setRole(data.role ?? 'vendor')
+      setRole(data.role ?? getRoleFromSupabaseUser(session?.user) ?? null)
       setHasProfile(!!data.profile)
       setProfileReady(true)
     } catch {
-      setRole('vendor')
+      const {
+        data: { session: nextSession },
+      } = await supabase.auth.getSession()
+      setRole(getRoleFromSupabaseUser(nextSession?.user) ?? getRoleFromSupabaseUser(session?.user) ?? null)
       setHasProfile(false)
       setProfileReady(true)
     } finally {

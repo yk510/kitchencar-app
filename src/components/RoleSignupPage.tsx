@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
+import {
+  getAllKnownAuthCookieNames,
+  getBrowserAuthCookieDomain,
+  getBrowserAuthCookieName,
+} from '@/lib/auth-cookie'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import { compressImageFile } from '@/lib/client-image'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
@@ -153,6 +158,44 @@ function isRecoverableSignupError(message: string) {
     lower.includes('user already registered') ||
     lower.includes('email rate limit exceeded')
   )
+}
+
+function syncBrowserAccessToken(accessToken?: string | null) {
+  if (typeof document === 'undefined') return
+  const domain = getBrowserAuthCookieDomain()
+  const cookieName = getBrowserAuthCookieName()
+  const domainPart = domain ? `; domain=${domain}` : ''
+
+  for (const knownCookieName of getAllKnownAuthCookieNames()) {
+    if (knownCookieName === cookieName && accessToken) continue
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
+  }
+
+  if (accessToken) {
+    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
+    return
+  }
+
+  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+}
+
+async function waitForServerSessionReady() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const response = await fetch('/api/user/profile', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    })
+
+    if (response.ok) {
+      return true
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+  }
+
+  return false
 }
 
 function buildVendorWelcomePath(source?: string | null, returnOfferId?: string | null) {
@@ -669,6 +712,12 @@ export default function RoleSignupPage({
         throw new Error('確認コードの検証には成功しましたが、ユーザー情報の取得に失敗しました。')
       }
 
+      const {
+        data: { session: confirmedSession },
+      } = await supabase.auth.getSession()
+
+      syncBrowserAccessToken(confirmedSession?.access_token ?? null)
+      await waitForServerSessionReady()
       await refreshProfile()
       setMessage('確認コードを認証しました。登録を完了しています...')
       await finalizeConfirmedSignup(confirmedUser, email)
