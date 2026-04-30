@@ -13,6 +13,10 @@ import type {
 } from '@/types/api-payloads'
 
 const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
+const primaryCtaClassName =
+  'rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(37,99,235,0.24)] transition active:translate-y-[1px] active:scale-[0.99] active:shadow-[0_8px_18px_rgba(37,99,235,0.18)] disabled:cursor-not-allowed disabled:opacity-50'
+const secondaryCtaClassName =
+  'rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(148,163,184,0.14)] transition active:translate-y-[1px] active:scale-[0.99] active:bg-slate-200'
 
 type ProductSelection = {
   selectedChoiceIdsByGroup: Record<string, string[]>
@@ -587,7 +591,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           <button
             type="button"
             onClick={resetToOrderPage}
-            className="mt-6 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white"
+            className={`mt-6 ${primaryCtaClassName}`}
           >
             もう一度注文ページを見る
           </button>
@@ -626,7 +630,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             <button
               type="button"
               onClick={() => replaceStep('menu')}
-              className="rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+              className={secondaryCtaClassName}
             >
               内容を修正する
             </button>
@@ -685,7 +689,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 <button
                   type="button"
                   onClick={() => replaceStep('menu')}
-                  className="flex-1 rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+                  className={`flex-1 ${secondaryCtaClassName}`}
                 >
                   内容を修正する
                 </button>
@@ -693,7 +697,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                   type="button"
                   onClick={handleOpenPaymentConfirm}
                   disabled={submitting}
-                  className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  className={`flex-1 ${primaryCtaClassName}`}
                 >
                   {submitting ? '決済ページを準備中...' : 'クレジットカードで支払う'}
                 </button>
@@ -756,7 +760,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <button
                 type="button"
                 onClick={() => setShowPaymentConfirmModal(false)}
-                className="flex-1 rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+                className={`flex-1 ${secondaryCtaClassName}`}
               >
                 戻る
               </button>
@@ -764,7 +768,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 type="button"
                 onClick={() => void handleConfirmPaymentSubmit()}
                 disabled={submitting}
-                className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                className={`flex-1 ${primaryCtaClassName}`}
               >
                 {submitting ? '決済ページを準備中...' : '支払いへ進む'}
               </button>
@@ -791,7 +795,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             <button
               type="button"
               onClick={() => replaceStep('menu')}
-              className="rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+              className={secondaryCtaClassName}
             >
               商品選択へ戻る
             </button>
@@ -870,7 +874,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 type="button"
                 onClick={handleStartReview}
                 disabled={cartItems.length === 0}
-                className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                className={`mt-5 w-full ${primaryCtaClassName}`}
               >
                 注文内容を確認する
               </button>
@@ -1145,7 +1149,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     type="button"
                     onClick={handleAddToCart}
                     disabled={isProductUnavailable(selectedProduct)}
-                    className="w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    className={`w-full ${primaryCtaClassName}`}
                   >
                     {isProductUnavailable(selectedProduct) ? '売り切れ中です' : 'カートに追加'}
                   </button>
@@ -1194,7 +1198,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 type="button"
                 onClick={handleGoToCart}
                 disabled={cartItems.length === 0}
-                className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                className={`mt-5 w-full ${primaryCtaClassName}`}
               >
                 カートを見る
               </button>
