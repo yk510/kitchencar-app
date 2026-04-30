@@ -106,7 +106,7 @@ const ORGANIZER_STEPS: SignupStep[] = [
 ]
 
 function countFilled(values: string[]) {
-  return values.filter((value) => value.trim()).length
+  return values.filter((value) => String(value ?? '').trim()).length
 }
 
 function validatePassword(password: string) {
