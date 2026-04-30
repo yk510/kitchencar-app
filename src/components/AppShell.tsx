@@ -64,7 +64,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     if (user && role && hostScope && role !== hostScope) {
       void supabase?.auth.signOut()
-      router.replace('/login')
+      if (!isPublicPage) {
+        router.replace('/login')
+      }
       return
     }
 
