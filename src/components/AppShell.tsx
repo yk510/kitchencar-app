@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
 import { getHostScopeFromWindow, isPublicEntryPath } from '@/lib/domain'
@@ -21,6 +21,7 @@ function LoadingScreen({ message }: { message: string }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { loading, supabase, user, role, hasProfile, profileReady } = useAuth()
   const hostScope = useMemo(() => getHostScopeFromWindow(), [])
@@ -77,6 +78,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [hasProfile, homePath, hostScope, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.history.scrollRestoration = 'manual'
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname, searchParams])
 
   if (isLoginPage || isSignupPage || isEmailConfirmedPage || (!user && isPublicPage)) {
     return <main className="min-h-screen px-4 py-8 lg:px-6">{children}</main>
