@@ -468,7 +468,7 @@ create table mobile_orders (
   store_id                    uuid not null references vendor_stores(id) on delete restrict,
   order_page_id               uuid not null references store_order_pages(id) on delete restrict,
   schedule_id                 uuid not null references store_order_schedules(id) on delete restrict,
-  order_number                text not null unique,
+  order_number                text not null,
   order_daily_sequence        integer not null,
   customer_line_user_id       text,
   customer_line_display_name  text,

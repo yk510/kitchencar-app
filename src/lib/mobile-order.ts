@@ -183,13 +183,13 @@ export function resolveActiveSchedule<T extends { opens_at: string; closes_at: s
 export async function generateNextOrderNumber(
   supabase: any,
   store: { id: string; store_code: string },
-  scheduleId: string
+  businessDate: string
 ) {
   const { data, error } = await supabase
     .from('mobile_orders')
-    .select('order_daily_sequence')
+    .select('order_daily_sequence, store_order_schedules!inner(business_date)')
     .eq('store_id', store.id)
-    .eq('schedule_id', scheduleId)
+    .eq('store_order_schedules.business_date', businessDate)
     .order('order_daily_sequence', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -214,11 +214,11 @@ export async function generateNextOrderNumber(
 export async function insertMobileOrderWithGeneratedNumber(
   supabase: any,
   store: { id: string; store_code: string },
-  scheduleId: string,
+  businessDate: string,
   payload: Record<string, unknown>
 ) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const { orderNumber, dailySequence } = await generateNextOrderNumber(supabase, store, scheduleId)
+    const { orderNumber, dailySequence } = await generateNextOrderNumber(supabase, store, businessDate)
 
     const { data, error } = await supabase
       .from('mobile_orders')
