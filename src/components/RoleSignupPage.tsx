@@ -1064,7 +1064,7 @@ export default function RoleSignupPage({
                     value={confirmationCode}
                     onChange={(event) => setConfirmationCode(event.target.value.replace(/\s+/g, ''))}
                     className="w-full px-4 py-3"
-                    placeholder="6桁の確認コード"
+                    placeholder="メールに届いた確認コード"
                   />
                   <button
                     type="button"
