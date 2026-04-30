@@ -296,6 +296,13 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }
 
+  function resetToOrderPage() {
+    setCompletedOrder(null)
+    setCheckoutError(null)
+    setIsVerifyingPayment(false)
+    router.replace(pathname, { scroll: false })
+  }
+
   useEffect(() => {
     if (currentStep === 'review' && cartItems.length === 0) {
       replaceStep('menu')
@@ -526,7 +533,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
           <button
             type="button"
-            onClick={() => setCompletedOrder(null)}
+            onClick={resetToOrderPage}
             className="mt-6 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white"
           >
             もう一度注文ページを見る
