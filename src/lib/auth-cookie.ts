@@ -2,6 +2,10 @@ import { detectHostAppScope, type AppHostScope } from '@/lib/domain'
 
 export const LEGACY_AUTH_COOKIE_NAME = 'kitchencar-access-token'
 const DEFAULT_SUPABASE_STORAGE_KEY = 'kitchencar-auth'
+const LEGACY_VENDOR_AUTH_COOKIE_NAME = `${LEGACY_AUTH_COOKIE_NAME}-vendor`
+const LEGACY_ORGANIZER_AUTH_COOKIE_NAME = `${LEGACY_AUTH_COOKIE_NAME}-organizer`
+const LEGACY_VENDOR_STORAGE_KEY = `${DEFAULT_SUPABASE_STORAGE_KEY}-vendor`
+const LEGACY_ORGANIZER_STORAGE_KEY = `${DEFAULT_SUPABASE_STORAGE_KEY}-organizer`
 
 function getScopedSuffix(scope: AppHostScope) {
   if (scope === 'vendor') return 'vendor'
@@ -102,6 +106,8 @@ export function getAuthCookieCandidateNames(scope: AppHostScope) {
   const names = new Set<string>([
     getAuthCookieName(scope),
     LEGACY_AUTH_COOKIE_NAME,
+    LEGACY_VENDOR_AUTH_COOKIE_NAME,
+    LEGACY_ORGANIZER_AUTH_COOKIE_NAME,
   ])
 
   if (scope !== 'vendor') {
@@ -119,6 +125,8 @@ export function getAllKnownAuthCookieNames() {
   return Array.from(
     new Set([
       LEGACY_AUTH_COOKIE_NAME,
+      LEGACY_VENDOR_AUTH_COOKIE_NAME,
+      LEGACY_ORGANIZER_AUTH_COOKIE_NAME,
       getAuthCookieName('vendor'),
       getAuthCookieName('organizer'),
       getAuthCookieName(null),
@@ -130,6 +138,8 @@ export function getAllKnownSupabaseStorageKeys() {
   return Array.from(
     new Set([
       DEFAULT_SUPABASE_STORAGE_KEY,
+      LEGACY_VENDOR_STORAGE_KEY,
+      LEGACY_ORGANIZER_STORAGE_KEY,
       getSupabaseStorageKey('vendor'),
       getSupabaseStorageKey('organizer'),
       getSupabaseStorageKey(null),
