@@ -218,7 +218,8 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false)
 
-  const currentStep = searchParams.get('step') === 'review' ? 'review' : 'menu'
+  const stepParam = searchParams.get('step')
+  const currentStep = stepParam === 'review' ? 'review' : stepParam === 'cart' ? 'cart' : 'menu'
 
   const availableProducts = useMemo(
     () => pageData.products.filter((product) => product.is_published && !isProductUnavailable(product)),
@@ -285,10 +286,12 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
   }, [availableProducts, selectedProduct])
 
-  function replaceStep(step: 'menu' | 'review') {
+  function replaceStep(step: 'menu' | 'cart' | 'review') {
     const params = new URLSearchParams(searchParams.toString())
     if (step === 'review') {
       params.set('step', 'review')
+    } else if (step === 'cart') {
+      params.set('step', 'cart')
     } else {
       params.delete('step')
       params.delete('checkout_session_id')
@@ -319,7 +322,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   }
 
   useEffect(() => {
-    if (currentStep === 'review' && cartItems.length === 0) {
+    if ((currentStep === 'cart' || currentStep === 'review') && cartItems.length === 0) {
       replaceStep('menu')
     }
   }, [cartItems.length, currentStep])
@@ -473,6 +476,16 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
     setCheckoutError(null)
     replaceStep('review')
+  }
+
+  function handleGoToCart() {
+    if (cartItems.length === 0) {
+      setCheckoutError('商品を1件以上カートに追加してください')
+      return
+    }
+
+    setCheckoutError(null)
+    replaceStep('cart')
   }
 
   async function handleSubmitOrder() {
@@ -714,6 +727,31 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <p className="mt-1">受け取り名: {pickupNickname.trim()}</p>
             </div>
 
+            <div className="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
+              <p className="text-sm font-semibold text-gray-800">注文内容</p>
+              <div className="mt-3 space-y-3">
+                {cartItems.map((item) => (
+                  <div key={`payment-confirm-${item.id}`} className="rounded-2xl bg-[#f8fafc] px-3 py-3 text-sm text-gray-600">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-gray-800">
+                        {item.product_name} x{item.quantity}
+                      </p>
+                      <p className="shrink-0 font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                    </div>
+                    {item.selected_options.length > 0 && (
+                      <div className="mt-2 space-y-1 text-xs leading-6 text-gray-500">
+                        {item.selected_options.map((group) => (
+                          <p key={`payment-confirm-${item.id}-${group.group_id}`}>
+                            {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
@@ -735,6 +773,111 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
         </div>
       )}
       </>
+    )
+  }
+
+  if (currentStep === 'cart') {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-6">
+        <section className="soft-panel rounded-[36px] px-6 py-7 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="badge-soft badge-blue inline-block">CART</div>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-[var(--text-main)]">カートの確認</h1>
+              <p className="mt-3 text-sm leading-7 text-[var(--text-sub)]">
+                商品内容と受け取り名を確認してから、注文内容の確認へ進みます。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => replaceStep('menu')}
+              className="rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+            >
+              商品選択へ戻る
+            </button>
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="soft-panel rounded-[32px] p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">ご注文内容</h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                {cartItems.length} 件
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {cartItems.map((item) => (
+                <div key={`cart-page-${item.id}`} className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-800">
+                        {item.product_name} x{item.quantity}
+                      </p>
+                      {item.selected_options.length > 0 && (
+                        <div className="mt-2 space-y-1 text-xs text-gray-500">
+                          {item.selected_options.map((group) => (
+                            <p key={`cart-page-${item.id}-${group.group_id}`}>
+                              {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeCartItem(item.id)}
+                      className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600"
+                    >
+                      削除
+                    </button>
+                  </div>
+                  <p className="mt-3 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <section className="soft-panel rounded-[32px] p-6">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">お受け取り情報</h2>
+              <div className="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
+                <label className="mb-2 block text-sm font-medium text-gray-700">受け取りニックネーム</label>
+                <input
+                  value={pickupNickname}
+                  onChange={(event) => {
+                    setPickupNickname(event.target.value)
+                  }}
+                  className="w-full px-4 py-3"
+                  placeholder="例: たろう"
+                />
+                <p className="mt-2 text-xs text-gray-500">商品受け渡し時にスタッフが呼び出す名前です。</p>
+              </div>
+
+              <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">カート合計</span>
+                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                </div>
+              </div>
+
+              {checkoutError && (
+                <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{checkoutError}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleStartReview}
+                disabled={cartItems.length === 0}
+                className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                注文内容を確認する
+              </button>
+            </section>
+          </div>
+        </section>
+      </div>
     )
   }
 
@@ -1022,54 +1165,18 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 </span>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-600">
                 {cartItems.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-6 text-sm text-gray-500">
-                    まだ商品が入っていません。商品を選んでカートに追加してください。
-                  </div>
+                  <p>まだ商品が入っていません。商品を選んでカートに追加してください。</p>
                 ) : (
-                  cartItems.map((item) => (
-                    <div key={item.id} className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-800">
-                            {item.product_name} x{item.quantity}
-                          </p>
-                          {item.selected_options.length > 0 && (
-                            <div className="mt-2 space-y-1 text-xs text-gray-500">
-                              {item.selected_options.map((group) => (
-                                <p key={group.group_id}>
-                                  {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeCartItem(item.id)}
-                          className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600"
-                        >
-                          削除
-                        </button>
-                      </div>
-                      <p className="mt-3 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                    </div>
-                  ))
+                  <>
+                    <p className="font-semibold text-gray-800">
+                      {cartItems[0].product_name}
+                      {cartItems.length > 1 ? ` ほか ${cartItems.length - 1} 件` : ''}
+                    </p>
+                    <p className="mt-2 text-xs text-gray-500">カートページで商品内容、受け取り名、合計金額を確認できます。</p>
+                  </>
                 )}
-              </div>
-
-              <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-                <label className="mb-2 block text-sm font-medium text-gray-700">受け取りニックネーム</label>
-                <input
-                  value={pickupNickname}
-                  onChange={(event) => {
-                    setPickupNickname(event.target.value)
-                  }}
-                  className="w-full px-4 py-3"
-                  placeholder="例: たろう"
-                />
-                <p className="mt-2 text-xs text-gray-500">商品受け渡し時にスタッフが呼び出す名前です。</p>
               </div>
 
               <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
@@ -1085,15 +1192,15 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
               <button
                 type="button"
-                onClick={handleStartReview}
+                onClick={handleGoToCart}
                 disabled={cartItems.length === 0}
                 className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
               >
-                注文内容を確認する
+                カートを見る
               </button>
 
               <div className="mt-4 rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
-                ご注文内容を確認したあと、クレジットカード決済ページへ進みます。
+                カートページで注文内容を確認したあと、クレジットカード決済ページへ進みます。
               </div>
             </section>
           </aside>
