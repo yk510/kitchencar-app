@@ -216,6 +216,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [submitting, setSubmitting] = useState(false)
   const [completedOrder, setCompletedOrder] = useState<PublicMobileOrderCheckoutStatusResponse | null>(null)
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
+  const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false)
 
   const currentStep = searchParams.get('step') === 'review' ? 'review' : 'menu'
 
@@ -524,6 +525,31 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
   }
 
+  function handleOpenPaymentConfirm() {
+    if (!pageData.activeSchedule) {
+      setCheckoutError('現在は注文受付時間外です')
+      return
+    }
+
+    if (cartItems.length === 0) {
+      setCheckoutError('商品を1件以上カートに追加してください')
+      return
+    }
+
+    if (!pickupNickname.trim()) {
+      setCheckoutError('受け取りニックネームを入力してください')
+      return
+    }
+
+    setCheckoutError(null)
+    setShowPaymentConfirmModal(true)
+  }
+
+  async function handleConfirmPaymentSubmit() {
+    setShowPaymentConfirmModal(false)
+    await handleSubmitOrder()
+  }
+
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
 
   if (completedOrder) {
@@ -573,6 +599,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   if (currentStep === 'review') {
     return (
+      <>
       <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-6">
         <section className="soft-panel rounded-[36px] px-6 py-7 lg:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -651,7 +678,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleSubmitOrder()}
+                  onClick={handleOpenPaymentConfirm}
                   disabled={submitting}
                   className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
                 >
@@ -662,6 +689,52 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           </div>
         </section>
       </div>
+      {showPaymentConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
+          <div className="w-full max-w-md rounded-[32px] bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+            <div className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-800">
+              Payment Notice
+            </div>
+            <h2 className="mt-4 text-2xl font-black tracking-tight text-[var(--text-main)]">
+              お支払い前のご確認
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
+              お支払い完了後のキャンセル・返金はいたしかねます。
+              <br />
+              ご注文内容を十分にご確認のうえ、お支払い画面へお進みください。
+            </p>
+
+            <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4 text-sm text-gray-600">
+              <p className="font-semibold text-gray-800">今回のお支払い内容</p>
+              <p className="mt-2">注文点数: {cartItems.length} 件</p>
+              <p className="mt-1">
+                お支払い金額:
+                <span className="ml-2 font-bold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+              </p>
+              <p className="mt-1">受け取り名: {pickupNickname.trim()}</p>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPaymentConfirmModal(false)}
+                className="flex-1 rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmPaymentSubmit()}
+                disabled={submitting}
+                className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {submitting ? '決済ページを準備中...' : '支払いへ進む'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
     )
   }
 
