@@ -7,14 +7,14 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
-import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
+import { getStripeClient, getStripeConfigStatus } from '@/lib/stripe'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type {
   MobileOrderOptionChoiceRow,
   MobileOrderOptionGroupRow,
   MobileOrderProductRow,
+  PublicMobileOrderCheckoutResponse,
   PublicMobileOrderCreatePayload,
-  PublicMobileOrderCreateResponse,
   StoreOrderScheduleRow,
 } from '@/types/api-payloads'
 
@@ -27,6 +27,11 @@ export async function POST(req: NextRequest) {
   const supabase = createServerSupabaseClient()
 
   try {
+    const stripeConfig = getStripeConfigStatus()
+    if (!stripeConfig.hasSecretKey) {
+      return apiError('現在クレジットカード決済の設定中です。少し時間をおいてお試しください。', 503)
+    }
+
     const body = (await req.json()) as PublicMobileOrderCreatePayload
     const publicToken = String(body.public_token ?? '').trim()
     const pickupNickname = String(body.pickup_nickname ?? '').trim()
@@ -211,14 +216,28 @@ export async function POST(req: NextRequest) {
         pickup_nickname: pickupNickname,
         status: 'placed',
         payment_status: 'pending',
-        payment_provider: 'web_pending',
+        payment_provider: 'stripe_checkout',
         subtotal_amount: subtotalAmount,
         tax_amount: 0,
         total_amount: subtotalAmount,
       }
     )
 
+    let checkoutUrl = ''
+
     try {
+      const stripeLineItems: Array<{
+        price_data: {
+          currency: 'jpy'
+          unit_amount: number
+          product_data: {
+            name: string
+            description?: string
+          }
+        }
+        quantity: number
+      }> = []
+
       for (const item of normalizedItems) {
         const { data: insertedItem, error: itemError } = await (supabase as any)
           .from('mobile_order_items')
@@ -260,46 +279,75 @@ export async function POST(req: NextRequest) {
             throw new Error(optionInsertError.message)
           }
         }
-      }
 
-      const { data: insertedNotification, error: notificationError } = await (supabase as any)
-        .from('mobile_order_notifications')
-        .insert([
-          {
-            order_id: order.id,
-            notification_type: 'order_completed',
-            delivery_status: 'pending',
-            error_message: null,
+        const optionDescription = Array.from(item.selectedChoicesByGroup.entries())
+          .map(([groupId, choices]) => {
+            const group = optionGroupMap.get(groupId)
+            if (!group || choices.length === 0) return null
+            return `${group.name}: ${choices.map((choice) => choice.name).join(' / ')}`
+          })
+          .filter(Boolean)
+          .join(' | ')
+
+        const unitAmount = Math.round(item.lineTotal / item.quantity)
+        stripeLineItems.push({
+          price_data: {
+            currency: 'jpy',
+            unit_amount: unitAmount,
+            product_data: {
+              name: item.product.name,
+              ...(optionDescription ? { description: optionDescription } : {}),
+            },
           },
-        ])
-        .select('*')
-        .single()
-
-      if (notificationError || !insertedNotification) {
-        throw new Error(notificationError?.message ?? '注文通知の作成に失敗しました')
+          quantity: item.quantity,
+        })
       }
 
-      try {
-        await sendMobileOrderLineNotification({
-          supabase,
-          orderId: order.id,
-          notificationId: insertedNotification.id,
-          actorUserId: null,
+      const stripe = getStripeClient()
+      const successUrl = `${req.nextUrl.origin}/order/${publicToken}?checkout_session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`
+      const cancelUrl = `${req.nextUrl.origin}/order/${publicToken}?checkout_cancelled=1`
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: stripeLineItems,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          order_id: order.id,
+          public_token: publicToken,
+          store_id: store.id,
+          schedule_id: activeSchedule.id,
+        },
+        payment_intent_data: {
+          metadata: {
+            order_id: order.id,
+            public_token: publicToken,
+          },
+        },
+      })
+
+      if (!session.url) {
+        throw new Error('決済ページURLの生成に失敗しました')
+      }
+      checkoutUrl = session.url
+
+      const { error: paymentReferenceUpdateError } = await (supabase as any)
+        .from('mobile_orders')
+        .update({
+          payment_reference: session.id,
         })
-      } catch (notificationSendError) {
-        console.error('[public/mobile-order/orders POST] failed to auto-send order_completed notification', notificationSendError)
+        .eq('id', order.id)
+
+      if (paymentReferenceUpdateError) {
+        throw new Error(paymentReferenceUpdateError.message)
       }
     } catch (nestedError) {
       await (supabase as any).from('mobile_orders').delete().eq('id', order.id)
       throw nestedError
     }
 
-    const payload: PublicMobileOrderCreateResponse = {
+    const payload: PublicMobileOrderCheckoutResponse = {
       order_id: order.id,
-      order_number: order.order_number,
-      pickup_nickname: order.pickup_nickname,
-      total_amount: order.total_amount,
-      ordered_at: order.ordered_at,
+      checkout_url: checkoutUrl,
     }
 
     return apiOk(payload)

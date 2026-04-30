@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         .select('*, mobile_order_items(*, mobile_order_item_option_choices(*)), mobile_order_notifications(*)')
         .eq('store_id', store.id)
         .eq('schedule_id', selectedSchedule.id)
+        .in('payment_status', ['paid', 'authorized'])
         .order('ordered_at', { ascending: false })
 
       if (error) {

@@ -4,7 +4,8 @@ import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
-  PublicMobileOrderCreateResponse,
+  PublicMobileOrderCheckoutResponse,
+  PublicMobileOrderCheckoutStatusResponse,
   PublicMobileOrderOptionChoice,
   PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
@@ -211,8 +212,9 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [completedOrder, setCompletedOrder] = useState<PublicMobileOrderCreateResponse | null>(null)
+  const [completedOrder, setCompletedOrder] = useState<PublicMobileOrderCheckoutStatusResponse | null>(null)
   const [isReviewingOrder, setIsReviewingOrder] = useState(false)
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
 
   const availableProducts = useMemo(
     () => pageData.products.filter((product) => product.is_published && !isProductUnavailable(product)),
@@ -278,6 +280,76 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
       setSelection(buildInitialSelection(availableProducts[0]))
     }
   }, [availableProducts, selectedProduct])
+
+  useEffect(() => {
+    const checkoutSessionId = searchParams.get('checkout_session_id')?.trim() ?? ''
+    const orderId = searchParams.get('order_id')?.trim() ?? ''
+    const checkoutCancelled = searchParams.get('checkout_cancelled') === '1'
+
+    if (checkoutCancelled) {
+      setCheckoutError('決済はまだ完了していません。商品を選び直して、もう一度お支払いください。')
+      return
+    }
+
+    if (!checkoutSessionId || !orderId || completedOrder) {
+      return
+    }
+
+    let disposed = false
+    let attemptCount = 0
+
+    async function verifyCheckout() {
+      if (disposed) return
+      attemptCount += 1
+      setIsVerifyingPayment(true)
+      setCheckoutError(null)
+
+      try {
+        const response = await fetchApi<PublicMobileOrderCheckoutStatusResponse>(
+          `/api/public/mobile-order/orders/checkout-status?public_token=${encodeURIComponent(pageData.orderPage.public_token)}&order_id=${encodeURIComponent(orderId)}&checkout_session_id=${encodeURIComponent(checkoutSessionId)}`,
+          { cache: 'no-store' }
+        )
+
+        if (response.payment_status === 'paid' || response.payment_status === 'authorized') {
+          if (disposed) return
+          setCompletedOrder(response)
+          setCartItems([])
+          setPickupNickname('')
+          setIsReviewingOrder(false)
+          setIsVerifyingPayment(false)
+          const next = await fetchApi<PublicMobileOrderPagePayload>(
+            `/api/public/mobile-order/${pageData.orderPage.public_token}`,
+            { cache: 'no-store' }
+          )
+          if (!disposed) {
+            setPageData(next)
+          }
+          return
+        }
+
+        if (attemptCount < 12) {
+          window.setTimeout(() => {
+            void verifyCheckout()
+          }, 1500)
+          return
+        }
+
+        setCheckoutError('決済完了の確認に少し時間がかかっています。少し待ってから画面を開き直してください。')
+      } catch (error) {
+        setCheckoutError(error instanceof ApiClientError ? error.message : '決済確認に失敗しました')
+      } finally {
+        if (!disposed) {
+          setIsVerifyingPayment(false)
+        }
+      }
+    }
+
+    void verifyCheckout()
+
+    return () => {
+      disposed = true
+    }
+  }, [completedOrder, pageData.orderPage.public_token, searchParams])
 
   function handleSelectProduct(product: PublicMobileOrderProduct) {
     if (isProductUnavailable(product)) {
@@ -385,7 +457,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
       const storedLiffContext = getStoredLiffOrderContext()
       const lineUserId = lineUserIdFromQuery || storedLiffContext.lineUserId
       const lineDisplayName = lineDisplayNameFromQuery || storedLiffContext.lineDisplayName
-      const response = await fetchApi<PublicMobileOrderCreateResponse>('/api/public/mobile-order/orders', {
+      const response = await fetchApi<PublicMobileOrderCheckoutResponse>('/api/public/mobile-order/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -402,16 +474,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           })),
         }),
       })
-
-      const next = await fetchApi<PublicMobileOrderPagePayload>(
-        `/api/public/mobile-order/${pageData.orderPage.public_token}`,
-        { cache: 'no-store' }
-      )
-      setPageData(next)
-      setCompletedOrder(response)
-      setCartItems([])
-      setPickupNickname('')
-      setIsReviewingOrder(false)
+      window.location.assign(response.checkout_url)
     } catch (error) {
       setCheckoutError(error instanceof ApiClientError ? error.message : '注文の送信に失敗しました')
     } finally {
@@ -440,10 +503,6 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             <p className="mt-2 text-sm text-gray-600">合計: {formatPrice(completedOrder.total_amount)}</p>
           </div>
 
-          <div className="mt-6 rounded-3xl border border-dashed border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4 text-sm text-gray-500">
-            決済とLINE通知は次の実装で接続します。現時点では注文保存と注文番号発行まで確認できます。
-          </div>
-
           <button
             type="button"
             onClick={() => setCompletedOrder(null)}
@@ -451,6 +510,20 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           >
             もう一度注文ページを見る
           </button>
+        </section>
+      </div>
+    )
+  }
+
+  if (isVerifyingPayment) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-10 lg:px-6">
+        <section className="soft-panel rounded-[36px] px-6 py-8 text-center lg:px-8">
+          <div className="badge-soft badge-blue inline-block">PAYMENT CHECK</div>
+          <h1 className="mt-5 text-3xl font-black tracking-tight text-[var(--text-main)]">決済完了を確認しています</h1>
+          <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
+            クレジットカード決済の結果を確認しています。数秒そのままでお待ちください。
+          </p>
         </section>
       </div>
     )
@@ -831,7 +904,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                       disabled={submitting}
                       className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      {submitting ? '注文を送信中...' : 'この内容で注文する'}
+                      {submitting ? '決済ページを準備中...' : 'クレジットカードで支払う'}
                     </button>
                   </div>
                 </div>
@@ -847,7 +920,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               )}
 
               <div className="mt-4 rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
-                現時点では決済は未接続です。次の実装でクレジットカード決済とLINE通知を追加します。
+                ご注文内容を確認したあと、クレジットカード決済ページへ進みます。
               </div>
             </section>
           </aside>

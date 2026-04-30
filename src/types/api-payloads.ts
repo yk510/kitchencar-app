@@ -235,12 +235,18 @@ export type PublicMobileOrderCreatePayload = {
   items: PublicMobileOrderCreateItemPayload[]
 }
 
-export type PublicMobileOrderCreateResponse = {
+export type PublicMobileOrderCheckoutResponse = {
+  order_id: string
+  checkout_url: string
+}
+
+export type PublicMobileOrderCheckoutStatusResponse = {
   order_id: string
   order_number: string
   pickup_nickname: string
   total_amount: number
   ordered_at: string
+  payment_status: MobileOrderRow['payment_status']
 }
 
 export type MobileOrderRow = Database['public']['Tables']['mobile_orders']['Row']
