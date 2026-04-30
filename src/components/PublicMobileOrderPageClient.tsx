@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
@@ -203,6 +203,8 @@ function getStoredLiffOrderContext() {
 }
 
 export default function PublicMobileOrderPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(null)
@@ -213,8 +215,9 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [completedOrder, setCompletedOrder] = useState<PublicMobileOrderCheckoutStatusResponse | null>(null)
-  const [isReviewingOrder, setIsReviewingOrder] = useState(false)
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
+
+  const currentStep = searchParams.get('step') === 'review' ? 'review' : 'menu'
 
   const availableProducts = useMemo(
     () => pageData.products.filter((product) => product.is_published && !isProductUnavailable(product)),
@@ -281,6 +284,24 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
   }, [availableProducts, selectedProduct])
 
+  function replaceStep(step: 'menu' | 'review') {
+    const params = new URLSearchParams(searchParams.toString())
+    if (step === 'review') {
+      params.set('step', 'review')
+    } else {
+      params.delete('step')
+    }
+
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
+  useEffect(() => {
+    if (currentStep === 'review' && cartItems.length === 0) {
+      replaceStep('menu')
+    }
+  }, [cartItems.length, currentStep])
+
   useEffect(() => {
     const checkoutSessionId = searchParams.get('checkout_session_id')?.trim() ?? ''
     const orderId = searchParams.get('order_id')?.trim() ?? ''
@@ -288,6 +309,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
     if (checkoutCancelled) {
       setCheckoutError('決済はまだ完了していません。商品を選び直して、もう一度お支払いください。')
+      replaceStep('menu')
       return
     }
 
@@ -315,7 +337,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           setCompletedOrder(response)
           setCartItems([])
           setPickupNickname('')
-          setIsReviewingOrder(false)
+          replaceStep('menu')
           setIsVerifyingPayment(false)
           const next = await fetchApi<PublicMobileOrderPagePayload>(
             `/api/public/mobile-order/${pageData.orderPage.public_token}`,
@@ -414,7 +436,6 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   function removeCartItem(cartItemId: string) {
     setCartItems((current) => current.filter((item) => item.id !== cartItemId))
-    setIsReviewingOrder(false)
   }
 
   function handleStartReview() {
@@ -429,7 +450,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
 
     setCheckoutError(null)
-    setIsReviewingOrder(true)
+    replaceStep('review')
   }
 
   async function handleSubmitOrder() {
@@ -524,6 +545,100 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
             クレジットカード決済の結果を確認しています。数秒そのままでお待ちください。
           </p>
+        </section>
+      </div>
+    )
+  }
+
+  if (currentStep === 'review') {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-6">
+        <section className="soft-panel rounded-[36px] px-6 py-7 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="badge-soft badge-blue inline-block">ORDER REVIEW</div>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-[var(--text-main)]">注文内容の確認</h1>
+              <p className="mt-3 text-sm leading-7 text-[var(--text-sub)]">
+                商品、数量、受け取り名を確認してから、クレジットカード決済へ進みます。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => replaceStep('menu')}
+              className="rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+            >
+              内容を修正する
+            </button>
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="soft-panel rounded-[32px] p-6">
+            <h2 className="text-lg font-semibold text-[var(--text-main)]">ご注文内容</h2>
+            <div className="mt-4 space-y-3 text-sm text-gray-600">
+              {cartItems.map((item) => (
+                <div key={`review-page-${item.id}`} className="rounded-2xl bg-white px-4 py-4 ring-1 ring-[var(--line-soft)]">
+                  <p className="font-semibold text-gray-800">
+                    {item.product_name} x{item.quantity}
+                  </p>
+                  {item.selected_options.length > 0 && (
+                    <div className="mt-2 space-y-1 text-xs text-gray-500">
+                      {item.selected_options.map((group) => (
+                        <p key={`review-page-${item.id}-${group.group_id}`}>
+                          {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-2 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <section className="soft-panel rounded-[32px] p-6">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">お受け取り情報</h2>
+              <div className="mt-4 rounded-2xl bg-white px-4 py-4 ring-1 ring-[var(--line-soft)] text-sm text-gray-600">
+                <p>
+                  受け取りニックネーム:
+                  <span className="ml-2 font-semibold text-gray-800">{pickupNickname.trim()}</span>
+                </p>
+                <p className="mt-2">
+                  合計金額:
+                  <span className="ml-2 font-semibold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                </p>
+              </div>
+            </section>
+
+            {checkoutError && (
+              <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{checkoutError}</p>
+            )}
+
+            <section className="soft-panel rounded-[32px] p-6">
+              <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
+                次の画面でクレジットカード情報を入力して、お支払いを完了します。
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => replaceStep('menu')}
+                  className="flex-1 rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
+                >
+                  内容を修正する
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSubmitOrder()}
+                  disabled={submitting}
+                  className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {submitting ? '決済ページを準備中...' : 'クレジットカードで支払う'}
+                </button>
+              </div>
+            </section>
+          </div>
         </section>
       </div>
     )
@@ -837,7 +952,6 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                   value={pickupNickname}
                   onChange={(event) => {
                     setPickupNickname(event.target.value)
-                    setIsReviewingOrder(false)
                   }}
                   className="w-full px-4 py-3"
                   placeholder="例: たろう"
@@ -856,68 +970,14 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{checkoutError}</p>
               )}
 
-              {isReviewingOrder ? (
-                <div className="mt-5 space-y-4">
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-gray-800">注文内容の確認</h3>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                        最終確認
-                      </span>
-                    </div>
-                    <div className="mt-4 space-y-3 text-sm text-gray-600">
-                      {cartItems.map((item) => (
-                        <div key={`review-${item.id}`} className="rounded-2xl bg-[#f8fafc] px-3 py-3">
-                          <p className="font-semibold text-gray-800">
-                            {item.product_name} x{item.quantity}
-                          </p>
-                          {item.selected_options.length > 0 && (
-                            <div className="mt-2 space-y-1 text-xs text-gray-500">
-                              {item.selected_options.map((group) => (
-                                <p key={`review-${item.id}-${group.group_id}`}>
-                                  {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                          <p className="mt-2 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 rounded-2xl bg-[#f8fafc] px-3 py-3 text-sm text-gray-600">
-                      <p>受け取りニックネーム: <span className="font-semibold text-gray-800">{pickupNickname.trim()}</span></p>
-                      <p className="mt-1">合計金額: <span className="font-semibold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span></p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsReviewingOrder(false)}
-                      className="flex-1 rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700"
-                    >
-                      内容を修正する
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleSubmitOrder()}
-                      disabled={submitting}
-                      className="flex-1 rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      {submitting ? '決済ページを準備中...' : 'クレジットカードで支払う'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleStartReview}
-                  disabled={cartItems.length === 0}
-                  className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  注文内容を確認する
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleStartReview}
+                disabled={cartItems.length === 0}
+                className="mt-5 w-full rounded-full bg-[var(--accent-blue)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                注文内容を確認する
+              </button>
 
               <div className="mt-4 rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
                 ご注文内容を確認したあと、クレジットカード決済ページへ進みます。
