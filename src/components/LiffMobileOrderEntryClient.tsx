@@ -268,18 +268,18 @@ export default function LiffMobileOrderEntryClient() {
     <div className="mx-auto max-w-2xl px-4 py-16">
       <div className="soft-panel rounded-[32px] p-8 text-center">
         <div className="badge-soft badge-blue inline-block">LIFF ENTRY</div>
+        <div className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-blue-soft)]">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--accent-blue-soft)] border-t-[var(--accent-blue)]" />
+        </div>
         <h1 className="mt-5 text-2xl font-bold text-[var(--text-main)]">注文ページへ移動しています</h1>
         <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
           LINE内の共通入口から、店舗ごとの注文ページへ案内しています。
         </p>
         <p className="mt-3 text-sm font-medium text-[var(--accent-blue)]">{statusText}</p>
-        <p className="mt-3 break-all text-xs text-[var(--text-soft)]">{destination}</p>
+        <div className="mt-5 rounded-2xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
+          画面が切り替わるまで、そのままお待ちください。
+        </div>
         {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-        {debugDetail && (
-          <p className="mt-3 break-all rounded-2xl bg-slate-50 px-4 py-3 text-left text-[11px] text-slate-500">
-            {debugDetail}
-          </p>
-        )}
       </div>
     </div>
   )
