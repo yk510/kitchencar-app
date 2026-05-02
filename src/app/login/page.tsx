@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import {
@@ -13,6 +13,7 @@ import { getHostScopeFromWindow } from '@/lib/domain'
 import { fetchApi } from '@/lib/api-client'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 import { getHomePathByRole, type AppRole } from '@/lib/user-role'
+import { useRouter } from 'next/navigation'
 
 function syncBrowserAccessToken(accessToken?: string | null) {
   if (typeof document === 'undefined') return
@@ -52,7 +53,8 @@ async function waitForServerSessionReady() {
 }
 
 export default function LoginPage() {
-  const { supabase, loading } = useAuth()
+  const router = useRouter()
+  const { supabase, loading, user, role, profileReady } = useAuth()
   const hostScope = getHostScopeFromWindow()
   const roleParam = useMemo(() => {
     if (typeof window === 'undefined') return null
@@ -72,10 +74,17 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [awaitingServerRedirect, setAwaitingServerRedirect] = useState(false)
+
+  useEffect(() => {
+    if (loading || !profileReady || !user || awaitingServerRedirect) return
+    router.replace(getHomePathByRole(role ?? scopedRole))
+  }, [awaitingServerRedirect, loading, profileReady, role, router, scopedRole, user])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
+    setAwaitingServerRedirect(true)
     setMessage(null)
     setError(null)
 
@@ -113,6 +122,7 @@ export default function LoginPage() {
         window.location.replace(homePath)
       }, 400)
     } catch (submitError: any) {
+      setAwaitingServerRedirect(false)
       setError(submitError.message ?? 'ログインに失敗しました')
     } finally {
       setSubmitting(false)

@@ -71,11 +71,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return
     }
 
-    if (user && isLoginPage && profileReady) {
-      router.replace(homePath)
-      return
-    }
-
     if (user && isSignupPage && profileReady && hasProfile) {
       router.replace(homePath)
       return
