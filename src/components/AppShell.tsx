@@ -45,6 +45,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isLoginPage = pathname === '/login'
   const isEmailConfirmedPage = pathname === '/auth/confirmed' || pathname.startsWith('/auth/confirmed/')
   const isSignupPage = pathname.startsWith('/signup/')
+  const isLandingPage = pathname === '/lp' || pathname === '/lp/vendor' || pathname === '/lp/organizer'
   const isOrganizerPath = pathname === '/organizer' || pathname.startsWith('/organizer/')
   const isVendorPath = pathname === '/vendor' || pathname.startsWith('/vendor/')
   const isPublicPage = isPublicEntryPath(pathname)
@@ -80,6 +81,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return
     }
 
+    if (user && isLandingPage && profileReady) {
+      router.replace(homePath)
+      return
+    }
+
     if (user && role === 'organizer' && pathname === '/') {
       router.replace('/organizer')
       return
@@ -93,7 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (user && role === 'organizer' && isVendorPath) {
       router.replace('/organizer')
     }
-  }, [hasProfile, homePath, hostScope, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
+  }, [hasProfile, homePath, hostScope, isLandingPage, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 

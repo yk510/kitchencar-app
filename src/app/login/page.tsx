@@ -4,9 +4,52 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
+import {
+  getAllKnownAuthCookieNames,
+  getBrowserAuthCookieDomain,
+  getBrowserAuthCookieName,
+} from '@/lib/auth-cookie'
 import { getHostScopeFromWindow } from '@/lib/domain'
+import { fetchApi } from '@/lib/api-client'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
-import type { AppRole } from '@/lib/user-role'
+import { getHomePathByRole, type AppRole } from '@/lib/user-role'
+
+function syncBrowserAccessToken(accessToken?: string | null) {
+  if (typeof document === 'undefined') return
+
+  const domain = getBrowserAuthCookieDomain()
+  const cookieName = getBrowserAuthCookieName()
+  const domainPart = domain ? `; domain=${domain}` : ''
+
+  for (const knownCookieName of getAllKnownAuthCookieNames()) {
+    if (knownCookieName === cookieName && accessToken) continue
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
+  }
+
+  if (accessToken) {
+    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
+    return
+  }
+
+  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
+}
+
+async function waitForServerSessionReady() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      await fetchApi('/api/user/profile', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      })
+      return true
+    } catch {
+      await new Promise((resolve) => window.setTimeout(resolve, 250))
+    }
+  }
+
+  return false
+}
 
 export default function LoginPage() {
   const { supabase, loading } = useAuth()
@@ -19,6 +62,7 @@ export default function LoginPage() {
     roleParam === 'organizer' || roleParam === 'vendor'
       ? roleParam
       : hostScope
+  const homePath = getHomePathByRole(scopedRole)
   const authDraft = usePersistentDraft('draft:login-form', {
     email: '',
     password: '',
@@ -49,8 +93,25 @@ export default function LoginPage() {
         throw signInError
       }
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      syncBrowserAccessToken(session?.access_token ?? null)
       setMessage('ログインしました。ホームへ移動します。')
       clearDraft()
+
+      const serverSessionReady = await waitForServerSessionReady()
+
+      if (serverSessionReady) {
+        window.location.replace(homePath)
+        return
+      }
+
+      setMessage('ログインしました。ホームへ移動しています。数秒後に切り替わらない場合は再読み込みしてください。')
+      window.setTimeout(() => {
+        window.location.replace(homePath)
+      }, 400)
     } catch (submitError: any) {
       setError(submitError.message ?? 'ログインに失敗しました')
     } finally {
