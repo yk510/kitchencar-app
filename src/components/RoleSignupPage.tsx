@@ -198,6 +198,23 @@ async function waitForServerSessionReady() {
   return false
 }
 
+async function persistServerSessionCookie(accessToken?: string | null) {
+  if (!accessToken) return false
+
+  const response = await fetch('/api/auth/session-cookie', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      access_token: accessToken,
+    }),
+  })
+
+  return response.ok
+}
+
 function buildVendorWelcomePath(source?: string | null, returnOfferId?: string | null) {
   const params = new URLSearchParams()
   if (source) params.set('from', source)
@@ -717,6 +734,7 @@ export default function RoleSignupPage({
       } = await supabase.auth.getSession()
 
       syncBrowserAccessToken(confirmedSession?.access_token ?? null)
+      await persistServerSessionCookie(confirmedSession?.access_token ?? null)
       await waitForServerSessionReady()
       await refreshProfile()
       setMessage('確認コードを認証しました。登録を完了しています...')

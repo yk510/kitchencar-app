@@ -52,6 +52,23 @@ async function waitForServerSessionReady() {
   return false
 }
 
+async function persistServerSessionCookie(accessToken?: string | null) {
+  if (!accessToken) return false
+
+  const response = await fetch('/api/auth/session-cookie', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      access_token: accessToken,
+    }),
+  })
+
+  return response.ok
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { supabase, loading, user, role, profileReady } = useAuth()
@@ -107,6 +124,7 @@ export default function LoginPage() {
       } = await supabase.auth.getSession()
 
       syncBrowserAccessToken(session?.access_token ?? null)
+      await persistServerSessionCookie(session?.access_token ?? null)
       setMessage('ログインしました。ホームへ移動します。')
       clearDraft()
 

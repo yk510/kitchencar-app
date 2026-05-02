@@ -73,6 +73,23 @@ function OnboardingCards({ role }: { role: AppRole }) {
   )
 }
 
+async function persistServerSessionCookie(accessToken?: string | null) {
+  if (!accessToken) return false
+
+  const response = await fetch('/api/auth/session-cookie', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      access_token: accessToken,
+    }),
+  })
+
+  return response.ok
+}
+
 export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -219,6 +236,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
         } = await client.auth.getSession()
 
         syncBrowserAccessToken(session?.access_token ?? null)
+        await persistServerSessionCookie(session?.access_token ?? null)
 
         const serverSessionReady = await waitForServerSessionReady()
 
