@@ -1,12 +1,13 @@
 import type { AppRole } from '@/lib/user-role'
 
 export type AppHostScope = AppRole | null
+export type RouteAccessScope = 'public' | 'vendor' | 'organizer'
 
 function normalizeHost(rawHost: string) {
   return rawHost.trim().toLowerCase().replace(/:\d+$/, '')
 }
 
-function normalizePathname(pathname: string) {
+export function normalizePathname(pathname: string) {
   if (!pathname) return '/'
   if (pathname === '/') return pathname
   return pathname.replace(/\/+$/, '') || '/'
@@ -87,4 +88,29 @@ export function isVendorPrimaryPath(pathname: string) {
     normalizedPathname === '/vendor' ||
     normalizedPathname.startsWith('/vendor/')
   )
+}
+
+export function getRouteAccessScope(pathname: string): RouteAccessScope {
+  if (isPublicEntryPath(pathname)) {
+    return 'public'
+  }
+
+  if (isOrganizerOnlyPath(pathname)) {
+    return 'organizer'
+  }
+
+  if (isVendorPrimaryPath(pathname)) {
+    return 'vendor'
+  }
+
+  return 'public'
+}
+
+export function isPathAccessibleToRole(role: AppRole, pathname: string) {
+  const accessScope = getRouteAccessScope(pathname)
+  return accessScope === 'public' || accessScope === role
+}
+
+export function isRoleCompatibleWithHost(role: AppRole, hostScope: AppHostScope) {
+  return !hostScope || role === hostScope
 }

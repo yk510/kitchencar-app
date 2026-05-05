@@ -27,6 +27,12 @@ export type UserProfilePayload = {
   email: string | null
 }
 
+export type UserProfileSummaryPayload = {
+  hasProfile: boolean
+  role: AppRole | null
+  email: string | null
+}
+
 export type UserProfileUpdatePayload = {
   profile: UserProfileRow
   role: AppRole

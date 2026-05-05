@@ -4,7 +4,12 @@ import { Suspense, useEffect, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
-import { getHostScopeFromWindow, isPublicEntryPath } from '@/lib/domain'
+import {
+  getHostScopeFromWindow,
+  getRouteAccessScope,
+  isPathAccessibleToRole,
+  isRoleCompatibleWithHost,
+} from '@/lib/domain'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole } from '@/lib/user-role'
 
@@ -76,7 +81,7 @@ function resolveGuardAction({
     return { action: 'allow' }
   }
 
-  if (role && hostScope && role !== hostScope) {
+  if (role && !isRoleCompatibleWithHost(role, hostScope)) {
     return { action: 'signout', redirectToLogin: !isPublicPage }
   }
 
@@ -92,11 +97,11 @@ function resolveGuardAction({
     return { action: 'redirect', href: '/organizer' }
   }
 
-  if (role === 'vendor' && isOrganizerPath) {
+  if (role === 'vendor' && !isPathAccessibleToRole(role, pathname)) {
     return { action: 'redirect', href: '/' }
   }
 
-  if (role === 'organizer' && isVendorPath) {
+  if (role === 'organizer' && !isPathAccessibleToRole(role, pathname)) {
     return { action: 'redirect', href: '/organizer' }
   }
 
@@ -114,9 +119,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isEmailConfirmedPage = pathname === '/auth/confirmed' || pathname.startsWith('/auth/confirmed/')
   const isSignupPage = pathname.startsWith('/signup/')
   const isLandingPage = pathname === '/lp' || pathname === '/lp/vendor' || pathname === '/lp/organizer'
-  const isOrganizerPath = pathname === '/organizer' || pathname.startsWith('/organizer/')
-  const isVendorPath = pathname === '/vendor' || pathname.startsWith('/vendor/')
-  const isPublicPage = isPublicEntryPath(pathname)
+  const routeAccessScope = getRouteAccessScope(pathname)
+  const isOrganizerPath = routeAccessScope === 'organizer'
+  const isVendorPath = routeAccessScope === 'vendor'
+  const isPublicPage = routeAccessScope === 'public'
   const homePath = getHomePathByRole(role)
 
   useEffect(() => {

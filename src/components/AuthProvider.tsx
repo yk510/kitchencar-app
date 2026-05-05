@@ -11,7 +11,7 @@ import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { getRoleFromSupabaseUser, syncBrowserAccessToken } from '@/lib/client-auth-session'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
 import type { Database } from '@/types/database'
-import type { UserProfilePayload } from '@/types/api-payloads'
+import type { UserProfileSummaryPayload } from '@/types/api-payloads'
 
 type AuthContextValue = {
   supabase: SupabaseClient<Database> | null
@@ -90,12 +90,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = window.setTimeout(() => controller.abort(), 2500)
 
     try {
-      const data = await fetchApi<UserProfilePayload>('/api/user/profile', {
+      const data = await fetchApi<UserProfileSummaryPayload>('/api/user/profile/summary', {
         cache: 'no-store',
         signal: controller.signal,
       })
       setRole(data.role ?? getRoleFromSupabaseUser(session?.user) ?? null)
-      setHasProfile(!!data.profile)
+      setHasProfile(!!data.hasProfile)
       setProfileReady(true)
     } catch {
       const {

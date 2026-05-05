@@ -43,7 +43,12 @@ function getRoleFromMetadata(session: Awaited<ReturnType<typeof getUserFromAcces
   return metadataRole === 'organizer' ? 'organizer' : metadataRole === 'vendor' ? 'vendor' : null
 }
 
-export async function getServerSession() {
+type SessionOptions = {
+  includeProfile?: boolean
+}
+
+export async function getServerSession(options: SessionOptions = {}) {
+  const { includeProfile = true } = options
   const cookieStore = await cookies()
   const headerStore = await headers()
   const scope = getScopeFromHost(headerStore.get('host') ?? '')
@@ -52,7 +57,7 @@ export async function getServerSession() {
       .map((name) => cookieStore.get(name)?.value)
       .find(Boolean) ?? null
   const session = await getUserFromAccessToken(accessToken)
-  const profile = await getUserProfileForSession(session)
+  const profile = includeProfile ? await getUserProfileForSession(session) : null
 
   return session
     ? {
@@ -73,14 +78,15 @@ export async function requireServerSession() {
   return session
 }
 
-export async function getRouteSession(request: NextRequest) {
+export async function getRouteSession(request: NextRequest, options: SessionOptions = {}) {
+  const { includeProfile = true } = options
   const scope = getScopeFromHost(request.headers.get('host') ?? '')
   const accessToken =
     getAuthCookieCandidateNames(scope)
       .map((name) => request.cookies.get(name)?.value)
       .find(Boolean) ?? null
   const session = await getUserFromAccessToken(accessToken)
-  const profile = await getUserProfileForSession(session)
+  const profile = includeProfile ? await getUserProfileForSession(session) : null
 
   return session
     ? {
@@ -91,8 +97,8 @@ export async function getRouteSession(request: NextRequest) {
     : null
 }
 
-export async function requireRouteSession(request: NextRequest) {
-  const session = await getRouteSession(request)
+export async function requireRouteSession(request: NextRequest, options: SessionOptions = {}) {
+  const session = await getRouteSession(request, options)
 
   if (!session) {
     return {
