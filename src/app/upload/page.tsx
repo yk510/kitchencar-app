@@ -1,19 +1,40 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type { UploadResultPayload } from '@/types/operations'
 
 export default function UploadPage() {
-  const [file, setFile]       = useState<File | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult]   = useState<UploadResultPayload | null>(null)
-  const [error, setError]     = useState<string | null>(null)
-  const inputRef              = useRef<HTMLInputElement>(null)
+  const [file, setFile]                 = useState<File | null>(null)
+  const [loading, setLoading]           = useState(false)
+  const [result, setResult]             = useState<UploadResultPayload | null>(null)
+  const [error, setError]               = useState<string | null>(null)
+  const [resultHighlighted, setResultHighlighted] = useState(false)
+  const inputRef                        = useRef<HTMLInputElement>(null)
+  const resultRef                       = useRef<HTMLDivElement>(null)
   const guideMode = useMemo(() => {
     if (typeof window === 'undefined') return null
     return new URLSearchParams(window.location.search).get('guide')
   }, [])
+
+  useEffect(() => {
+    if (!result) return
+
+    setResultHighlighted(true)
+
+    requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block:    'start',
+      })
+    })
+
+    const timeoutId = window.setTimeout(() => {
+      setResultHighlighted(false)
+    }, 2400)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [result])
 
   async function handleUpload() {
     if (!file) return
@@ -192,9 +213,18 @@ export default function UploadPage() {
 
       {/* 結果表示 */}
       {result && (
-        <div className="mt-6 space-y-4">
+        <div
+          ref={resultRef}
+          className={[
+            'mt-6 space-y-4 scroll-mt-24 rounded-2xl transition-all duration-500',
+            resultHighlighted ? 'ring-4 ring-green-200 ring-offset-4 ring-offset-white' : '',
+          ].join(' ')}
+        >
           <div className="bg-green-50 border border-green-300 rounded-xl p-5">
             <h2 className="font-bold text-green-800 text-lg mb-3">取り込み完了</h2>
+            <p className="mb-4 text-sm text-green-700">
+              取り込み結果を更新しました。新規登録・更新件数をこのまま確認できます。
+            </p>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
                 <p className="text-2xl font-bold text-green-700">{result.inserted}</p>
