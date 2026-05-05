@@ -24,6 +24,21 @@ export interface ParsedItem {
   subtotal: number
 }
 
+function mergeTransactionItem(items: ParsedItem[], nextItem: ParsedItem) {
+  const existingItem = items.find((item) => item.product_name === nextItem.product_name)
+
+  if (!existingItem) {
+    items.push(nextItem)
+    return
+  }
+
+  existingItem.quantity += nextItem.quantity
+  existingItem.subtotal += nextItem.subtotal
+
+  // 単価が揺れるケースでは、後続行の値で上書きせず最初の単価を優先する
+  // Airレジの同一商品重複行は通常同単価のため、ここでは数量/小計だけ合算する
+}
+
 // ====== 支払方法 ======
 const PAYMENT_COLS = [
   'クレジットカード(Airペイ タッチ)',
@@ -177,7 +192,7 @@ export function groupTransactions(
         items: [item],
       })
     } else {
-      txnMap.get(txnNo)!.items.push(item)
+      mergeTransactionItem(txnMap.get(txnNo)!.items, item)
     }
   }
 
