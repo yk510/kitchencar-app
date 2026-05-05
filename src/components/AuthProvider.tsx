@@ -6,10 +6,9 @@ import { useRouter } from 'next/navigation'
 import {
   getAllKnownAuthCookieNames,
   getAllKnownSupabaseStorageKeys,
-  getBrowserAuthCookieDomain,
-  getBrowserAuthCookieName,
 } from '@/lib/auth-cookie'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { getRoleFromSupabaseUser, syncBrowserAccessToken } from '@/lib/client-auth-session'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
 import type { Database } from '@/types/database'
 import type { UserProfilePayload } from '@/types/api-payloads'
@@ -28,15 +27,6 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 const LIFF_ORDER_CONTEXT_STORAGE_KEY = 'mobile-order:liff-context'
-
-function getRoleFromSupabaseUser(user?: User | null): 'vendor' | 'organizer' | null {
-  const metadataRole = user?.user_metadata?.role ?? user?.app_metadata?.role
-  return metadataRole === 'organizer'
-    ? 'organizer'
-    : metadataRole === 'vendor'
-      ? 'vendor'
-      : null
-}
 
 function clearLocalDraftsAndTransientState() {
   if (typeof window === 'undefined') return
@@ -73,26 +63,6 @@ function clearLocalDraftsAndTransientState() {
   } catch {
     // noop
   }
-}
-
-function syncAuthCookie(accessToken?: string | null) {
-  if (typeof document === 'undefined') return
-  const domain = getBrowserAuthCookieDomain()
-  const cookieName = getBrowserAuthCookieName()
-  const domainPart = domain ? `; domain=${domain}` : ''
-
-  for (const knownCookieName of getAllKnownAuthCookieNames()) {
-    if (knownCookieName === cookieName && accessToken) continue
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
-  }
-
-  if (accessToken) {
-    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
-    return
-  }
-
-  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -161,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextUserId = data.session?.user?.id ?? null
         const nextRole = getRoleFromSupabaseUser(data.session?.user)
         activeUserIdRef.current = nextUserId
-        syncAuthCookie(data.session?.access_token ?? null)
+        syncBrowserAccessToken(data.session?.access_token ?? null)
         if (data.session?.access_token) {
           setRole(nextRole)
           setHasProfile(false)
@@ -179,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return
         setSession(null)
         activeUserIdRef.current = null
-        syncAuthCookie(null)
+        syncBrowserAccessToken(null)
         clearLocalDraftsAndTransientState()
         setRole(null)
         setHasProfile(false)
@@ -199,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setSession(nextSession ?? null)
       activeUserIdRef.current = nextUserId
-      syncAuthCookie(nextSession?.access_token ?? null)
+      syncBrowserAccessToken(nextSession?.access_token ?? null)
 
       if (shouldClearTransientState || !nextSession?.access_token) {
         clearLocalDraftsAndTransientState()

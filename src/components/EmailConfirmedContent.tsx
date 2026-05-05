@@ -4,12 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
-import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
-import {
-  getAllKnownAuthCookieNames,
-  getBrowserAuthCookieDomain,
-  getBrowserAuthCookieName,
-} from '@/lib/auth-cookie'
+import { compactMetadataAndPersistSession } from '@/lib/client-auth-session'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole, type AppRole } from '@/lib/user-role'
@@ -74,23 +69,6 @@ function OnboardingCards({ role }: { role: AppRole }) {
   )
 }
 
-async function persistServerSessionCookie(accessToken?: string | null) {
-  if (!accessToken) return false
-
-  const response = await fetch('/api/auth/session-cookie', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      access_token: accessToken,
-    }),
-  })
-
-  return response.ok
-}
-
 export default function EmailConfirmedContent({ role }: { role: AppRole }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -151,25 +129,6 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
     setHashParsed(true)
   }, [])
 
-  function syncBrowserAccessToken(accessToken?: string | null) {
-    if (typeof document === 'undefined') return
-    const domain = getBrowserAuthCookieDomain()
-    const cookieName = getBrowserAuthCookieName()
-    const domainPart = domain ? `; domain=${domain}` : ''
-
-    for (const knownCookieName of getAllKnownAuthCookieNames()) {
-      if (knownCookieName === cookieName && accessToken) continue
-      document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-    }
-
-    if (accessToken) {
-      document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
-      return
-    }
-
-    document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-  }
-
   const needsExchange = useMemo(
     () => !!supabase && (!!authCode || !!tokenHash || !!sessionAccessToken),
     [authCode, sessionAccessToken, supabase, tokenHash]
@@ -218,21 +177,7 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
           data: { session },
         } = await client.auth.getSession()
 
-        if (needsAuthMetadataCompaction(session?.user?.user_metadata)) {
-          await client.auth.updateUser({
-            data: buildCompactAuthMetadata(session?.user?.user_metadata),
-          })
-          await client.auth.refreshSession()
-        }
-
-        const {
-          data: { session: compactedSession },
-        } = await client.auth.getSession()
-
-        syncBrowserAccessToken(compactedSession?.access_token ?? session?.access_token ?? null)
-        await persistServerSessionCookie(
-          compactedSession?.access_token ?? session?.access_token ?? null
-        )
+        await compactMetadataAndPersistSession(client)
         void refreshProfile()
 
         if (cancelled) return

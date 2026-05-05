@@ -8,6 +8,11 @@ import { getHostScopeFromWindow, isPublicEntryPath } from '@/lib/domain'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole } from '@/lib/user-role'
 
+type GuardResolution =
+  | { action: 'allow' }
+  | { action: 'redirect'; href: string }
+  | { action: 'signout'; redirectToLogin: boolean }
+
 function LoadingScreen({ message }: { message: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
@@ -36,6 +41,68 @@ function ScrollToTopOnNavigation() {
   return null
 }
 
+function resolveGuardAction({
+  pathname,
+  user,
+  role,
+  hostScope,
+  isPublicPage,
+  isSignupPage,
+  isLandingPage,
+  isOrganizerPath,
+  isVendorPath,
+  homePath,
+  hasProfile,
+  profileReady,
+}: {
+  pathname: string
+  user: unknown
+  role: 'vendor' | 'organizer' | null
+  hostScope: 'vendor' | 'organizer' | null
+  isPublicPage: boolean
+  isSignupPage: boolean
+  isLandingPage: boolean
+  isOrganizerPath: boolean
+  isVendorPath: boolean
+  homePath: string
+  hasProfile: boolean
+  profileReady: boolean
+}): GuardResolution {
+  if (!user && !isPublicPage) {
+    return { action: 'redirect', href: '/login' }
+  }
+
+  if (!user || !profileReady) {
+    return { action: 'allow' }
+  }
+
+  if (role && hostScope && role !== hostScope) {
+    return { action: 'signout', redirectToLogin: !isPublicPage }
+  }
+
+  if (isSignupPage && hasProfile) {
+    return { action: 'redirect', href: homePath }
+  }
+
+  if (isLandingPage) {
+    return { action: 'redirect', href: homePath }
+  }
+
+  if (role === 'organizer' && pathname === '/') {
+    return { action: 'redirect', href: '/organizer' }
+  }
+
+  if (role === 'vendor' && isOrganizerPath) {
+    return { action: 'redirect', href: '/' }
+  }
+
+  if (role === 'organizer' && isVendorPath) {
+    return { action: 'redirect', href: '/organizer' }
+  }
+
+  return { action: 'allow' }
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -55,45 +122,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!canResolveAuthenticatedRoutes) return
 
-    if (!user && !isPublicPage) {
-      router.replace('/login')
-      return
-    }
+    const resolution = resolveGuardAction({
+      pathname,
+      user,
+      role,
+      hostScope,
+      isPublicPage,
+      isSignupPage,
+      isLandingPage,
+      isOrganizerPath,
+      isVendorPath,
+      homePath,
+      hasProfile,
+      profileReady,
+    })
 
-    if (user && !profileReady) {
-      return
-    }
-
-    if (user && role && hostScope && role !== hostScope) {
+    if (resolution.action === 'signout') {
       void supabase?.auth.signOut()
-      if (!isPublicPage) {
+      if (resolution.redirectToLogin) {
         router.replace('/login')
       }
       return
     }
 
-    if (user && isSignupPage && profileReady && hasProfile) {
-      router.replace(homePath)
-      return
-    }
-
-    if (user && isLandingPage && profileReady) {
-      router.replace(homePath)
-      return
-    }
-
-    if (user && role === 'organizer' && pathname === '/') {
-      router.replace('/organizer')
-      return
-    }
-
-    if (user && role === 'vendor' && isOrganizerPath) {
-      router.replace('/')
-      return
-    }
-
-    if (user && role === 'organizer' && isVendorPath) {
-      router.replace('/organizer')
+    if (resolution.action === 'redirect') {
+      router.replace(resolution.href)
     }
   }, [canResolveAuthenticatedRoutes, hasProfile, homePath, hostScope, isLandingPage, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, pathname, profileReady, role, router, supabase, user])
 

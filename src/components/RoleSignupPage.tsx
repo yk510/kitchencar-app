@@ -4,14 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
-import {
-  getAllKnownAuthCookieNames,
-  getBrowserAuthCookieDomain,
-  getBrowserAuthCookieName,
-} from '@/lib/auth-cookie'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
 import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
 import { compressImageFile } from '@/lib/client-image'
+import { compactMetadataAndPersistSession } from '@/lib/client-auth-session'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
 import { useDraftForm } from '@/lib/use-draft-form'
@@ -159,43 +155,6 @@ function isRecoverableSignupError(message: string) {
     lower.includes('user already registered') ||
     lower.includes('email rate limit exceeded')
   )
-}
-
-function syncBrowserAccessToken(accessToken?: string | null) {
-  if (typeof document === 'undefined') return
-  const domain = getBrowserAuthCookieDomain()
-  const cookieName = getBrowserAuthCookieName()
-  const domainPart = domain ? `; domain=${domain}` : ''
-
-  for (const knownCookieName of getAllKnownAuthCookieNames()) {
-    if (knownCookieName === cookieName && accessToken) continue
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
-  }
-
-  if (accessToken) {
-    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
-    return
-  }
-
-  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-}
-
-async function persistServerSessionCookie(accessToken?: string | null) {
-  if (!accessToken) return false
-
-  const response = await fetch('/api/auth/session-cookie', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      access_token: accessToken,
-    }),
-  })
-
-  return response.ok
 }
 
 function buildVendorWelcomePath(source?: string | null, returnOfferId?: string | null) {
@@ -713,25 +672,7 @@ export default function RoleSignupPage({
         throw new Error('確認コードの検証には成功しましたが、ユーザー情報の取得に失敗しました。')
       }
 
-      const {
-        data: { session: confirmedSession },
-      } = await supabase.auth.getSession()
-
-      if (needsAuthMetadataCompaction(confirmedSession?.user?.user_metadata)) {
-        await supabase.auth.updateUser({
-          data: buildCompactAuthMetadata(confirmedSession?.user?.user_metadata),
-        })
-        await supabase.auth.refreshSession()
-      }
-
-      const {
-        data: { session: compactedSession },
-      } = await supabase.auth.getSession()
-
-      syncBrowserAccessToken(compactedSession?.access_token ?? confirmedSession?.access_token ?? null)
-      await persistServerSessionCookie(
-        compactedSession?.access_token ?? confirmedSession?.access_token ?? null
-      )
+      await compactMetadataAndPersistSession(supabase)
       void refreshProfile()
       setMessage('確認コードを認証しました。登録を完了しています...')
       await finalizeConfirmedSignup(confirmedUser, email)

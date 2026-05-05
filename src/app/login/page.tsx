@@ -4,55 +4,11 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
-import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
-import {
-  getAllKnownAuthCookieNames,
-  getBrowserAuthCookieDomain,
-  getBrowserAuthCookieName,
-} from '@/lib/auth-cookie'
+import { compactMetadataAndPersistSession } from '@/lib/client-auth-session'
 import { getHostScopeFromWindow } from '@/lib/domain'
-import { fetchApi } from '@/lib/api-client'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 import { getHomePathByRole, type AppRole } from '@/lib/user-role'
 import { useRouter } from 'next/navigation'
-
-function syncBrowserAccessToken(accessToken?: string | null) {
-  if (typeof document === 'undefined') return
-
-  const domain = getBrowserAuthCookieDomain()
-  const cookieName = getBrowserAuthCookieName()
-  const domainPart = domain ? `; domain=${domain}` : ''
-
-  for (const knownCookieName of getAllKnownAuthCookieNames()) {
-    if (knownCookieName === cookieName && accessToken) continue
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-    document.cookie = `${knownCookieName}=; path=/; max-age=0; samesite=lax`
-  }
-
-  if (accessToken) {
-    document.cookie = `${cookieName}=${accessToken}; path=/; max-age=604800; samesite=lax${domainPart}`
-    return
-  }
-
-  document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
-}
-
-async function persistServerSessionCookie(accessToken?: string | null) {
-  if (!accessToken) return false
-
-  const response = await fetch('/api/auth/session-cookie', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      access_token: accessToken,
-    }),
-  })
-
-  return response.ok
-}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -105,19 +61,7 @@ export default function LoginPage() {
         throw signInError
       }
 
-      if (needsAuthMetadataCompaction(signInData.user?.user_metadata)) {
-        await supabase.auth.updateUser({
-          data: buildCompactAuthMetadata(signInData.user?.user_metadata),
-        })
-        await supabase.auth.refreshSession()
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      syncBrowserAccessToken(session?.access_token ?? null)
-      await persistServerSessionCookie(session?.access_token ?? null)
+      await compactMetadataAndPersistSession(supabase)
       setMessage('ログインしました。ホームへ移動します。')
       clearDraft()
       window.location.replace(homePath)
