@@ -10,6 +10,7 @@ import {
   getBrowserAuthCookieName,
 } from '@/lib/auth-cookie'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
+import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
 import { compressImageFile } from '@/lib/client-image'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { notifyProfileUpdated } from '@/lib/profile-sync'
@@ -590,6 +591,11 @@ export default function RoleSignupPage({
             x_url: form.x_url.trim() || null,
             description: form.description.trim(),
           }
+      const signUpMetadata = buildCompactAuthMetadata(null, {
+        role,
+        displayName: isVendor ? form.business_name.trim() : form.organizer_name.trim(),
+        onboardingProfile,
+      })
       let activeUser = user
       let hasActiveSession = !!user
 
@@ -601,11 +607,7 @@ export default function RoleSignupPage({
           email,
           password,
           options: {
-            data: {
-              role,
-              display_name: isVendor ? form.business_name.trim() : form.organizer_name.trim(),
-              onboarding_profile: onboardingProfile,
-            },
+            data: signUpMetadata,
           },
         })
 
@@ -733,8 +735,21 @@ export default function RoleSignupPage({
         data: { session: confirmedSession },
       } = await supabase.auth.getSession()
 
-      syncBrowserAccessToken(confirmedSession?.access_token ?? null)
-      await persistServerSessionCookie(confirmedSession?.access_token ?? null)
+      if (needsAuthMetadataCompaction(confirmedSession?.user?.user_metadata)) {
+        await supabase.auth.updateUser({
+          data: buildCompactAuthMetadata(confirmedSession?.user?.user_metadata),
+        })
+        await supabase.auth.refreshSession()
+      }
+
+      const {
+        data: { session: compactedSession },
+      } = await supabase.auth.getSession()
+
+      syncBrowserAccessToken(compactedSession?.access_token ?? confirmedSession?.access_token ?? null)
+      await persistServerSessionCookie(
+        compactedSession?.access_token ?? confirmedSession?.access_token ?? null
+      )
       await waitForServerSessionReady()
       await refreshProfile()
       setMessage('確認コードを認証しました。登録を完了しています...')

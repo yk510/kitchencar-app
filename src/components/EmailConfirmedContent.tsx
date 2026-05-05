@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
+import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
 import {
   getAllKnownAuthCookieNames,
   getBrowserAuthCookieDomain,
@@ -235,8 +236,21 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
           data: { session },
         } = await client.auth.getSession()
 
-        syncBrowserAccessToken(session?.access_token ?? null)
-        await persistServerSessionCookie(session?.access_token ?? null)
+        if (needsAuthMetadataCompaction(session?.user?.user_metadata)) {
+          await client.auth.updateUser({
+            data: buildCompactAuthMetadata(session?.user?.user_metadata),
+          })
+          await client.auth.refreshSession()
+        }
+
+        const {
+          data: { session: compactedSession },
+        } = await client.auth.getSession()
+
+        syncBrowserAccessToken(compactedSession?.access_token ?? session?.access_token ?? null)
+        await persistServerSessionCookie(
+          compactedSession?.access_token ?? session?.access_token ?? null
+        )
 
         const serverSessionReady = await waitForServerSessionReady()
 

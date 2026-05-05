@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { BRAND_CONCEPT, BRAND_NAME, BRAND_STAGE_LABEL } from '@/lib/brand'
+import { buildCompactAuthMetadata, needsAuthMetadataCompaction } from '@/lib/auth-metadata'
 import {
   getAllKnownAuthCookieNames,
   getBrowserAuthCookieDomain,
@@ -110,13 +111,20 @@ export default function LoginPage() {
         throw new Error('ログイン機能の準備中です。少し待ってからもう一度お試しください。')
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (signInError) {
         throw signInError
+      }
+
+      if (needsAuthMetadataCompaction(signInData.user?.user_metadata)) {
+        await supabase.auth.updateUser({
+          data: buildCompactAuthMetadata(signInData.user?.user_metadata),
+        })
+        await supabase.auth.refreshSession()
       }
 
       const {
