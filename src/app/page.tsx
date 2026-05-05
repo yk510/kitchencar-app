@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import DashboardClient from '@/components/DashboardClient'
+import SessionRecoveryGate from '@/components/SessionRecoveryGate'
 import { getServerSession } from '@/lib/auth'
-import { redirect } from 'next/navigation'
 
 type TaskTone = 'danger' | 'warn'
 
@@ -242,7 +242,7 @@ async function getDashboardData(supabase: any) {
 export default async function DashboardPage() {
   const session = await getServerSession()
   if (!session) {
-    redirect('/lp')
+    return <SessionRecoveryGate targetPath="/" expectedRole="vendor" fallbackPath="/lp" />
   }
 
   const { supabase } = session

@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import SessionRecoveryGate from '@/components/SessionRecoveryGate'
 import { getServerSession } from '@/lib/auth'
-import { redirect } from 'next/navigation'
 
 async function getOrganizerDashboardData(supabase: any, userId: string) {
   const [{ data: profile }, { data: offers }, { data: applications }] = await Promise.all([
@@ -51,7 +51,7 @@ async function getOrganizerDashboardData(supabase: any, userId: string) {
 export default async function OrganizerDashboardPage() {
   const session = await getServerSession()
   if (!session) {
-    redirect('/lp')
+    return <SessionRecoveryGate targetPath="/organizer" expectedRole="organizer" fallbackPath="/lp" />
   }
 
   const { supabase, user, role } = session
