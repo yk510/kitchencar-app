@@ -159,9 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return
         setSession(data.session ?? null)
         const nextUserId = data.session?.user?.id ?? null
+        const nextRole = getRoleFromSupabaseUser(data.session?.user)
         activeUserIdRef.current = nextUserId
         syncAuthCookie(data.session?.access_token ?? null)
         if (data.session?.access_token) {
+          setRole(nextRole)
+          setHasProfile(false)
           setProfileReady(false)
           void refreshProfile()
         } else {
@@ -186,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       const nextUserId = nextSession?.user?.id ?? null
+      const nextRole = getRoleFromSupabaseUser(nextSession?.user)
       const shouldClearTransientState =
         (!nextUserId && activeUserIdRef.current !== null) ||
         (nextUserId !== null && activeUserIdRef.current !== null && nextUserId !== activeUserIdRef.current)
@@ -199,6 +203,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (nextSession?.access_token) {
+        setRole(nextRole)
+        setHasProfile(false)
         setProfileReady(false)
         void refreshProfile()
       } else {

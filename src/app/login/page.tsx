@@ -38,7 +38,7 @@ function syncBrowserAccessToken(accessToken?: string | null) {
 }
 
 async function waitForServerSessionReady() {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       await fetchApi('/api/user/profile', {
         cache: 'no-store',
@@ -46,7 +46,7 @@ async function waitForServerSessionReady() {
       })
       return true
     } catch {
-      await new Promise((resolve) => window.setTimeout(resolve, 250))
+      await new Promise((resolve) => window.setTimeout(resolve, 100))
     }
   }
 
@@ -82,6 +82,7 @@ export default function LoginPage() {
     roleParam === 'organizer' || roleParam === 'vendor'
       ? roleParam
       : hostScope
+  const resolvedRole = role ?? scopedRole
   const homePath = getHomePathByRole(scopedRole)
   const authDraft = usePersistentDraft('draft:login-form', {
     email: '',
@@ -95,9 +96,9 @@ export default function LoginPage() {
   const [awaitingServerRedirect, setAwaitingServerRedirect] = useState(false)
 
   useEffect(() => {
-    if (loading || !profileReady || !user || awaitingServerRedirect) return
-    router.replace(getHomePathByRole(role ?? scopedRole))
-  }, [awaitingServerRedirect, loading, profileReady, role, router, scopedRole, user])
+    if (loading || !user || !resolvedRole || awaitingServerRedirect) return
+    router.replace(getHomePathByRole(resolvedRole))
+  }, [awaitingServerRedirect, loading, resolvedRole, router, user])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

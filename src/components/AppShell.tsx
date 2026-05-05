@@ -41,6 +41,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { loading, supabase, user, role, hasProfile, profileReady } = useAuth()
   const hostScope = useMemo(() => getHostScopeFromWindow(), [])
+  const canResolveAuthenticatedRoutes = !loading && (!user || !!role)
 
   const isLoginPage = pathname === '/login'
   const isEmailConfirmedPage = pathname === '/auth/confirmed' || pathname.startsWith('/auth/confirmed/')
@@ -52,7 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const homePath = getHomePathByRole(role)
 
   useEffect(() => {
-    if (loading) return
+    if (!canResolveAuthenticatedRoutes) return
 
     if (!user && !isPublicPage) {
       router.replace('/login')
@@ -94,7 +95,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (user && role === 'organizer' && isVendorPath) {
       router.replace('/organizer')
     }
-  }, [hasProfile, homePath, hostScope, isLandingPage, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, loading, pathname, profileReady, role, router, supabase, user])
+  }, [canResolveAuthenticatedRoutes, hasProfile, homePath, hostScope, isLandingPage, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 
@@ -109,7 +110,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (loading || (user && !profileReady)) {
+  if (!canResolveAuthenticatedRoutes) {
     return <LoadingScreen message="ログイン状態を確認しています..." />
   }
 
