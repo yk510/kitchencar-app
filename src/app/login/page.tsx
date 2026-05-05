@@ -37,22 +37,6 @@ function syncBrowserAccessToken(accessToken?: string | null) {
   document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
 }
 
-async function waitForServerSessionReady() {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      await fetchApi('/api/user/profile', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      })
-      return true
-    } catch {
-      await new Promise((resolve) => window.setTimeout(resolve, 100))
-    }
-  }
-
-  return false
-}
-
 async function persistServerSessionCookie(accessToken?: string | null) {
   if (!accessToken) return false
 
@@ -136,18 +120,8 @@ export default function LoginPage() {
       await persistServerSessionCookie(session?.access_token ?? null)
       setMessage('ログインしました。ホームへ移動します。')
       clearDraft()
-
-      const serverSessionReady = await waitForServerSessionReady()
-
-      if (serverSessionReady) {
-        window.location.replace(homePath)
-        return
-      }
-
-      setMessage('ログインしました。ホームへ移動しています。数秒後に切り替わらない場合は再読み込みしてください。')
-      window.setTimeout(() => {
-        window.location.replace(homePath)
-      }, 400)
+      window.location.replace(homePath)
+      return
     } catch (submitError: any) {
       setAwaitingServerRedirect(false)
       setError(submitError.message ?? 'ログインに失敗しました')

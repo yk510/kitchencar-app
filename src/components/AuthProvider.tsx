@@ -187,12 +187,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
       })
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
       const nextUserId = nextSession?.user?.id ?? null
       const nextRole = getRoleFromSupabaseUser(nextSession?.user)
+      const userChanged =
+        nextUserId !== null && activeUserIdRef.current !== null && nextUserId !== activeUserIdRef.current
+      const signedOut = !nextUserId && activeUserIdRef.current !== null
       const shouldClearTransientState =
         (!nextUserId && activeUserIdRef.current !== null) ||
-        (nextUserId !== null && activeUserIdRef.current !== null && nextUserId !== activeUserIdRef.current)
+        userChanged
 
       setSession(nextSession ?? null)
       activeUserIdRef.current = nextUserId
@@ -203,17 +206,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (nextSession?.access_token) {
+        const shouldRefreshProfile =
+          event === 'SIGNED_IN' ||
+          event === 'USER_UPDATED' ||
+          userChanged ||
+          !nextRole ||
+          !profileReady
+
         setRole(nextRole)
-        setHasProfile(false)
-        setProfileReady(false)
-        void refreshProfile()
+
+        if (shouldRefreshProfile) {
+          setHasProfile(false)
+          setProfileReady(false)
+          void refreshProfile()
+        }
       } else {
         setRole(null)
         setHasProfile(false)
         setProfileReady(true)
       }
       setLoading(false)
-      router.refresh()
+
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED' || userChanged || signedOut) {
+        router.refresh()
+      }
     })
 
     return () => {

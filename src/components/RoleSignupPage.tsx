@@ -181,24 +181,6 @@ function syncBrowserAccessToken(accessToken?: string | null) {
   document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
 }
 
-async function waitForServerSessionReady() {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const response = await fetch('/api/user/profile', {
-      method: 'GET',
-      cache: 'no-store',
-      credentials: 'same-origin',
-    })
-
-    if (response.ok) {
-      return true
-    }
-
-    await new Promise((resolve) => window.setTimeout(resolve, 250))
-  }
-
-  return false
-}
-
 async function persistServerSessionCookie(accessToken?: string | null) {
   if (!accessToken) return false
 
@@ -750,8 +732,7 @@ export default function RoleSignupPage({
       await persistServerSessionCookie(
         compactedSession?.access_token ?? confirmedSession?.access_token ?? null
       )
-      await waitForServerSessionReady()
-      await refreshProfile()
+      void refreshProfile()
       setMessage('確認コードを認証しました。登録を完了しています...')
       await finalizeConfirmedSignup(confirmedUser, email)
     } catch (verifyError) {

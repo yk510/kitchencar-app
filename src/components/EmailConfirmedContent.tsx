@@ -170,24 +170,6 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
     document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax${domainPart}`
   }
 
-  async function waitForServerSessionReady() {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const response = await fetch('/api/user/profile', {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'same-origin',
-      })
-
-      if (response.ok) {
-        return true
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, 250))
-    }
-
-    return false
-  }
-
   const needsExchange = useMemo(
     () => !!supabase && (!!authCode || !!tokenHash || !!sessionAccessToken),
     [authCode, sessionAccessToken, supabase, tokenHash]
@@ -251,18 +233,12 @@ export default function EmailConfirmedContent({ role }: { role: AppRole }) {
         await persistServerSessionCookie(
           compactedSession?.access_token ?? session?.access_token ?? null
         )
-
-        const serverSessionReady = await waitForServerSessionReady()
+        void refreshProfile()
 
         if (cancelled) return
         window.history.replaceState({}, '', pathname)
         setHasConfirmedSession(true)
         setConfirmationStatus('confirmed')
-        if (!serverSessionReady) {
-          setConfirmationError(
-            'ログイン状態の反映に少し時間がかかっています。数秒待ってから「ダッシュボードへ進む」を押してください。'
-          )
-        }
         router.refresh()
       } catch (error) {
         if (cancelled) return
