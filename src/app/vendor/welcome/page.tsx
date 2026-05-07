@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import SignupProfileHydrator from '@/components/SignupProfileHydrator'
 import { BRAND_NAME } from '@/lib/brand'
 import { requireServerSession } from '@/lib/auth'
 import { getSignupSourceLabel } from '@/lib/onboarding'
@@ -21,6 +22,8 @@ export default async function VendorWelcomePage({
 
   return (
     <div className="space-y-6">
+      <SignupProfileHydrator role="vendor" />
+
       <div className="soft-panel rounded-[32px] px-8 py-8">
         <div className="badge-soft badge-blue inline-block">{BRAND_NAME}</div>
         <h1 className="mt-4 text-3xl font-bold text-[var(--text-main)]">登録が完了しました</h1>

@@ -42,6 +42,30 @@ type SignupStep = {
   reason: string
 }
 
+type MinimalVendorProfilePayload = {
+  business_name: string
+  owner_name: string | null
+  contact_email: string
+  phone: string | null
+  genre: string | null
+  main_menu: null
+  logo_image_url: null
+  instagram_url: null
+  x_url: null
+  description: null
+}
+
+type MinimalOrganizerProfilePayload = {
+  organizer_name: string
+  contact_name: string | null
+  contact_email: string
+  phone: string | null
+  logo_image_url: null
+  instagram_url: null
+  x_url: null
+  description: null
+}
+
 const INITIAL_FORM: SignupForm = {
   email: '',
   password: '',
@@ -58,6 +82,37 @@ const INITIAL_FORM: SignupForm = {
   instagram_url: '',
   x_url: '',
   description_note: '',
+}
+
+function buildMinimalVendorProfilePayload(form: SignupForm, email: string): MinimalVendorProfilePayload {
+  return {
+    business_name: form.business_name.trim(),
+    owner_name: form.owner_name.trim() || null,
+    contact_email: form.contact_email.trim() || email,
+    phone: form.phone.trim() || null,
+    genre: form.genre || null,
+    main_menu: null,
+    logo_image_url: null,
+    instagram_url: null,
+    x_url: null,
+    description: null,
+  }
+}
+
+function buildMinimalOrganizerProfilePayload(
+  form: SignupForm,
+  email: string
+): MinimalOrganizerProfilePayload {
+  return {
+    organizer_name: form.organizer_name.trim(),
+    contact_name: form.contact_name.trim() || null,
+    contact_email: form.contact_email.trim() || email,
+    phone: form.phone.trim() || null,
+    logo_image_url: null,
+    instagram_url: null,
+    x_url: null,
+    description: null,
+  }
 }
 
 const VENDOR_STEPS: SignupStep[] = [
@@ -229,7 +284,7 @@ export default function RoleSignupPage({
 }) {
   const router = useRouter()
   const { supabase, user, hasProfile, refreshProfile } = useAuth()
-  const { form, setForm, clearDraft } = useDraftForm(`draft:signup-${role}-form`, INITIAL_FORM)
+  const { form, setForm } = useDraftForm(`draft:signup-${role}-form`, INITIAL_FORM)
   const { pending, message, error, setError, setMessage, start, stop } = useSubmissionFeedback()
   const [generatingField, setGeneratingField] = useState<CopyField | null>(null)
   const [step, setStep] = useState(1)
@@ -428,24 +483,9 @@ export default function RoleSignupPage({
     if (isVendor) {
       const { error: vendorError } = await (supabase as any)
         .from('vendor_profiles')
-        .upsert(
-          [
-            {
-              user_id: confirmedUser.id,
-              business_name: form.business_name.trim(),
-              owner_name: form.owner_name.trim() || null,
-              contact_email: form.contact_email.trim() || email,
-              phone: form.phone.trim() || null,
-              genre: form.genre || null,
-              main_menu: form.main_menu.trim() || null,
-              logo_image_url: form.logo_image_url || null,
-              instagram_url: form.instagram_url.trim() || null,
-              x_url: form.x_url.trim() || null,
-              description: form.description.trim() || null,
-            },
-          ],
-          { onConflict: 'user_id' }
-        )
+        .upsert([{ user_id: confirmedUser.id, ...buildMinimalVendorProfilePayload(form, email) }], {
+          onConflict: 'user_id',
+        })
 
       if (vendorError) {
         throw new Error(vendorError.message)
@@ -453,29 +493,15 @@ export default function RoleSignupPage({
     } else {
       const { error: organizerError } = await (supabase as any)
         .from('organizer_profiles')
-        .upsert(
-          [
-            {
-              user_id: confirmedUser.id,
-              organizer_name: form.organizer_name.trim(),
-              contact_name: form.contact_name.trim() || null,
-              contact_email: form.contact_email.trim() || email,
-              phone: form.phone.trim() || null,
-              logo_image_url: form.logo_image_url || null,
-              instagram_url: form.instagram_url.trim() || null,
-              x_url: form.x_url.trim() || null,
-              description: form.description.trim() || null,
-            },
-          ],
-          { onConflict: 'user_id' }
-        )
+        .upsert([{ user_id: confirmedUser.id, ...buildMinimalOrganizerProfilePayload(form, email) }], {
+          onConflict: 'user_id',
+        })
 
       if (organizerError) {
         throw new Error(organizerError.message)
       }
     }
 
-    clearDraft()
     setConfirmationEmailSent(false)
     setConfirmationCode('')
     setConfirmationEmail('')
