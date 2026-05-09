@@ -201,6 +201,7 @@
 
 ### 4-16. CSV/アップロード系
 
+- 詳細な回帰確認は `/Users/yukikuchi/Documents/1.KX/仲町CS/kitchencar-app/docs/csv-import-regression-checklist.md` を使う
 - CSVアップロード画面が開く
 - 想定フォーマットのCSVを取り込める
 - 不正フォーマットのCSVでエラー表示される
