@@ -147,6 +147,31 @@ export interface Database {
         Insert: Omit<MobileOrderAuditLog, 'id' | 'created_at'>
         Update: never
       }
+      audio_capture_sessions: {
+        Row: AudioCaptureSession
+        Insert: Omit<AudioCaptureSession, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<AudioCaptureSession, 'id' | 'created_at'>>
+      }
+      audio_capture_chunks: {
+        Row: AudioCaptureChunk
+        Insert: Omit<AudioCaptureChunk, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<AudioCaptureChunk, 'id' | 'created_at'>>
+      }
+      audio_transcripts: {
+        Row: AudioTranscript
+        Insert: Omit<AudioTranscript, 'id' | 'created_at'>
+        Update: never
+      }
+      audio_order_events: {
+        Row: AudioOrderEvent
+        Insert: Omit<AudioOrderEvent, 'id' | 'created_at'>
+        Update: never
+      }
+      product_aliases: {
+        Row: ProductAlias
+        Insert: Omit<ProductAlias, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<ProductAlias, 'id' | 'created_at'>>
+      }
       user_profiles: {
         Row: UserProfile
         Insert: Omit<UserProfile, 'created_at' | 'updated_at'>
@@ -540,6 +565,71 @@ export interface MobileOrderAuditLog {
   after_status: string | null
   payload: Json | null
   created_at: string
+}
+
+export interface AudioCaptureSession {
+  id: string
+  user_id: string
+  status: 'recording' | 'paused' | 'completed' | 'failed'
+  device_label: string | null
+  microphone_label: string | null
+  started_at: string
+  ended_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AudioCaptureChunk {
+  id: string
+  session_id: string
+  user_id: string
+  started_at: string
+  ended_at: string
+  duration_sec: number
+  storage_bucket: string | null
+  storage_path: string | null
+  audio_file_url: string | null
+  upload_status: 'pending' | 'uploaded' | 'failed'
+  transcription_status: 'pending' | 'processing' | 'completed' | 'failed'
+  created_at: string
+  updated_at: string
+}
+
+export interface AudioTranscript {
+  id: string
+  chunk_id: string
+  session_id: string
+  user_id: string
+  spoken_at: string
+  speaker_type: 'staff' | 'unknown'
+  transcript_text: string
+  confidence: number | null
+  created_at: string
+}
+
+export interface AudioOrderEvent {
+  id: string
+  transcript_id: string
+  session_id: string
+  user_id: string
+  product_id: string | null
+  product_name_raw: string
+  normalized_product_name: string | null
+  quantity: number
+  confidence: number | null
+  event_at: string
+  created_at: string
+}
+
+export interface ProductAlias {
+  id: string
+  user_id: string
+  product_id: string
+  alias: string
+  normalized_alias: string
+  created_at: string
+  updated_at: string
 }
 
 export interface UserProfile {
