@@ -2,6 +2,14 @@ begin;
 
 create extension if not exists pgcrypto;
 
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 create table if not exists public.audio_capture_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -51,7 +59,7 @@ create table if not exists public.audio_order_events (
   product_id uuid references public.product_master(id) on delete set null,
   product_name_raw text not null,
   normalized_product_name text,
-  quantity integer not null default 1,
+  quantity integer not null default 1 check (quantity > 0),
   confidence numeric(5,4),
   event_at timestamptz not null,
   created_at timestamptz not null default now()
@@ -77,17 +85,26 @@ create index if not exists idx_audio_capture_chunks_session_id
 create index if not exists idx_audio_capture_chunks_user_id
   on public.audio_capture_chunks(user_id);
 
+create index if not exists idx_audio_capture_chunks_user_started_at
+  on public.audio_capture_chunks(user_id, started_at desc);
+
 create index if not exists idx_audio_transcripts_session_id
   on public.audio_transcripts(session_id);
 
 create index if not exists idx_audio_transcripts_user_spoken_at
   on public.audio_transcripts(user_id, spoken_at desc);
 
+create index if not exists idx_audio_transcripts_chunk_id
+  on public.audio_transcripts(chunk_id);
+
 create index if not exists idx_audio_order_events_user_event_at
   on public.audio_order_events(user_id, event_at desc);
 
 create index if not exists idx_audio_order_events_product_id
   on public.audio_order_events(product_id);
+
+create index if not exists idx_audio_order_events_transcript_id
+  on public.audio_order_events(transcript_id);
 
 create index if not exists idx_product_aliases_user_product_id
   on public.product_aliases(user_id, product_id);
@@ -105,18 +122,35 @@ drop policy if exists "authenticated_own_rows" on public.audio_order_events;
 drop policy if exists "authenticated_own_rows" on public.product_aliases;
 
 create policy "authenticated_own_rows" on public.audio_capture_sessions
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "authenticated_own_rows" on public.audio_capture_chunks
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "authenticated_own_rows" on public.audio_transcripts
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "authenticated_own_rows" on public.audio_order_events
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "authenticated_own_rows" on public.product_aliases
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop trigger if exists trg_audio_capture_sessions_updated_at on public.audio_capture_sessions;
+create trigger trg_audio_capture_sessions_updated_at
+  before update on public.audio_capture_sessions
+  for each row execute function set_updated_at();
+
+drop trigger if exists trg_audio_capture_chunks_updated_at on public.audio_capture_chunks;
+create trigger trg_audio_capture_chunks_updated_at
+  before update on public.audio_capture_chunks
+  for each row execute function set_updated_at();
+
+drop trigger if exists trg_product_aliases_updated_at on public.product_aliases;
+create trigger trg_product_aliases_updated_at
+  before update on public.product_aliases
+  for each row execute function set_updated_at();
+
+notify pgrst, 'reload schema';
 
 commit;
