@@ -1,29 +1,19 @@
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { requireServerSession } from '@/lib/auth'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import {
+  buildStallLogResolutionMap,
+  matchesAnalyticsScope,
+  resolveAnalyticsEventId,
+} from '@/lib/analytics-resolution'
 
 export const dynamic = 'force-dynamic'
 
 async function getEventAnalytics(supabase: any, start?: string, end?: string) {
-  let eventsQuery = (supabase as any)
-    .from('events')
-    .select('id, event_name, event_date, location_id')
-
-  if (start) eventsQuery = eventsQuery.gte('event_date', start)
-  if (end) eventsQuery = eventsQuery.lte('event_date', end)
-
-  const { data: events, error: eventsErr } = await eventsQuery
-  if (eventsErr) throw new Error(eventsErr.message)
-
-  const { data: locations, error: locationsErr } = await (supabase as any)
-    .from('locations')
-    .select('id, name')
-  if (locationsErr) throw new Error(locationsErr.message)
-
   let txnsQuery = (supabase as any)
     .from('transactions')
     .select('event_id, total_amount, txn_date, txn_no')
     .eq('is_return', false)
-    .not('event_id', 'is', null)
 
   if (start) txnsQuery = txnsQuery.gte('txn_date', start)
   if (end) txnsQuery = txnsQuery.lte('txn_date', end)
@@ -34,7 +24,6 @@ async function getEventAnalytics(supabase: any, start?: string, end?: string) {
   let salesQuery = (supabase as any)
     .from('product_sales')
     .select('event_id, product_name, quantity, txn_date')
-    .not('event_id', 'is', null)
 
   if (start) salesQuery = salesQuery.gte('txn_date', start)
   if (end) salesQuery = salesQuery.lte('txn_date', end)
@@ -42,21 +31,66 @@ async function getEventAnalytics(supabase: any, start?: string, end?: string) {
   const { data: sales, error: salesErr } = await salesQuery
   if (salesErr) throw new Error(salesErr.message)
 
+  let stallLogsQuery = (supabase as any)
+    .from('stall_logs')
+    .select('log_date, event_id')
+
+  if (start) stallLogsQuery = stallLogsQuery.gte('log_date', start)
+  if (end) stallLogsQuery = stallLogsQuery.lte('log_date', end)
+
+  const { data: stallLogs, error: stallLogsErr } = await stallLogsQuery
+  if (stallLogsErr) throw new Error(stallLogsErr.message)
+
   const { data: costs, error: costsErr } = await (supabase as any)
     .from('product_master')
     .select('product_name, cost_amount')
   if (costsErr) throw new Error(costsErr.message)
-
-  const locationNameMap = new Map<string, string>()
-  for (const loc of ((locations ?? []) as any[])) {
-    locationNameMap.set(loc.id, loc.name)
-  }
 
   const costMap = new Map<string, number>()
   for (const c of ((costs ?? []) as any[])) {
     if (c.cost_amount != null) {
       costMap.set(c.product_name, c.cost_amount)
     }
+  }
+
+  const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+
+  const resolvedTxns = ((txns ?? []) as any[]).map((txn) => ({
+    ...txn,
+    resolved_event_id: resolveAnalyticsEventId(txn.txn_date, txn.event_id, stallLogByDate),
+  }))
+
+  const resolvedSales = ((sales ?? []) as any[]).map((sale) => ({
+    ...sale,
+    resolved_event_id: resolveAnalyticsEventId(sale.txn_date, sale.event_id, stallLogByDate),
+  }))
+
+  const activeEventIds = Array.from(
+    new Set(
+      [...resolvedTxns, ...resolvedSales]
+        .map((row) => row.resolved_event_id)
+        .filter((value): value is string => matchesAnalyticsScope('event', value))
+    )
+  )
+
+  if (activeEventIds.length === 0) {
+    return []
+  }
+
+  const { data: events, error: eventsErr } = await (supabase as any)
+    .from('events')
+    .select('id, event_name, event_date, location_id')
+    .in('id', activeEventIds)
+  if (eventsErr) throw new Error(eventsErr.message)
+
+  const { data: locations, error: locationsErr } = await (supabase as any)
+    .from('locations')
+    .select('id, name')
+  if (locationsErr) throw new Error(locationsErr.message)
+
+  const locationNameMap = new Map<string, string>()
+  for (const loc of ((locations ?? []) as any[])) {
+    locationNameMap.set(loc.id, loc.name)
   }
 
   const eventMap = new Map<
@@ -84,18 +118,18 @@ async function getEventAnalytics(supabase: any, start?: string, end?: string) {
     })
   }
 
-  for (const txn of ((txns ?? []) as any[])) {
-    if (!txn.event_id) continue
-    const entry = eventMap.get(txn.event_id)
+  for (const txn of resolvedTxns) {
+    if (!matchesAnalyticsScope('event', txn.resolved_event_id)) continue
+    const entry = txn.resolved_event_id ? eventMap.get(txn.resolved_event_id) : null
     if (!entry) continue
 
     entry.total_sales += txn.total_amount ?? 0
     if (txn.txn_no) entry.txnSet.add(txn.txn_no)
   }
 
-  for (const s of ((sales ?? []) as any[])) {
-    if (!s.event_id) continue
-    const entry = eventMap.get(s.event_id)
+  for (const s of resolvedSales) {
+    if (!matchesAnalyticsScope('event', s.resolved_event_id)) continue
+    const entry = s.resolved_event_id ? eventMap.get(s.resolved_event_id) : null
     if (!entry) continue
 
     const unitCost = costMap.get(s.product_name)
@@ -128,8 +162,8 @@ export default async function EventAnalyticsPage({
   searchParams?: { start?: string; end?: string }
 }) {
   const { supabase } = await requireServerSession({ includeProfile: false })
-  const start = searchParams?.start
-  const end = searchParams?.end
+  const start = normalizeAnalyticsDate(searchParams?.start)
+  const end = normalizeAnalyticsDate(searchParams?.end)
 
   const data = await getEventAnalytics(supabase, start, end)
 

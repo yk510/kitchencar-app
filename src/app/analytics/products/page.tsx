@@ -1,6 +1,12 @@
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 import { requireServerSession } from '@/lib/auth'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import {
+  buildStallLogResolutionMap,
+  matchesAnalyticsScope,
+  resolveAnalyticsEventId,
+} from '@/lib/analytics-resolution'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,12 +26,6 @@ async function getProductAnalytics(
     .from('product_sales')
     .select('product_name, subtotal, quantity, txn_no, event_id, txn_date')
 
-  if (scope === 'normal') {
-    salesQuery = salesQuery.is('event_id', null)
-  } else if (scope === 'event') {
-    salesQuery = salesQuery.not('event_id', 'is', null)
-  }
-
   if (start) {
     salesQuery = salesQuery.gte('txn_date', start)
   }
@@ -38,6 +38,16 @@ async function getProductAnalytics(
   if (salesErr) {
     throw new Error(salesErr.message)
   }
+
+  let stallLogsQuery = (supabase as any)
+    .from('stall_logs')
+    .select('log_date, event_id')
+
+  if (start) stallLogsQuery = stallLogsQuery.gte('log_date', start)
+  if (end) stallLogsQuery = stallLogsQuery.lte('log_date', end)
+
+  const { data: stallLogs, error: stallLogsErr } = await stallLogsQuery
+  if (stallLogsErr) throw new Error(stallLogsErr.message)
 
   const { data: costs, error: costsErr } = await (supabase as any)
     .from('product_master')
@@ -54,6 +64,15 @@ async function getProductAnalytics(
     }
   }
 
+  const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+
+  const filteredSales = ((sales ?? []) as any[]).filter((sale) =>
+    matchesAnalyticsScope(
+      scope,
+      resolveAnalyticsEventId(sale.txn_date, sale.event_id, stallLogByDate)
+    )
+  )
+
   const productMap = new Map<
     string,
     {
@@ -64,7 +83,7 @@ async function getProductAnalytics(
     }
   >()
 
-  for (const s of ((sales ?? []) as any[])) {
+  for (const s of filteredSales) {
     const name = s.product_name
     if (!name) continue
 
@@ -117,8 +136,8 @@ export default async function ProductAnalyticsPage({
 }) {
   const { supabase } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
-  const start = searchParams?.start
-  const end = searchParams?.end
+  const start = normalizeAnalyticsDate(searchParams?.start)
+  const end = normalizeAnalyticsDate(searchParams?.end)
 
   const data = await getProductAnalytics(supabase, scope, start, end)
 

@@ -1,6 +1,12 @@
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 import { requireServerSession } from '@/lib/auth'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import {
+  buildStallLogResolutionMap,
+  matchesAnalyticsScope,
+  resolveAnalyticsEventId,
+} from '@/lib/analytics-resolution'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,9 +32,6 @@ async function getWeekdayAnalytics(
     .select('day_of_week, total_amount, txn_date, event_id, txn_no')
     .eq('is_return', false)
 
-  if (scope === 'normal') txnQuery = txnQuery.is('event_id', null)
-  else if (scope === 'event') txnQuery = txnQuery.not('event_id', 'is', null)
-
   if (start) txnQuery = txnQuery.gte('txn_date', start)
   if (end) txnQuery = txnQuery.lte('txn_date', end)
 
@@ -39,14 +42,21 @@ async function getWeekdayAnalytics(
     .from('product_sales')
     .select('product_name, quantity, txn_date, event_id')
 
-  if (scope === 'normal') salesQuery = salesQuery.is('event_id', null)
-  else if (scope === 'event') salesQuery = salesQuery.not('event_id', 'is', null)
-
   if (start) salesQuery = salesQuery.gte('txn_date', start)
   if (end) salesQuery = salesQuery.lte('txn_date', end)
 
   const { data: sales, error: salesErr } = await salesQuery
   if (salesErr) throw new Error(salesErr.message)
+
+  let stallLogsQuery = (supabase as any)
+    .from('stall_logs')
+    .select('log_date, event_id')
+
+  if (start) stallLogsQuery = stallLogsQuery.gte('log_date', start)
+  if (end) stallLogsQuery = stallLogsQuery.lte('log_date', end)
+
+  const { data: stallLogs, error: stallLogsErr } = await stallLogsQuery
+  if (stallLogsErr) throw new Error(stallLogsErr.message)
 
   const { data: costs, error: costsErr } = await (supabase as any)
     .from('product_master')
@@ -57,6 +67,8 @@ async function getWeekdayAnalytics(
   for (const c of ((costs ?? []) as any[])) {
     if (c.cost_amount != null) costMap.set(c.product_name, c.cost_amount)
   }
+
+  const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
 
   const weekdayMap = new Map<
     number,
@@ -78,6 +90,9 @@ async function getWeekdayAnalytics(
   }
 
   for (const t of ((txns ?? []) as any[])) {
+    const resolvedEventId = resolveAnalyticsEventId(t.txn_date, t.event_id, stallLogByDate)
+    if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
+
     const day = t.day_of_week
     if (day == null) continue
 
@@ -90,6 +105,9 @@ async function getWeekdayAnalytics(
   }
 
   for (const s of ((sales ?? []) as any[])) {
+    const resolvedEventId = resolveAnalyticsEventId(s.txn_date, s.event_id, stallLogByDate)
+    if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
+
     if (!s.txn_date) continue
     const day = new Date(`${s.txn_date}T00:00:00`).getDay()
     const entry = weekdayMap.get(day)
@@ -149,8 +167,8 @@ export default async function WeekdayAnalyticsPage({
 }) {
   const { supabase } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
-  const start = searchParams?.start
-  const end = searchParams?.end
+  const start = normalizeAnalyticsDate(searchParams?.start)
+  const end = normalizeAnalyticsDate(searchParams?.end)
 
   const data = await getWeekdayAnalytics(supabase, scope, start, end)
 

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
 import type {
   CrossAnalyticsDimensionKey as DimensionKey,
   CrossAnalyticsMetricKey as MetricKey,
@@ -45,14 +46,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const dimensions = normalizeDimensions(body.dimensions).slice(0, 2)
     const metrics = normalizeMetrics(body.metrics)
-    const start = typeof body.start === 'string' ? body.start : ''
-    const end = typeof body.end === 'string' ? body.end : ''
+    const start = normalizeAnalyticsDate(typeof body.start === 'string' ? body.start : '')
+    const end = normalizeAnalyticsDate(typeof body.end === 'string' ? body.end : '')
 
     if (dimensions.length === 0) {
       return apiError('分析軸を1つ以上選択してください', 400)
     }
 
-    const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }] =
+    const [{ data: txns, error: txnError }, { data: sales, error: salesError }, { data: costs, error: costError }, { data: weatherLogs, error: weatherError }, { data: locations, error: locationError }, { data: stallLogs, error: stallLogsError }] =
       await Promise.all([
         (supabase as any)
           .from('transactions')
@@ -72,6 +73,11 @@ export async function POST(req: NextRequest) {
           .gte('log_date', start || '1900-01-01')
           .lte('log_date', end || '2999-12-31'),
         (supabase as any).from('locations').select('id, name'),
+        (supabase as any)
+          .from('stall_logs')
+          .select('log_date, location_id')
+          .gte('log_date', start || '1900-01-01')
+          .lte('log_date', end || '2999-12-31'),
       ])
 
     if (txnError) return apiError(txnError.message)
@@ -79,6 +85,7 @@ export async function POST(req: NextRequest) {
     if (costError) return apiError(costError.message)
     if (weatherError) return apiError(weatherError.message)
     if (locationError) return apiError(locationError.message)
+    if (stallLogsError) return apiError(stallLogsError.message)
 
     const locationMap = new Map<string, string>()
     for (const location of (locations ?? []) as any[]) {
@@ -90,6 +97,11 @@ export async function POST(req: NextRequest) {
       weatherMap.set(`${row.log_date}__${row.location_id ?? 'none'}`, row.weather_type ?? '不明')
     }
 
+    const stallLogLocationMap = new Map<string, string | null>()
+    for (const row of (stallLogs ?? []) as any[]) {
+      stallLogLocationMap.set(row.log_date, row.location_id ?? null)
+    }
+
     const costMap = new Map<string, number>()
     for (const row of (costs ?? []) as any[]) {
       if (row.cost_amount != null) {
@@ -99,16 +111,17 @@ export async function POST(req: NextRequest) {
 
     const txnMetaMap = new Map<string, any>()
     for (const txn of (txns ?? []) as any[]) {
+      const resolvedLocationId = txn.location_id ?? stallLogLocationMap.get(txn.txn_date) ?? null
       txnMetaMap.set(txn.txn_no, {
         txn_no: txn.txn_no,
         txn_date: txn.txn_date,
         total_amount: txn.total_amount ?? 0,
-        location_id: txn.location_id ?? null,
-        location_name: txn.location_id ? locationMap.get(txn.location_id) ?? '未設定' : '未設定',
+        location_id: resolvedLocationId,
+        location_name: resolvedLocationId ? locationMap.get(resolvedLocationId) ?? '未設定' : '未設定',
         weekday: getWeekdayLabel(txn.day_of_week),
         hour: formatHourLabel(txn.hour_of_day),
         weather:
-          weatherMap.get(`${txn.txn_date}__${txn.location_id ?? 'none'}`) ??
+          weatherMap.get(`${txn.txn_date}__${resolvedLocationId ?? 'none'}`) ??
           weatherMap.get(`${txn.txn_date}__none`) ??
           '不明',
       })
