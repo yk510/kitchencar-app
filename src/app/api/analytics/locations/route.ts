@@ -28,11 +28,20 @@ export async function GET(req: NextRequest) {
 
   const { data: sales, error: salesErr } = await (supabase as any)
     .from('product_sales')
-    .select('location_id, product_name, subtotal, quantity')
+    .select('location_id, product_name, subtotal, quantity, txn_date')
 
   if (salesErr) {
     console.error('[analytics/locations] product_sales error:', salesErr)
     return apiError(salesErr.message)
+  }
+
+  const { data: stallLogs, error: stallLogsErr } = await (supabase as any)
+    .from('stall_logs')
+    .select('log_date, location_id')
+
+  if (stallLogsErr) {
+    console.error('[analytics/locations] stall_logs error:', stallLogsErr)
+    return apiError(stallLogsErr.message)
   }
 
   const { data: costs, error: costsErr } = await (supabase as any)
@@ -57,6 +66,7 @@ export async function GET(req: NextRequest) {
     locations: locations?.length ?? 0,
     txns: txns?.length ?? 0,
     sales: sales?.length ?? 0,
+    stallLogs: stallLogs?.length ?? 0,
     costs: costs?.length ?? 0,
     weather: weather?.length ?? 0,
   })
@@ -66,6 +76,11 @@ export async function GET(req: NextRequest) {
     if (c.cost_amount != null) {
       costMap.set(c.product_name, c.cost_amount)
     }
+  }
+
+  const stallLogByDate = new Map<string, string | null>()
+  for (const row of (stallLogs ?? []) as any[]) {
+    stallLogByDate.set(row.log_date, row.location_id ?? null)
   }
 
   const locMap = new Map<
@@ -90,8 +105,9 @@ export async function GET(req: NextRequest) {
   }
 
   for (const t of (txns ?? []) as any[]) {
-    if (!t.location_id) continue
-    const entry = locMap.get(t.location_id)
+    const locationId = t.location_id ?? stallLogByDate.get(t.txn_date) ?? null
+    if (!locationId) continue
+    const entry = locMap.get(locationId)
     if (!entry) continue
 
     entry.total_sales += t.total_amount ?? 0
@@ -101,8 +117,9 @@ export async function GET(req: NextRequest) {
   }
 
   for (const s of (sales ?? []) as any[]) {
-    if (!s.location_id) continue
-    const entry = locMap.get(s.location_id)
+    const locationId = s.location_id ?? stallLogByDate.get(s.txn_date) ?? null
+    if (!locationId) continue
+    const entry = locMap.get(locationId)
     if (!entry) continue
 
     const unitCost = costMap.get(s.product_name)

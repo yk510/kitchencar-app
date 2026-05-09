@@ -27,12 +27,6 @@ async function getLocationAnalytics(
     .select('location_id, total_amount, txn_date, event_id, txn_no')
     .eq('is_return', false)
 
-  if (scope === 'normal') {
-    txnQuery = txnQuery.is('event_id', null)
-  } else if (scope === 'event') {
-    txnQuery = txnQuery.not('event_id', 'is', null)
-  }
-
   if (start) txnQuery = txnQuery.gte('txn_date', start)
   if (end) txnQuery = txnQuery.lte('txn_date', end)
 
@@ -48,6 +42,16 @@ async function getLocationAnalytics(
 
   const { data: sales, error: salesErr } = await salesQuery
   if (salesErr) throw new Error(salesErr.message)
+
+  let stallLogsQuery = (supabase as any)
+    .from('stall_logs')
+    .select('log_date, location_id, event_id')
+
+  if (start) stallLogsQuery = stallLogsQuery.gte('log_date', start)
+  if (end) stallLogsQuery = stallLogsQuery.lte('log_date', end)
+
+  const { data: stallLogs, error: stallLogsErr } = await stallLogsQuery
+  if (stallLogsErr) throw new Error(stallLogsErr.message)
 
   const { data: costs, error: costsErr } = await (supabase as any)
     .from('product_master')
@@ -65,19 +69,52 @@ async function getLocationAnalytics(
   const { data: weather, error: weatherErr } = await weatherQuery
   if (weatherErr) throw new Error(weatherErr.message)
 
-  const filteredSales =
-    scope === 'all'
-      ? (sales ?? [])
-      : ((sales ?? []) as any[]).filter((s: any) =>
-          scope === 'normal' ? s.event_id == null : s.event_id != null
-        )
-
   const costMap = new Map<string, number>()
   for (const c of ((costs ?? []) as any[])) {
     if (c.cost_amount != null) {
       costMap.set(c.product_name, c.cost_amount)
     }
   }
+
+  const stallLogByDate = new Map<string, { locationId: string | null; eventId: string | null }>()
+  for (const row of ((stallLogs ?? []) as any[])) {
+    stallLogByDate.set(row.log_date, {
+      locationId: row.location_id ?? null,
+      eventId: row.event_id ?? null,
+    })
+  }
+
+  const resolvedTxns = ((txns ?? []) as any[]).map((txn) => {
+    const stallLog = stallLogByDate.get(txn.txn_date)
+    return {
+      ...txn,
+      resolved_location_id: txn.location_id ?? stallLog?.locationId ?? null,
+      resolved_event_id: txn.event_id ?? stallLog?.eventId ?? null,
+    }
+  })
+
+  const resolvedSales = ((sales ?? []) as any[]).map((sale) => {
+    const stallLog = stallLogByDate.get(sale.txn_date)
+    return {
+      ...sale,
+      resolved_location_id: sale.location_id ?? stallLog?.locationId ?? null,
+      resolved_event_id: sale.event_id ?? stallLog?.eventId ?? null,
+    }
+  })
+
+  const filteredTxns =
+    scope === 'all'
+      ? resolvedTxns
+      : resolvedTxns.filter((txn) =>
+          scope === 'normal' ? txn.resolved_event_id == null : txn.resolved_event_id != null
+        )
+
+  const filteredSales =
+    scope === 'all'
+      ? resolvedSales
+      : resolvedSales.filter((sale) =>
+          scope === 'normal' ? sale.resolved_event_id == null : sale.resolved_event_id != null
+        )
 
   const locMap = new Map<
     string,
@@ -102,9 +139,9 @@ async function getLocationAnalytics(
     })
   }
 
-  for (const t of ((txns ?? []) as any[])) {
-    if (!t.location_id) continue
-    const entry = locMap.get(t.location_id)
+  for (const t of filteredTxns) {
+    if (!t.resolved_location_id) continue
+    const entry = locMap.get(t.resolved_location_id)
     if (!entry) continue
 
     entry.total_sales += t.total_amount ?? 0
@@ -113,8 +150,8 @@ async function getLocationAnalytics(
   }
 
   for (const s of filteredSales as any[]) {
-    if (!s.location_id) continue
-    const entry = locMap.get(s.location_id)
+    if (!s.resolved_location_id) continue
+    const entry = locMap.get(s.resolved_location_id)
     if (!entry) continue
 
     const unitCost = costMap.get(s.product_name)
