@@ -1,6 +1,7 @@
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 import { requireServerSession } from '@/lib/auth'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,8 +142,17 @@ async function getLocationAnalytics(
 
   for (const t of filteredTxns) {
     if (!t.resolved_location_id) continue
-    const entry = locMap.get(t.resolved_location_id)
-    if (!entry) continue
+    if (!locMap.has(t.resolved_location_id)) {
+      locMap.set(t.resolved_location_id, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        txnSet: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(t.resolved_location_id)!
 
     entry.total_sales += t.total_amount ?? 0
     if (t.txn_date) entry.days.add(t.txn_date)
@@ -151,8 +161,17 @@ async function getLocationAnalytics(
 
   for (const s of filteredSales as any[]) {
     if (!s.resolved_location_id) continue
-    const entry = locMap.get(s.resolved_location_id)
-    if (!entry) continue
+    if (!locMap.has(s.resolved_location_id)) {
+      locMap.set(s.resolved_location_id, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        txnSet: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(s.resolved_location_id)!
 
     const unitCost = costMap.get(s.product_name)
     if (unitCost != null) {
@@ -211,8 +230,8 @@ export default async function LocationAnalyticsPage({
 }) {
   const { supabase } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
-  const start = searchParams?.start
-  const end = searchParams?.end
+  const start = normalizeAnalyticsDate(searchParams?.start)
+  const end = normalizeAnalyticsDate(searchParams?.end)
 
   const data = await getLocationAnalytics(supabase, scope, start, end)
 

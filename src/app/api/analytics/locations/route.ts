@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
+import { normalizeAnalyticsDate } from '@/lib/analytics-date'
 import { apiError, apiOk } from '@/lib/api-response'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
   const { supabase } = auth.session
+  const { searchParams } = new URL(req.url)
+  const start = normalizeAnalyticsDate(searchParams.get('start') ?? undefined)
+  const end = normalizeAnalyticsDate(searchParams.get('end') ?? undefined)
 
   const { data: locations, error: locErr } = await (supabase as any)
     .from('locations')
@@ -20,6 +24,8 @@ export async function GET(req: NextRequest) {
     .from('transactions')
     .select('location_id, total_amount, txn_date, is_return')
     .eq('is_return', false)
+    .gte('txn_date', start ?? '1900-01-01')
+    .lte('txn_date', end ?? '2999-12-31')
 
   if (txErr) {
     console.error('[analytics/locations] transactions error:', txErr)
@@ -29,6 +35,8 @@ export async function GET(req: NextRequest) {
   const { data: sales, error: salesErr } = await (supabase as any)
     .from('product_sales')
     .select('location_id, product_name, subtotal, quantity, txn_date')
+    .gte('txn_date', start ?? '1900-01-01')
+    .lte('txn_date', end ?? '2999-12-31')
 
   if (salesErr) {
     console.error('[analytics/locations] product_sales error:', salesErr)
@@ -38,6 +46,8 @@ export async function GET(req: NextRequest) {
   const { data: stallLogs, error: stallLogsErr } = await (supabase as any)
     .from('stall_logs')
     .select('log_date, location_id')
+    .gte('log_date', start ?? '1900-01-01')
+    .lte('log_date', end ?? '2999-12-31')
 
   if (stallLogsErr) {
     console.error('[analytics/locations] stall_logs error:', stallLogsErr)
@@ -56,6 +66,8 @@ export async function GET(req: NextRequest) {
   const { data: weather, error: weatherErr } = await (supabase as any)
     .from('weather_logs')
     .select('location_id, weather_type')
+    .gte('log_date', start ?? '1900-01-01')
+    .lte('log_date', end ?? '2999-12-31')
 
   if (weatherErr) {
     console.error('[analytics/locations] weather_logs error:', weatherErr)
@@ -107,8 +119,16 @@ export async function GET(req: NextRequest) {
   for (const t of (txns ?? []) as any[]) {
     const locationId = t.location_id ?? stallLogByDate.get(t.txn_date) ?? null
     if (!locationId) continue
-    const entry = locMap.get(locationId)
-    if (!entry) continue
+    if (!locMap.has(locationId)) {
+      locMap.set(locationId, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(locationId)!
 
     entry.total_sales += t.total_amount ?? 0
     if (t.txn_date) {
@@ -119,8 +139,16 @@ export async function GET(req: NextRequest) {
   for (const s of (sales ?? []) as any[]) {
     const locationId = s.location_id ?? stallLogByDate.get(s.txn_date) ?? null
     if (!locationId) continue
-    const entry = locMap.get(locationId)
-    if (!entry) continue
+    if (!locMap.has(locationId)) {
+      locMap.set(locationId, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(locationId)!
 
     const unitCost = costMap.get(s.product_name)
     if (unitCost != null) {
