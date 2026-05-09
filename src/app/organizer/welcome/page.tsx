@@ -11,7 +11,7 @@ export default async function OrganizerWelcomePage({
 }: {
   searchParams?: { from?: string }
 }) {
-  const { role } = await requireServerSession()
+  const { role } = await requireServerSession({ includeProfile: false })
 
   if (role !== 'organizer') {
     return null

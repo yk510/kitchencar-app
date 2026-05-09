@@ -49,7 +49,7 @@ async function getOrganizerDashboardData(supabase: any, userId: string) {
 }
 
 export default async function OrganizerDashboardPage() {
-  const session = await getServerSession()
+  const session = await getServerSession({ includeProfile: false })
   if (!session) {
     return <SessionRecoveryGate targetPath="/organizer" expectedRole="organizer" fallbackPath="/lp" />
   }

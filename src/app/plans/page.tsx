@@ -25,7 +25,7 @@ export default async function PlansPage({
 }: {
   searchParams?: { plan?: string }
 }) {
-  const { supabase } = await requireServerSession()
+  const { supabase } = await requireServerSession({ includeProfile: false })
   const { data: plans } = await (supabase as any)
     .from('operation_plans')
     .select('*')

@@ -68,8 +68,8 @@ export async function getServerSession(options: SessionOptions = {}) {
     : null
 }
 
-export async function requireServerSession() {
-  const session = await getServerSession()
+export async function requireServerSession(options: SessionOptions = {}) {
+  const session = await getServerSession(options)
 
   if (!session) {
     redirect('/login')

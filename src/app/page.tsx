@@ -16,47 +16,51 @@ async function getDashboardData(supabase: any) {
 
   const monthStart = today.slice(0, 7) + '-01'
 
-  const { data: todayTxns } = await (supabase as any)
-    .from('transactions')
-    .select('total_amount')
-    .eq('txn_date', today)
-    .eq('is_return', false)
-
-  const { data: monthTxns } = await (supabase as any)
-    .from('transactions')
-    .select('txn_date, total_amount, location_id')
-    .gte('txn_date', monthStart)
-    .lte('txn_date', today)
-    .eq('is_return', false)
-
-  const { data: monthProducts } = await (supabase as any)
-    .from('product_sales')
-    .select('product_name, subtotal, quantity')
-    .gte('txn_date', monthStart)
-    .lte('txn_date', today)
-
-  const { data: costs } = await (supabase as any)
-    .from('product_master')
-    .select('product_name, cost_amount')
-
-  const { data: unregistered } = await (supabase as any)
-    .from('product_master')
-    .select('product_name')
-    .is('cost_amount', null)
-    .is('cost_rate', null)
-
-  const { data: txnDates } = await (supabase as any)
-    .from('transactions')
-    .select('txn_date')
-    .eq('is_return', false)
-
-  const { data: logDates } = await (supabase as any)
-    .from('stall_logs')
-    .select('log_date')
-
-  const { data: locations } = await (supabase as any)
-    .from('locations')
-    .select('id, name')
+  const [
+    { data: todayTxns },
+    { data: monthTxns },
+    { data: monthProducts },
+    { data: costs },
+    { data: unregistered },
+    { data: txnDates },
+    { data: logDates },
+    { data: locations },
+  ] = await Promise.all([
+    (supabase as any)
+      .from('transactions')
+      .select('total_amount')
+      .eq('txn_date', today)
+      .eq('is_return', false),
+    (supabase as any)
+      .from('transactions')
+      .select('txn_date, total_amount, location_id')
+      .gte('txn_date', monthStart)
+      .lte('txn_date', today)
+      .eq('is_return', false),
+    (supabase as any)
+      .from('product_sales')
+      .select('product_name, subtotal, quantity')
+      .gte('txn_date', monthStart)
+      .lte('txn_date', today),
+    (supabase as any)
+      .from('product_master')
+      .select('product_name, cost_amount'),
+    (supabase as any)
+      .from('product_master')
+      .select('product_name')
+      .is('cost_amount', null)
+      .is('cost_rate', null),
+    (supabase as any)
+      .from('transactions')
+      .select('txn_date')
+      .eq('is_return', false),
+    (supabase as any)
+      .from('stall_logs')
+      .select('log_date'),
+    (supabase as any)
+      .from('locations')
+      .select('id, name'),
+  ])
 
   const locationNameMap = new Map<string, string>()
   for (const loc of ((locations ?? []) as any[])) {
@@ -240,7 +244,7 @@ async function getDashboardData(supabase: any) {
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession()
+  const session = await getServerSession({ includeProfile: false })
   if (!session) {
     return <SessionRecoveryGate targetPath="/" expectedRole="vendor" fallbackPath="/lp" />
   }

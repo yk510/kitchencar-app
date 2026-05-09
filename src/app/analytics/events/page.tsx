@@ -127,7 +127,7 @@ export default async function EventAnalyticsPage({
 }: {
   searchParams?: { start?: string; end?: string }
 }) {
-  const { supabase } = await requireServerSession()
+  const { supabase } = await requireServerSession({ includeProfile: false })
   const start = searchParams?.start
   const end = searchParams?.end
 

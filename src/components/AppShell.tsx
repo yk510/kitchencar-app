@@ -4,19 +4,13 @@ import { Suspense, useEffect, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import HeaderNav from '@/components/HeaderNav'
 import { useAuth } from '@/components/AuthProvider'
+import { resolveGuardAction } from '@/lib/auth-guard'
 import {
   getHostScopeFromWindow,
   getRouteAccessScope,
-  isPathAccessibleToRole,
-  isRoleCompatibleWithHost,
 } from '@/lib/domain'
 import { subscribeProfileUpdated } from '@/lib/profile-sync'
 import { getHomePathByRole } from '@/lib/user-role'
-
-type GuardResolution =
-  | { action: 'allow' }
-  | { action: 'redirect'; href: string }
-  | { action: 'signout'; redirectToLogin: boolean }
 
 function LoadingScreen({ message }: { message: string }) {
   return (
@@ -46,68 +40,6 @@ function ScrollToTopOnNavigation() {
   return null
 }
 
-function resolveGuardAction({
-  pathname,
-  user,
-  role,
-  hostScope,
-  isPublicPage,
-  isSignupPage,
-  isLandingPage,
-  isOrganizerPath,
-  isVendorPath,
-  homePath,
-  hasProfile,
-  profileReady,
-}: {
-  pathname: string
-  user: unknown
-  role: 'vendor' | 'organizer' | null
-  hostScope: 'vendor' | 'organizer' | null
-  isPublicPage: boolean
-  isSignupPage: boolean
-  isLandingPage: boolean
-  isOrganizerPath: boolean
-  isVendorPath: boolean
-  homePath: string
-  hasProfile: boolean
-  profileReady: boolean
-}): GuardResolution {
-  if (!user && !isPublicPage) {
-    return { action: 'redirect', href: '/login' }
-  }
-
-  if (!user || !profileReady) {
-    return { action: 'allow' }
-  }
-
-  if (role && !isRoleCompatibleWithHost(role, hostScope)) {
-    return { action: 'signout', redirectToLogin: !isPublicPage }
-  }
-
-  if (isSignupPage && hasProfile) {
-    return { action: 'redirect', href: homePath }
-  }
-
-  if (isLandingPage) {
-    return { action: 'redirect', href: homePath }
-  }
-
-  if (role === 'organizer' && pathname === '/') {
-    return { action: 'redirect', href: '/organizer' }
-  }
-
-  if (role === 'vendor' && !isPathAccessibleToRole(role, pathname)) {
-    return { action: 'redirect', href: '/' }
-  }
-
-  if (role === 'organizer' && !isPathAccessibleToRole(role, pathname)) {
-    return { action: 'redirect', href: '/organizer' }
-  }
-
-  return { action: 'allow' }
-}
-
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -120,8 +52,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isSignupPage = pathname.startsWith('/signup/')
   const isLandingPage = pathname === '/lp' || pathname === '/lp/vendor' || pathname === '/lp/organizer'
   const routeAccessScope = getRouteAccessScope(pathname)
-  const isOrganizerPath = routeAccessScope === 'organizer'
-  const isVendorPath = routeAccessScope === 'vendor'
   const isPublicPage = routeAccessScope === 'public'
   const homePath = getHomePathByRole(role)
 
@@ -136,8 +66,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       isPublicPage,
       isSignupPage,
       isLandingPage,
-      isOrganizerPath,
-      isVendorPath,
       homePath,
       hasProfile,
       profileReady,
@@ -154,7 +82,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (resolution.action === 'redirect') {
       router.replace(resolution.href)
     }
-  }, [canResolveAuthenticatedRoutes, hasProfile, homePath, hostScope, isLandingPage, isLoginPage, isOrganizerPath, isSignupPage, isVendorPath, pathname, profileReady, role, router, supabase, user])
+  }, [canResolveAuthenticatedRoutes, hasProfile, homePath, hostScope, isLandingPage, isSignupPage, pathname, profileReady, role, router, supabase, user])
 
   useEffect(() => subscribeProfileUpdated(() => router.refresh()), [router])
 

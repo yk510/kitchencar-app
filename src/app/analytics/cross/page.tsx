@@ -5,7 +5,7 @@ import { requireServerSession } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 
 export default async function CrossAnalyticsPage() {
-  await requireServerSession()
+  await requireServerSession({ includeProfile: false })
 
   return (
     <div>

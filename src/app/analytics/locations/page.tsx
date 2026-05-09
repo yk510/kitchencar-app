@@ -172,7 +172,7 @@ export default async function LocationAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
-  const { supabase } = await requireServerSession()
+  const { supabase } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
   const start = searchParams?.start
   const end = searchParams?.end

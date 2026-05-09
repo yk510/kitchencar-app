@@ -7,11 +7,10 @@ import {
   getAllKnownAuthCookieNames,
   getAllKnownSupabaseStorageKeys,
 } from '@/lib/auth-cookie'
-import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { getRoleFromSupabaseUser, syncBrowserAccessToken } from '@/lib/client-auth-session'
 import { createBrowserSupabaseClient } from '@/lib/supabase'
+import { fetchUserProfileSummary } from '@/lib/user-profile-summary'
 import type { Database } from '@/types/database'
-import type { UserProfileSummaryPayload } from '@/types/api-payloads'
 
 type AuthContextValue = {
   supabase: SupabaseClient<Database> | null
@@ -90,19 +89,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = window.setTimeout(() => controller.abort(), 2500)
 
     try {
-      const data = await fetchApi<UserProfileSummaryPayload>('/api/user/profile/summary', {
-        cache: 'no-store',
+      const data = await fetchUserProfileSummary({
+        supabase,
+        session,
         signal: controller.signal,
       })
       setRole(data.role ?? getRoleFromSupabaseUser(session?.user) ?? null)
       setHasProfile(!!data.hasProfile)
-      setProfileReady(true)
-    } catch {
-      const {
-        data: { session: nextSession },
-      } = await supabase.auth.getSession()
-      setRole(getRoleFromSupabaseUser(nextSession?.user) ?? getRoleFromSupabaseUser(session?.user) ?? null)
-      setHasProfile(false)
       setProfileReady(true)
     } finally {
       window.clearTimeout(timeoutId)

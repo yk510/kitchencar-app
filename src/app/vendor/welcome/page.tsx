@@ -11,7 +11,7 @@ export default async function VendorWelcomePage({
 }: {
   searchParams?: { from?: string; offer?: string }
 }) {
-  const { role } = await requireServerSession()
+  const { role } = await requireServerSession({ includeProfile: false })
 
   if (role !== 'vendor') {
     return null

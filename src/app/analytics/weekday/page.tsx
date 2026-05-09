@@ -147,7 +147,7 @@ export default async function WeekdayAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
-  const { supabase } = await requireServerSession()
+  const { supabase } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
   const start = searchParams?.start
   const end = searchParams?.end

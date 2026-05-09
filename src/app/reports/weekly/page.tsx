@@ -16,7 +16,7 @@ export default async function WeeklyReportsPage({
 }: {
   searchParams?: { start?: string; end?: string; month?: string }
 }) {
-  const { supabase } = await requireServerSession()
+  const { supabase } = await requireServerSession({ includeProfile: false })
   const range = getMonthRange(searchParams?.month)
   const start = searchParams?.start ?? range.start
   const end = searchParams?.end ?? range.end
