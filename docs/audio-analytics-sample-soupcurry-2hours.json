@@ -1,0 +1,163 @@
+{
+  "title": "スープカレー屋 2時間営業 サンプル文字起こしデータ",
+  "description": "音声Analyticsの検証用に使う、店員発話ベースのサンプル文字起こしデータです。15名来店、11:00-13:00の2時間営業を想定しています。",
+  "assumptions": {
+    "store_type": "スープカレー屋",
+    "business_hours": "2026-05-10 11:00-13:00 JST",
+    "customer_count": 15,
+    "products": [
+      "牛すじカレー",
+      "チキンカレー",
+      "匠スペシャル",
+      "マンゴーラッシー",
+      "いちごラッシー",
+      "アイスコーヒー"
+    ]
+  },
+  "expected_summary": {
+    "total_order_event_count": 15,
+    "total_estimated_quantity": 18,
+    "product_totals": [
+      {
+        "product_name": "牛すじカレー",
+        "quantity": 4
+      },
+      {
+        "product_name": "チキンカレー",
+        "quantity": 4
+      },
+      {
+        "product_name": "匠スペシャル",
+        "quantity": 3
+      },
+      {
+        "product_name": "いちごラッシー",
+        "quantity": 3
+      },
+      {
+        "product_name": "マンゴーラッシー",
+        "quantity": 2
+      },
+      {
+        "product_name": "アイスコーヒー",
+        "quantity": 2
+      }
+    ],
+    "hourly_totals": [
+      {
+        "hour": "11:00",
+        "quantity": 9
+      },
+      {
+        "hour": "12:00",
+        "quantity": 9
+      }
+    ]
+  },
+  "chunk_payload_templates": [
+    {
+      "chunk_label": "11時台",
+      "session_id": "REPLACE_WITH_SESSION_ID",
+      "chunk_id": "REPLACE_WITH_11AM_CHUNK_ID",
+      "transcripts": [
+        {
+          "spoken_at": "2026-05-10T11:02:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.98,
+          "transcript_text": "牛すじカレー1つお願いします"
+        },
+        {
+          "spoken_at": "2026-05-10T11:07:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.97,
+          "transcript_text": "チキンカレー1"
+        },
+        {
+          "spoken_at": "2026-05-10T11:12:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.96,
+          "transcript_text": "マンゴーラッシー1つ"
+        },
+        {
+          "spoken_at": "2026-05-10T11:18:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.98,
+          "transcript_text": "牛すじカレー2つ"
+        },
+        {
+          "spoken_at": "2026-05-10T11:25:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.97,
+          "transcript_text": "匠スペシャル1"
+        },
+        {
+          "spoken_at": "2026-05-10T11:31:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.95,
+          "transcript_text": "アイスコーヒー1"
+        },
+        {
+          "spoken_at": "2026-05-10T11:39:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.97,
+          "transcript_text": "チキンカレー1つ"
+        },
+        {
+          "spoken_at": "2026-05-10T11:46:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.96,
+          "transcript_text": "いちごラッシー1つ"
+        }
+      ]
+    },
+    {
+      "chunk_label": "12時台",
+      "session_id": "REPLACE_WITH_SESSION_ID",
+      "chunk_id": "REPLACE_WITH_12PM_CHUNK_ID",
+      "transcripts": [
+        {
+          "spoken_at": "2026-05-10T12:01:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.98,
+          "transcript_text": "牛すじカレー1"
+        },
+        {
+          "spoken_at": "2026-05-10T12:08:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.97,
+          "transcript_text": "匠スペシャル1つ"
+        },
+        {
+          "spoken_at": "2026-05-10T12:15:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.96,
+          "transcript_text": "匠スペシャル1"
+        },
+        {
+          "spoken_at": "2026-05-10T12:22:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.96,
+          "transcript_text": "マンゴーラッシー1"
+        },
+        {
+          "spoken_at": "2026-05-10T12:29:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.98,
+          "transcript_text": "チキンカレー2つ"
+        },
+        {
+          "spoken_at": "2026-05-10T12:37:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.97,
+          "transcript_text": "いちごラッシー2つ"
+        },
+        {
+          "spoken_at": "2026-05-10T12:44:00+09:00",
+          "speaker_type": "staff",
+          "confidence": 0.95,
+          "transcript_text": "アイスコーヒー1つ"
+        }
+      ]
+    }
+  ]
+}
