@@ -1,13 +1,10 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
-import { extractAudioOrderEvents } from '@/lib/audio/extract-order-events'
-import { loadAudioProductAliasDictionary } from '@/lib/audio/product-alias'
+import { persistAudioTranscriptsWithEvents } from '@/lib/audio/persist-audio-transcripts'
 import type {
-  AudioOrderEventCreateItem,
   AudioTranscriptCreatePayload,
   AudioTranscriptListPayload,
-  AudioTranscriptListRow,
   AudioTranscriptMutationPayload,
 } from '@/types/audio-analytics'
 
@@ -122,109 +119,16 @@ export async function POST(req: NextRequest) {
       return apiError('対象の chunk が見つかりません', 404)
     }
 
-    const transcriptRows = transcriptsInput.map((item) => {
-      const spokenAt = String(item.spoken_at ?? '').trim()
-      const transcriptText = String(item.transcript_text ?? '').trim()
-
-      if (!spokenAt) {
-        throw new Error('spoken_at は必須です')
-      }
-
-      if (!transcriptText) {
-        throw new Error('transcript_text は必須です')
-      }
-
-      const parsedSpokenAt = new Date(spokenAt)
-      if (Number.isNaN(parsedSpokenAt.getTime())) {
-        throw new Error('spoken_at は ISO 形式の日付文字列で指定してください')
-      }
-
-      return {
-        chunk_id: chunkId,
-        session_id: sessionId,
-        user_id: user.id,
-        spoken_at: parsedSpokenAt.toISOString(),
-        speaker_type: item.speaker_type ?? 'staff',
-        transcript_text: transcriptText,
-        confidence: item.confidence ?? null,
-      }
-    })
-
-    const { data: createdTranscripts, error: transcriptInsertError } = await (supabase as any)
-      .from('audio_transcripts')
-      .insert(transcriptRows)
-      .select('*')
-
-    if (transcriptInsertError) {
-      return apiError(transcriptInsertError.message)
-    }
-
-    const dictionary = await loadAudioProductAliasDictionary(supabase, user.id)
-    const eventRows: AudioOrderEventCreateItem[] = []
-
-    ;(createdTranscripts ?? []).forEach((transcript: any, index: number) => {
-      const extracted = extractAudioOrderEvents(dictionary, transcript.transcript_text)
-      for (const event of extracted) {
-        eventRows.push({
-          transcript_id: transcript.id,
-          product_id: event.productId,
-          product_name_raw: event.productNameRaw,
-          normalized_product_name: event.normalizedProductName,
-          quantity: event.quantity,
-          confidence: transcript.confidence ?? null,
-          event_at: transcript.spoken_at,
-        })
-      }
-    })
-
-    let createdEvents: any[] = []
-    if (eventRows.length > 0) {
-      const { data: insertedEvents, error: eventInsertError } = await (supabase as any)
-        .from('audio_order_events')
-        .insert(
-          eventRows.map((event) => ({
-            transcript_id: event.transcript_id,
-            session_id: sessionId,
-            user_id: user.id,
-            product_id: event.product_id ?? null,
-            product_name_raw: event.product_name_raw,
-            normalized_product_name: event.normalized_product_name ?? null,
-            quantity: event.quantity,
-            confidence: event.confidence ?? null,
-            event_at: event.event_at,
-          }))
-        )
-        .select('*')
-
-      if (eventInsertError) {
-        return apiError(eventInsertError.message)
-      }
-
-      createdEvents = insertedEvents ?? []
-    }
-
-    const { error: chunkUpdateError } = await (supabase as any)
-      .from('audio_capture_chunks')
-      .update({ transcription_status: 'completed' })
-      .eq('id', chunkId)
-      .eq('user_id', user.id)
-
-    if (chunkUpdateError) {
-      return apiError(chunkUpdateError.message)
-    }
-
-    const eventsByTranscriptId = new Map<string, any[]>()
-    for (const event of createdEvents) {
-      const bucket = eventsByTranscriptId.get(event.transcript_id) ?? []
-      bucket.push(event)
-      eventsByTranscriptId.set(event.transcript_id, bucket)
-    }
+    const result = await persistAudioTranscriptsWithEvents(
+      supabase,
+      user.id,
+      sessionId,
+      chunkId,
+      transcriptsInput
+    )
 
     const payload: AudioTranscriptMutationPayload = {
-      transcripts: (createdTranscripts ?? []).map((transcript: any): AudioTranscriptListRow => ({
-        ...transcript,
-        extracted_events: eventsByTranscriptId.get(transcript.id) ?? [],
-      })),
+      transcripts: result.transcripts,
     }
 
     return apiOk(payload)

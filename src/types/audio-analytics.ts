@@ -92,6 +92,13 @@ export type AudioTranscriptMutationPayload = {
   transcripts: AudioTranscriptListRow[]
 }
 
+export type AudioTranscriptPersistInput = {
+  spoken_at: string
+  transcript_text: string
+  speaker_type?: AudioTranscriptSpeakerType
+  confidence?: number | null
+}
+
 export type AudioOrderEventCreateItem = {
   transcript_id: string
   product_id?: string | null
@@ -118,6 +125,40 @@ export type AudioOrderEventListRow = AudioOrderEventRow & {
 
 export type AudioOrderEventListPayload = {
   rows: AudioOrderEventListRow[]
+}
+
+export type AudioTranscriptImportSessionInput = {
+  device_label?: string | null
+  microphone_label?: string | null
+  notes?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  status?: AudioCaptureSessionStatus
+}
+
+export type AudioTranscriptImportChunkInput = {
+  chunk_label?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  duration_sec?: number | null
+  transcripts: AudioTranscriptPersistInput[]
+}
+
+export type AudioTranscriptImportPayload = {
+  source_label?: string | null
+  session?: AudioTranscriptImportSessionInput
+  chunks?: AudioTranscriptImportChunkInput[]
+  chunk_payload_templates?: Array<{
+    chunk_label?: string | null
+    transcripts: AudioTranscriptPersistInput[]
+  }>
+}
+
+export type AudioTranscriptImportResultPayload = {
+  session: AudioCaptureSessionRow
+  chunk_count: number
+  transcript_count: number
+  order_event_count: number
 }
 
 export type ProductAliasCreatePayload = {

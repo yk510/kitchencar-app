@@ -51,6 +51,10 @@ export default function AudioAnalyticsDashboardClient() {
   const [productRows, setProductRows] = useState<AudioAnalyticsProductRow[]>([])
   const [hourlyRows, setHourlyRows] = useState<AudioAnalyticsHourlyRow[]>([])
   const [eventRows, setEventRows] = useState<AudioOrderEventListRow[]>([])
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
 
   async function load(next?: { start?: string; end?: string; sessionId?: string }) {
     setLoading(true)
@@ -133,6 +137,54 @@ export default function AudioAnalyticsDashboardClient() {
     })
   }
 
+  async function handleImport() {
+    if (!importFile) return
+
+    setImportLoading(true)
+    setImportError(null)
+    setImportMessage(null)
+
+    try {
+      const text = await importFile.text()
+      const payload = JSON.parse(text)
+
+      const data = await fetchApi<{
+        session: { id: string }
+        chunk_count: number
+        transcript_count: number
+        order_event_count: number
+      }>('/api/audio/import-transcripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      setImportMessage(
+        `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント ${data.order_event_count}件`
+      )
+
+      const nextSessionId = String(data.session?.id ?? '').trim()
+      if (nextSessionId) {
+        setSessionId(nextSessionId)
+        await load({
+          start: start.trim() || undefined,
+          end: end.trim() || undefined,
+          sessionId: nextSessionId,
+        })
+      } else {
+        await load({
+          start: start.trim() || undefined,
+          end: end.trim() || undefined,
+          sessionId: sessionId.trim() || undefined,
+        })
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'JSONインポートに失敗しました')
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -140,6 +192,59 @@ export default function AudioAnalyticsDashboardClient() {
         <p className="text-sm text-gray-500 mb-6">
           店員音声から推定した商品別販売数と、時間帯別の注文傾向を確認します。
         </p>
+
+        <div className="soft-panel mb-6 border border-[#f3dfb4] bg-[#fffaf0]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full bg-[#fff4dd] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#b7791f]">
+                検証用 transcript import
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-main">文字起こしJSONを取り込む</h2>
+              <p className="mt-2 text-sm leading-7 text-sub">
+                外部で作った文字起こしデータや、サンプルJSONをそのまま取り込めます。取り込み後は、この画面で商品別集計と注文イベント明細を確認できます。
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="mb-2 block text-sm text-sub">JSONファイル</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={(event) => {
+                  setImportFile(event.target.files?.[0] ?? null)
+                  setImportError(null)
+                  setImportMessage(null)
+                }}
+                className="w-full rounded-2xl border border-soft bg-white px-4 py-3 text-main"
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleImport}
+                className="rounded-2xl bg-[#b7791f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9f6518] disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!importFile || importLoading}
+              >
+                {importLoading ? '取り込み中...' : 'JSONを取り込む'}
+              </button>
+            </div>
+          </div>
+
+          {importError && (
+            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {importError}
+            </div>
+          )}
+
+          {importMessage && (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {importMessage}
+            </div>
+          )}
+        </div>
 
         <div className="soft-panel">
           <h2 className="text-lg font-semibold text-main mb-4">集計条件</h2>
