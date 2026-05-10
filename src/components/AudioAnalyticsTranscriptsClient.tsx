@@ -19,6 +19,10 @@ function formatConfidence(value: number | null | undefined) {
   return `${Math.round(value * 100)}%`
 }
 
+function shortId(value: string) {
+  return value.length > 14 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value
+}
+
 export default function AudioAnalyticsTranscriptsClient() {
   const [transcripts, setTranscripts] = useState<AudioTranscriptListRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,17 +75,43 @@ export default function AudioAnalyticsTranscriptsClient() {
     void load()
   }
 
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">音声Transcript</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          音声認識テキストと、そこから抽出した商品・数量を時系列で確認します。
-        </p>
+  const extractedCount = transcripts.filter((item) => item.extracted_events.length > 0).length
+  const unmatchedCount = transcripts.length - extractedCount
 
-        <div className="soft-panel">
-          <h2 className="text-lg font-semibold text-main mb-4">絞り込み</h2>
-          <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
+  return (
+    <div className="space-y-6">
+      <div className="soft-panel rounded-[32px] border border-[#efe7d7] bg-[linear-gradient(180deg,#fffdf9_0%,#fff8ee_100%)] px-8 py-8">
+        <div className="inline-flex rounded-full bg-[#fff1cf] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#a96a11]">
+          Experimental transcript review
+        </div>
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-main">音声Transcript</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-sub">
+          音声認識テキストと、そこから抽出した商品・数量を時系列で確認します。未抽出の発話もそのまま見られるので、alias の追加や認識改善の確認に向いています。
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3 text-xs text-sub">
+          <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+            transcript {transcripts.length} 件
+          </span>
+          <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+            抽出成功 {extractedCount} 件
+          </span>
+          <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+            未抽出 {unmatchedCount} 件
+          </span>
+        </div>
+      </div>
+
+      <div className="soft-panel rounded-[28px]">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-main">絞り込み</h2>
+            <p className="mt-1 text-sm text-sub">日付と session を指定して transcript を追い込みます。</p>
+          </div>
+          <div className="rounded-full bg-[#f7f4ee] px-3 py-1 text-xs text-sub">
+            最新 100 件を表示
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
             <label className="block">
               <span className="text-sm text-sub block mb-2">開始日</span>
               <input
@@ -130,7 +160,6 @@ export default function AudioAnalyticsTranscriptsClient() {
             >
               クリア
             </button>
-          </div>
         </div>
       </div>
 
@@ -149,56 +178,90 @@ export default function AudioAnalyticsTranscriptsClient() {
       ) : (
         <div className="space-y-4">
           {transcripts.map((transcript) => (
-            <div key={transcript.id} className="soft-card p-5 bg-white">
-              <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
-                <div>
-                  <p className="text-sm text-sub">{formatDateTime(transcript.spoken_at)}</p>
-                  <p className="text-xs text-sub mt-1">
-                    speaker: {transcript.speaker_type} / confidence: {formatConfidence(transcript.confidence)}
-                  </p>
-                </div>
-                <div className="text-xs text-sub">
-                  <p>session: {transcript.session_id}</p>
-                  <p>chunk: {transcript.chunk_id}</p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-soft bg-[#fffdf9] p-4 mb-4">
-                <p className="text-xs text-sub mb-2">認識テキスト</p>
-                <p className="text-main whitespace-pre-wrap leading-7">{transcript.transcript_text}</p>
-              </div>
-
-              <div>
-                <p className="text-xs text-sub mb-2">抽出イベント</p>
-                {transcript.extracted_events.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-soft bg-white p-4 text-sm text-sub">
-                    抽出された商品・数量はありません。
+            <div key={transcript.id} className="soft-card rounded-[28px] border border-[#ece6da] bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
+              <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-semibold text-[#2457c5]">
+                      {formatDateTime(transcript.spoken_at)}
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        transcript.extracted_events.length > 0
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {transcript.extracted_events.length > 0 ? '抽出済み' : '未抽出'}
+                    </span>
                   </div>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {transcript.extracted_events.map((event) => (
-                      <div
-                        key={event.id}
-                        className="rounded-2xl border border-soft bg-white p-4"
-                      >
-                        <p className="text-sm font-semibold text-main">
-                          {event.normalized_product_name ?? event.product_name_raw}
-                        </p>
-                        <p className="text-xs text-sub mt-1">
-                          raw: {event.product_name_raw}
-                        </p>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                            数量 {event.quantity}
-                          </span>
-                          <span className="text-xs text-sub">
+                  <div className="flex flex-wrap gap-2 text-xs text-sub">
+                    <span className="rounded-full bg-[#f7f4ee] px-3 py-1">
+                      speaker: {transcript.speaker_type}
+                    </span>
+                    <span className="rounded-full bg-[#f7f4ee] px-3 py-1">
+                      confidence: {formatConfidence(transcript.confidence)}
+                    </span>
+                    <span className="rounded-full bg-[#f7f4ee] px-3 py-1">
+                      transcript: {shortId(transcript.id)}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid gap-2 text-xs text-sub sm:text-right">
+                  <div>
+                    <p className="font-semibold text-main">session</p>
+                    <p>{shortId(transcript.session_id)}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-main">chunk</p>
+                    <p>{shortId(transcript.chunk_id)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-[24px] border border-soft bg-[#fffdf9] p-5">
+                  <p className="text-[11px] font-semibold tracking-[0.08em] text-sub uppercase">認識テキスト</p>
+                  <p className="mt-3 whitespace-pre-wrap text-base leading-8 text-main">{transcript.transcript_text}</p>
+                </div>
+
+                <div className="rounded-[24px] border border-soft bg-[#fcfbf8] p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold tracking-[0.08em] text-sub uppercase">抽出イベント</p>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs text-sub ring-1 ring-[#ebe3d4]">
+                      {transcript.extracted_events.length} 件
+                    </span>
+                  </div>
+                  {transcript.extracted_events.length === 0 ? (
+                    <div className="rounded-[20px] border border-dashed border-[#e8dcc8] bg-white px-4 py-5 text-sm leading-7 text-sub">
+                      この発話からは商品・数量を抽出できていません。alias を追加するか、認識テキストを見直す候補です。
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {transcript.extracted_events.map((event) => (
+                        <div
+                          key={event.id}
+                          className="rounded-[20px] border border-[#e8e1d3] bg-white px-4 py-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-main">
+                                {event.normalized_product_name ?? event.product_name_raw}
+                              </p>
+                              <p className="mt-1 text-xs text-sub">raw: {event.product_name_raw}</p>
+                            </div>
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                              数量 {event.quantity}
+                            </span>
+                          </div>
+                          <div className="mt-3 text-xs text-sub">
                             confidence: {formatConfidence(event.confidence)}
-                          </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}

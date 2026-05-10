@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
@@ -32,6 +33,10 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(parsed)
+}
+
+function formatSessionDisplay(value: string) {
+  return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value
 }
 
 function buildQuery(params: { start?: string; end?: string; sessionId?: string }) {
@@ -188,29 +193,61 @@ export default function AudioAnalyticsDashboardClient() {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">音声ダッシュボード</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          店員音声から推定した商品別販売数と、時間帯別の注文傾向を確認します。
+    <div className="space-y-6">
+      <div className="soft-panel rounded-[32px] border border-[#efe7d7] bg-[linear-gradient(180deg,#fffdf9_0%,#fff8ee_100%)] px-8 py-8">
+        <div className="inline-flex rounded-full bg-[#fff1cf] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#a96a11]">
+          Experimental audio analytics
+        </div>
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-main">音声ダッシュボード</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-sub">
+          店員音声から推定した商品別販売数と、時間帯別の注文傾向を確認します。転記用の集計と、イベント単位の明細を同じ画面で見られる状態にしています。
         </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Link
+            href="/audio-analytics/transcripts"
+            className="inline-flex items-center rounded-2xl bg-[#2f5fd0] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#244fb4]"
+          >
+            音声Transcriptを見る
+          </Link>
+          <span className="text-xs text-sub">
+            認識テキストと未抽出発話の確認はこちら
+          </span>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-3 text-xs text-sub">
+          <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+            推定販売数 {formatCount(summary.totalQuantity)} 個
+          </span>
+          <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+            注文イベント {formatCount(summary.totalOrders)} 件
+          </span>
+          {sessionId.trim() && (
+            <span className="rounded-full bg-white/90 px-3 py-1 ring-1 ring-[#ebe3d4]">
+              session {formatSessionDisplay(sessionId.trim())}
+            </span>
+          )}
+        </div>
+      </div>
 
-        <div className="soft-panel mb-6 border border-[#f3dfb4] bg-[#fffaf0]">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="inline-flex rounded-full bg-[#fff4dd] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#b7791f]">
-                検証用 transcript import
-              </div>
-              <h2 className="mt-3 text-lg font-semibold text-main">文字起こしJSONを取り込む</h2>
-              <p className="mt-2 text-sm leading-7 text-sub">
-                外部で作った文字起こしデータや、サンプルJSONをそのまま取り込めます。取り込み後は、この画面で商品別集計と注文イベント明細を確認できます。
-              </p>
+      <div className="soft-panel rounded-[28px] border border-[#f0dfbd] bg-[linear-gradient(180deg,#fffefb_0%,#fff8eb_100%)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex rounded-full bg-[#fff4dd] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#b7791f]">
+              検証用 transcript import
             </div>
+            <h2 className="mt-3 text-lg font-semibold text-main">文字起こしJSONを取り込む</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-sub">
+              外部で作った文字起こしデータや、サンプルJSONをそのまま取り込めます。取り込み後は、この画面で商品別集計と注文イベント明細を確認できます。
+            </p>
           </div>
+          <div className="rounded-full bg-white/90 px-3 py-1 text-xs text-sub ring-1 ring-[#eadfcf]">
+            開発・検証向け
+          </div>
+        </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto]">
-            <label className="block">
-              <span className="mb-2 block text-sm text-sub">JSONファイル</span>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
+          <label className="block">
+            <span className="mb-2 block text-sm text-sub">JSONファイル</span>
+            <div className="rounded-[24px] border border-dashed border-[#ddcfba] bg-white px-4 py-4">
               <input
                 type="file"
                 accept=".json,application/json"
@@ -219,38 +256,50 @@ export default function AudioAnalyticsDashboardClient() {
                   setImportError(null)
                   setImportMessage(null)
                 }}
-                className="w-full rounded-2xl border border-soft bg-white px-4 py-3 text-main"
+                className="w-full text-sm text-main file:mr-4 file:rounded-xl file:border-0 file:bg-[#f4efe6] file:px-4 file:py-2 file:font-semibold file:text-main hover:file:bg-[#ece4d7]"
               />
-            </label>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={handleImport}
-                className="rounded-2xl bg-[#b7791f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9f6518] disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!importFile || importLoading}
-              >
-                {importLoading ? '取り込み中...' : 'JSONを取り込む'}
-              </button>
+              <p className="mt-3 text-xs text-sub">
+                {importFile ? `選択中: ${importFile.name}` : 'sample transcript JSON または外部文字起こしJSONを選択してください。'}
+              </p>
             </div>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleImport}
+              className="min-w-[180px] rounded-2xl bg-[#b7791f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9f6518] disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!importFile || importLoading}
+            >
+              {importLoading ? '取り込み中...' : 'JSONを取り込む'}
+            </button>
           </div>
-
-          {importError && (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {importError}
-            </div>
-          )}
-
-          {importMessage && (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {importMessage}
-            </div>
-          )}
         </div>
 
-        <div className="soft-panel">
-          <h2 className="text-lg font-semibold text-main mb-4">集計条件</h2>
-          <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
+        {importError && (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {importError}
+          </div>
+        )}
+
+        {importMessage && (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {importMessage}
+          </div>
+        )}
+      </div>
+
+      <div className="soft-panel rounded-[28px]">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-main">集計条件</h2>
+            <p className="mt-1 text-sm text-sub">日付と session を指定して、集計対象を絞り込みます。</p>
+          </div>
+          <div className="rounded-full bg-[#f7f4ee] px-3 py-1 text-xs text-sub">
+            転記・検証の両方に使えます
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
             <label className="block">
               <span className="text-sm text-sub block mb-2">開始日</span>
               <input
@@ -299,7 +348,6 @@ export default function AudioAnalyticsDashboardClient() {
             >
               クリア
             </button>
-          </div>
         </div>
       </div>
 
@@ -343,7 +391,7 @@ export default function AudioAnalyticsDashboardClient() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="soft-card p-5 bg-white">
+            <div className="soft-card rounded-[28px] border border-[#ece6da] bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-main">商品ランキング</h2>
                 <p className="text-sm text-sub mt-1">推定販売数量の多い順に表示しています。</p>
@@ -375,7 +423,7 @@ export default function AudioAnalyticsDashboardClient() {
               )}
             </div>
 
-            <div className="soft-card p-5 bg-white">
+            <div className="soft-card rounded-[28px] border border-[#ece6da] bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-main">時間帯別推移</h2>
                 <p className="text-sm text-sub mt-1">推定販売数量の多い時間帯を確認できます。</p>
@@ -409,12 +457,17 @@ export default function AudioAnalyticsDashboardClient() {
             </div>
           </div>
 
-          <div className="soft-card p-5 bg-white">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-main">転記用 商品別集計</h2>
-              <p className="text-sm text-sub mt-1">
-                指定期間で、どの商品が何個出たかをそのまま確認できます。後からPOSへ手入力する用途を想定しています。
-              </p>
+          <div className="soft-card rounded-[28px] border border-[#ece6da] bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-main">転記用 商品別集計</h2>
+                <p className="text-sm text-sub mt-1">
+                  指定期間で、どの商品が何個出たかをそのまま確認できます。後からPOSへ手入力する用途を想定しています。
+                </p>
+              </div>
+              <div className="rounded-full bg-[#f5f7ff] px-3 py-1 text-xs font-semibold text-[#355fd1]">
+                合計 {formatCount(summary.totalQuantity)} 個
+              </div>
             </div>
 
             {productRows.length === 0 ? (
@@ -445,12 +498,17 @@ export default function AudioAnalyticsDashboardClient() {
             )}
           </div>
 
-          <div className="soft-card p-5 bg-white">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-main">注文イベント明細</h2>
-              <p className="text-sm text-sub mt-1">
-                裏側では、何時何分に何が何個出たかをイベント単位で保持しています。分析や手動転記の確認に使えます。
-              </p>
+          <div className="soft-card rounded-[28px] border border-[#ece6da] bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-main">注文イベント明細</h2>
+                <p className="text-sm text-sub mt-1">
+                  裏側では、何時何分に何が何個出たかをイベント単位で保持しています。分析や手動転記の確認に使えます。
+                </p>
+              </div>
+              <div className="rounded-full bg-[#f7f4ee] px-3 py-1 text-xs text-sub">
+                明細 {formatCount(eventRows.length)} 件
+              </div>
             </div>
 
             {eventRows.length === 0 ? (
@@ -463,6 +521,7 @@ export default function AudioAnalyticsDashboardClient() {
                   <thead className="bg-[#fbfaf7]">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold text-main">時刻</th>
+                      <th className="px-4 py-3 text-left font-semibold text-main">session</th>
                       <th className="px-4 py-3 text-left font-semibold text-main">商品</th>
                       <th className="px-4 py-3 text-right font-semibold text-main">数量</th>
                       <th className="px-4 py-3 text-left font-semibold text-main">認識テキスト</th>
@@ -472,6 +531,7 @@ export default function AudioAnalyticsDashboardClient() {
                     {eventRows.map((row) => (
                       <tr key={row.id}>
                         <td className="whitespace-nowrap px-4 py-3 text-sub">{formatDateTime(row.event_at)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sub">{formatSessionDisplay(row.session_id)}</td>
                         <td className="px-4 py-3 text-main">{row.normalized_product_name ?? row.product_name_raw}</td>
                         <td className="px-4 py-3 text-right font-semibold text-main">{formatCount(row.quantity)} 個</td>
                         <td className="px-4 py-3 text-sub">{row.transcript_text ?? '-'}</td>
