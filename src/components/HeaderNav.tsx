@@ -141,6 +141,17 @@ export default function HeaderNav() {
           { href: '/vendor/profile', label: '事業者設定' },
         ]
 
+  const experimentalItems =
+    role === 'organizer'
+      ? []
+      : [
+          {
+            href: '/audio-analytics',
+            label: '音声Analytics',
+            badge: '検証中',
+          },
+        ]
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -219,6 +230,27 @@ export default function HeaderNav() {
                     {item.label}
                   </Link>
                 ))}
+                {experimentalItems.length > 0 && (
+                  <>
+                    <div className="my-1 h-px bg-[var(--line-soft)]" />
+                    <div className="px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Experimental</p>
+                    </div>
+                    {experimentalItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-[var(--accent-blue-soft)] hover:text-[var(--accent-blue)]"
+                      >
+                        <span>{item.label}</span>
+                        <span className="rounded-full bg-[#fff4dd] px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-[#b7791f]">
+                          {item.badge}
+                        </span>
+                      </Link>
+                    ))}
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={handleSignOut}
