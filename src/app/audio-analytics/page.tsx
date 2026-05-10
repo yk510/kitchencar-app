@@ -5,6 +5,8 @@ import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
   AudioAnalyticsHourlyPayload,
   AudioAnalyticsHourlyRow,
+  AudioOrderEventListPayload,
+  AudioOrderEventListRow,
   AudioAnalyticsProductsPayload,
   AudioAnalyticsProductRow,
 } from '@/types/audio-analytics'
@@ -19,6 +21,17 @@ function getTodayDateText() {
 
 function formatCount(value: number) {
   return value.toLocaleString()
+}
+
+function formatDateTime(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
 }
 
 function buildQuery(params: { start?: string; end?: string; sessionId?: string }) {
@@ -37,6 +50,7 @@ export default function AudioAnalyticsDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [productRows, setProductRows] = useState<AudioAnalyticsProductRow[]>([])
   const [hourlyRows, setHourlyRows] = useState<AudioAnalyticsHourlyRow[]>([])
+  const [eventRows, setEventRows] = useState<AudioOrderEventListRow[]>([])
 
   async function load(next?: { start?: string; end?: string; sessionId?: string }) {
     setLoading(true)
@@ -49,21 +63,26 @@ export default function AudioAnalyticsDashboardPage() {
     })
 
     try {
-      const [products, hourly] = await Promise.all([
+      const [products, hourly, orderEvents] = await Promise.all([
         fetchApi<AudioAnalyticsProductsPayload>(`/api/audio/analytics/products?${query}`, {
           cache: 'no-store',
         }),
         fetchApi<AudioAnalyticsHourlyPayload>(`/api/audio/analytics/hourly?${query}`, {
           cache: 'no-store',
         }),
+        fetchApi<AudioOrderEventListPayload>(`/api/audio/order-events?${query}`, {
+          cache: 'no-store',
+        }),
       ])
 
       setProductRows(products.rows)
       setHourlyRows(hourly.rows)
+      setEventRows(orderEvents.rows)
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '音声Analyticsの取得に失敗しました')
       setProductRows([])
       setHourlyRows([])
+      setEventRows([])
     } finally {
       setLoading(false)
     }
@@ -189,7 +208,7 @@ export default function AudioAnalyticsDashboardPage() {
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="soft-card p-5 bg-white">
-              <p className="text-xs text-sub mb-2">本日の推定販売数</p>
+              <p className="text-xs text-sub mb-2">該当期間の推定販売数</p>
               <p className="text-2xl font-bold text-main">{formatCount(summary.totalQuantity)}</p>
             </div>
             <div className="soft-card p-5 bg-white">
@@ -281,6 +300,80 @@ export default function AudioAnalyticsDashboardPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="soft-card p-5 bg-white">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-main">転記用 商品別集計</h2>
+              <p className="text-sm text-sub mt-1">
+                指定期間で、どの商品が何個出たかをそのまま確認できます。後からPOSへ手入力する用途を想定しています。
+              </p>
+            </div>
+
+            {productRows.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-soft bg-white p-8 text-center text-sub">
+                商品別集計データがありません。
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-soft">
+                <table className="min-w-full divide-y divide-[var(--line-soft)] bg-white text-sm">
+                  <thead className="bg-[#fbfaf7]">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-main">商品名</th>
+                      <th className="px-4 py-3 text-right font-semibold text-main">推定数量</th>
+                      <th className="px-4 py-3 text-right font-semibold text-main">注文イベント件数</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line-soft)]">
+                    {productRows.map((row) => (
+                      <tr key={`${row.product_id ?? 'unknown'}-${row.product_name}`}>
+                        <td className="px-4 py-3 text-main">{row.product_name}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-main">{formatCount(row.total_quantity)} 個</td>
+                        <td className="px-4 py-3 text-right text-sub">{formatCount(row.order_event_count)} 件</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="soft-card p-5 bg-white">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-main">注文イベント明細</h2>
+              <p className="text-sm text-sub mt-1">
+                裏側では、何時何分に何が何個出たかをイベント単位で保持しています。分析や手動転記の確認に使えます。
+              </p>
+            </div>
+
+            {eventRows.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-soft bg-white p-8 text-center text-sub">
+                注文イベント明細がありません。
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-soft">
+                <table className="min-w-full divide-y divide-[var(--line-soft)] bg-white text-sm">
+                  <thead className="bg-[#fbfaf7]">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-main">時刻</th>
+                      <th className="px-4 py-3 text-left font-semibold text-main">商品</th>
+                      <th className="px-4 py-3 text-right font-semibold text-main">数量</th>
+                      <th className="px-4 py-3 text-left font-semibold text-main">認識テキスト</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line-soft)]">
+                    {eventRows.map((row) => (
+                      <tr key={row.id}>
+                        <td className="whitespace-nowrap px-4 py-3 text-sub">{formatDateTime(row.event_at)}</td>
+                        <td className="px-4 py-3 text-main">{row.normalized_product_name ?? row.product_name_raw}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-main">{formatCount(row.quantity)} 個</td>
+                        <td className="px-4 py-3 text-sub">{row.transcript_text ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

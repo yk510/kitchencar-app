@@ -111,6 +111,15 @@ export type AudioOrderEventMutationPayload = {
   events: AudioOrderEventRow[]
 }
 
+export type AudioOrderEventListRow = AudioOrderEventRow & {
+  transcript_text: string | null
+  speaker_type: AudioTranscriptSpeakerType | null
+}
+
+export type AudioOrderEventListPayload = {
+  rows: AudioOrderEventListRow[]
+}
+
 export type ProductAliasCreatePayload = {
   product_id: string
   alias: string
