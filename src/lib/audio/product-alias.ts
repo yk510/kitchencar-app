@@ -1,13 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, ProductMaster } from '@/types/database'
-import type { ProductAliasRow } from '@/types/audio-analytics'
+import type {
+  AudioImportCatalogProductInput,
+  ProductAliasRow,
+} from '@/types/audio-analytics'
 
 type ProductMasterRow = Database['public']['Tables']['product_master']['Row']
 
 export type AudioProductAliasMatchSource = 'product_master' | 'product_aliases'
 
 export type AudioProductAliasEntry = {
-  productId: string
+  productId: string | null
   productName: string
   matchedAlias: string
   normalizedAlias: string
@@ -16,9 +19,9 @@ export type AudioProductAliasEntry = {
 
 export type AudioProductAliasConflict = {
   normalizedAlias: string
-  keptProductId: string
+  keptProductId: string | null
   keptProductName: string
-  skippedProductId: string
+  skippedProductId: string | null
   skippedProductName: string
   skippedAlias: string
   source: AudioProductAliasMatchSource
@@ -56,7 +59,7 @@ export function normalizeAudioProductAlias(rawValue: string | null | undefined) 
 }
 
 function buildAliasEntry(
-  product: ProductMaster,
+  product: { id: string | null; product_name: string },
   alias: string,
   source: AudioProductAliasMatchSource,
   normalizedAlias = normalizeAudioProductAlias(alias)
@@ -76,7 +79,8 @@ function buildAliasEntry(
 
 export function buildAudioProductAliasDictionary(
   products: ProductMasterRow[],
-  aliases: ProductAliasRow[]
+  aliases: ProductAliasRow[],
+  importCatalogProducts: AudioImportCatalogProductInput[] = []
 ): AudioProductAliasDictionary {
   const byProductId = new Map(products.map((product) => [product.id, product]))
   const byNormalizedAlias = new Map<string, AudioProductAliasEntry>()
@@ -128,6 +132,24 @@ export function buildAudioProductAliasDictionary(
     }
   }
 
+  for (const importProduct of importCatalogProducts) {
+    const productName = String(importProduct.product_name ?? '').trim()
+    if (!productName) continue
+
+    const productRef = { id: null, product_name: productName }
+    const canonicalEntry = buildAliasEntry(productRef, productName, 'product_master')
+    if (canonicalEntry) {
+      registerEntry(canonicalEntry)
+    }
+
+    for (const alias of importProduct.aliases ?? []) {
+      const aliasEntry = buildAliasEntry(productRef, alias, 'product_aliases')
+      if (aliasEntry) {
+        registerEntry(aliasEntry)
+      }
+    }
+  }
+
   return {
     products,
     aliases,
@@ -151,7 +173,8 @@ export function resolveAudioProductAlias(
 
 export async function loadAudioProductAliasDictionary(
   supabase: SupabaseClient<Database>,
-  userId: string
+  userId: string,
+  importCatalogProducts: AudioImportCatalogProductInput[] = []
 ) {
   const [productsResult, aliasesResult] = await Promise.all([
     supabase
@@ -176,6 +199,7 @@ export async function loadAudioProductAliasDictionary(
 
   return buildAudioProductAliasDictionary(
     productsResult.data ?? [],
-    aliasesResult.data ?? []
+    aliasesResult.data ?? [],
+    importCatalogProducts
   )
 }

@@ -4,6 +4,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { persistAudioTranscriptsWithEvents } from '@/lib/audio/persist-audio-transcripts'
 import type {
   AudioCaptureSessionStatus,
+  AudioImportCatalogProductInput,
   AudioTranscriptImportChunkInput,
   AudioTranscriptImportPayload,
   AudioTranscriptImportResultPayload,
@@ -80,6 +81,28 @@ function deriveSessionWindow(chunks: AudioTranscriptImportChunkInput[]) {
   }
 }
 
+function deriveImportCatalogProducts(payload: AudioTranscriptImportPayload): AudioImportCatalogProductInput[] {
+  if (Array.isArray(payload.product_catalog?.products) && payload.product_catalog.products.length > 0) {
+    return payload.product_catalog.products
+      .map((product) => ({
+        product_name: String(product.product_name ?? '').trim(),
+        aliases: Array.isArray(product.aliases)
+          ? product.aliases.map((alias) => String(alias ?? '').trim()).filter(Boolean)
+          : [],
+      }))
+      .filter((product) => product.product_name)
+  }
+
+  if (Array.isArray(payload.assumptions?.products) && payload.assumptions.products.length > 0) {
+    return payload.assumptions.products
+      .map((productName) => String(productName ?? '').trim())
+      .filter(Boolean)
+      .map((product_name) => ({ product_name, aliases: [] }))
+  }
+
+  return []
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireRouteSession(req, { includeProfile: false })
@@ -88,6 +111,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as AudioTranscriptImportPayload
     const chunks = normalizeImportChunks(body)
+    const importCatalogProducts = deriveImportCatalogProducts(body)
     const sessionWindow = deriveSessionWindow(chunks)
     const requestedStatus = normalizeText(body.session?.status) as AudioCaptureSessionStatus | null
     const sessionStatus =
@@ -145,7 +169,10 @@ export async function POST(req: NextRequest) {
         user.id,
         session.id,
         createdChunk.id,
-        chunk.transcripts
+        chunk.transcripts,
+        {
+          importCatalogProducts,
+        }
       )
 
       transcriptCount += result.transcripts.length

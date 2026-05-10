@@ -99,6 +99,11 @@ export type AudioTranscriptPersistInput = {
   confidence?: number | null
 }
 
+export type AudioImportCatalogProductInput = {
+  product_name: string
+  aliases?: string[]
+}
+
 export type AudioOrderEventCreateItem = {
   transcript_id: string
   product_id?: string | null
@@ -147,6 +152,12 @@ export type AudioTranscriptImportChunkInput = {
 export type AudioTranscriptImportPayload = {
   source_label?: string | null
   session?: AudioTranscriptImportSessionInput
+  product_catalog?: {
+    products: AudioImportCatalogProductInput[]
+  }
+  assumptions?: {
+    products?: string[]
+  }
   chunks?: AudioTranscriptImportChunkInput[]
   chunk_payload_templates?: Array<{
     chunk_label?: string | null

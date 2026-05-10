@@ -100,3 +100,20 @@ test('extractAudioOrderEvents returns empty when no product alias matches', () =
   const dictionary = buildAudioProductAliasDictionary([], [])
   assert.deepEqual(extractAudioOrderEvents(dictionary, 'たくさんください'), [])
 })
+
+test('extractAudioOrderEvents works with import catalog products even when product master is empty', () => {
+  const dictionary = buildAudioProductAliasDictionary([], [], [
+    { product_name: '牛すじカレー' },
+  ])
+
+  assert.deepEqual(extractAudioOrderEvents(dictionary, '牛すじカレー2つ'), [
+    {
+      productId: null,
+      productName: '牛すじカレー',
+      productNameRaw: '牛すじカレー',
+      normalizedProductName: '牛すじカレー',
+      quantity: 2,
+      sourceAlias: '牛すじカレー',
+    },
+  ])
+})

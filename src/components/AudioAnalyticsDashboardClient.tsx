@@ -160,7 +160,9 @@ export default function AudioAnalyticsDashboardClient() {
       })
 
       setImportMessage(
-        `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント ${data.order_event_count}件`
+        data.order_event_count > 0
+          ? `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント ${data.order_event_count}件`
+          : `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント 0件。商品マスタ未登録でも、JSON内の商品一覧があれば集計できます。`
       )
 
       const nextSessionId = String(data.session?.id ?? '').trim()

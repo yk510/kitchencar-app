@@ -1,6 +1,7 @@
 import { extractAudioOrderEvents } from '@/lib/audio/extract-order-events'
 import { loadAudioProductAliasDictionary } from '@/lib/audio/product-alias'
 import type {
+  AudioImportCatalogProductInput,
   AudioOrderEventCreateItem,
   AudioTranscriptCreateItem,
   AudioTranscriptListRow,
@@ -37,7 +38,10 @@ export async function persistAudioTranscriptsWithEvents(
   userId: string,
   sessionId: string,
   chunkId: string,
-  transcriptsInput: Array<AudioTranscriptCreateItem | AudioTranscriptPersistInput>
+  transcriptsInput: Array<AudioTranscriptCreateItem | AudioTranscriptPersistInput>,
+  options?: {
+    importCatalogProducts?: AudioImportCatalogProductInput[]
+  }
 ) {
   if (transcriptsInput.length === 0) {
     throw new Error('transcripts は1件以上必要です')
@@ -65,7 +69,11 @@ export async function persistAudioTranscriptsWithEvents(
     throw new Error(transcriptInsertError.message)
   }
 
-  const dictionary = await loadAudioProductAliasDictionary(supabase, userId)
+  const dictionary = await loadAudioProductAliasDictionary(
+    supabase,
+    userId,
+    options?.importCatalogProducts ?? []
+  )
   const eventRows: AudioOrderEventCreateItem[] = []
 
   ;(createdTranscripts ?? []).forEach((transcript: any) => {

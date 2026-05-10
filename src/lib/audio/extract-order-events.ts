@@ -9,7 +9,7 @@ const QUANTITY_TOKEN_PATTERN =
   /(\d+(?:つ|個|こ|杯|本|枚|点|食|人|名)?|[一二三四五六七八九十〇零]+(?:つ|個|こ|杯|本|枚|点|食|人|名)?|ひとつ|ふたつ|みっつ|よっつ|いつつ|むっつ|ななつ|やっつ|ここのつ|とお)/g
 
 export type ExtractedAudioOrderEvent = {
-  productId: string
+  productId: string | null
   productName: string
   productNameRaw: string
   normalizedProductName: string

@@ -86,3 +86,15 @@ test('resolveAudioProductAlias returns null for blank or unknown input', () => {
   assert.equal(resolveAudioProductAlias(dictionary, ''), null)
   assert.equal(resolveAudioProductAlias(dictionary, '知らない商品'), null)
 })
+
+test('buildAudioProductAliasDictionary can include import catalog products without product master rows', () => {
+  const dictionary = buildAudioProductAliasDictionary([], [], [
+    {
+      product_name: '牛すじカレー',
+      aliases: ['牛すじ'],
+    },
+  ])
+
+  assert.equal(resolveAudioProductAlias(dictionary, '牛すじカレー')?.productId, null)
+  assert.equal(resolveAudioProductAlias(dictionary, '牛すじ')?.productName, '牛すじカレー')
+})
