@@ -88,6 +88,10 @@ export type AudioTranscriptListPayload = {
   transcripts: AudioTranscriptListRow[]
 }
 
+export type AudioTranscriptMutationPayload = {
+  transcripts: AudioTranscriptListRow[]
+}
+
 export type AudioOrderEventCreateItem = {
   transcript_id: string
   product_id?: string | null
