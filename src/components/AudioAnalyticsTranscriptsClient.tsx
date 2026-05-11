@@ -101,7 +101,7 @@ export default function AudioAnalyticsTranscriptsClient() {
         </div>
       </div>
 
-      <div className="soft-panel rounded-[28px]">
+      <div className="soft-panel rounded-[28px] px-7 py-6 md:px-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-main">絞り込み</h2>
@@ -111,7 +111,8 @@ export default function AudioAnalyticsTranscriptsClient() {
             最新 100 件を表示
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
+        <div className="border-t border-[#ece7dd] pt-5">
+          <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
             <label className="block">
               <span className="text-sm text-sub block mb-2">開始日</span>
               <input
@@ -160,6 +161,7 @@ export default function AudioAnalyticsTranscriptsClient() {
             >
               クリア
             </button>
+          </div>
         </div>
       </div>
 

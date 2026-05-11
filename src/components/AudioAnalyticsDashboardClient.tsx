@@ -228,7 +228,7 @@ export default function AudioAnalyticsDashboardClient() {
         </div>
       </div>
 
-      <div className="soft-panel rounded-[28px] border border-[#f0dfbd] bg-[linear-gradient(180deg,#fffefb_0%,#fff8eb_100%)]">
+      <div className="soft-panel rounded-[28px] border border-[#f0dfbd] bg-[linear-gradient(180deg,#fffefb_0%,#fff8eb_100%)] px-7 py-6 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="inline-flex rounded-full bg-[#fff4dd] px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#b7791f]">
@@ -244,35 +244,37 @@ export default function AudioAnalyticsDashboardClient() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
-          <label className="block">
-            <span className="mb-2 block text-sm text-sub">JSONファイル</span>
-            <div className="rounded-[24px] border border-dashed border-[#ddcfba] bg-white px-4 py-4">
-              <input
-                type="file"
-                accept=".json,application/json"
-                onChange={(event) => {
-                  setImportFile(event.target.files?.[0] ?? null)
-                  setImportError(null)
-                  setImportMessage(null)
-                }}
-                className="w-full text-sm text-main file:mr-4 file:rounded-xl file:border-0 file:bg-[#f4efe6] file:px-4 file:py-2 file:font-semibold file:text-main hover:file:bg-[#ece4d7]"
-              />
-              <p className="mt-3 text-xs text-sub">
-                {importFile ? `選択中: ${importFile.name}` : 'sample transcript JSON または外部文字起こしJSONを選択してください。'}
-              </p>
-            </div>
-          </label>
+        <div className="mt-5 border-t border-[#efe3cf] pt-5">
+          <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="mb-2 block text-sm text-sub">JSONファイル</span>
+              <div className="rounded-[24px] border border-dashed border-[#ddcfba] bg-white px-4 py-4">
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(event) => {
+                    setImportFile(event.target.files?.[0] ?? null)
+                    setImportError(null)
+                    setImportMessage(null)
+                  }}
+                  className="w-full text-sm text-main file:mr-4 file:rounded-xl file:border-0 file:bg-[#f4efe6] file:px-4 file:py-2 file:font-semibold file:text-main hover:file:bg-[#ece4d7]"
+                />
+                <p className="mt-3 text-xs text-sub">
+                  {importFile ? `選択中: ${importFile.name}` : 'sample transcript JSON または外部文字起こしJSONを選択してください。'}
+                </p>
+              </div>
+            </label>
 
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={handleImport}
-              className="min-w-[180px] rounded-2xl bg-[#b7791f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9f6518] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!importFile || importLoading}
-            >
-              {importLoading ? '取り込み中...' : 'JSONを取り込む'}
-            </button>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleImport}
+                className="min-w-[180px] rounded-2xl bg-[#b7791f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9f6518] disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!importFile || importLoading}
+              >
+                {importLoading ? '取り込み中...' : 'JSONを取り込む'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -289,7 +291,7 @@ export default function AudioAnalyticsDashboardClient() {
         )}
       </div>
 
-      <div className="soft-panel rounded-[28px]">
+      <div className="soft-panel rounded-[28px] px-7 py-6 md:px-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-main">集計条件</h2>
@@ -299,7 +301,8 @@ export default function AudioAnalyticsDashboardClient() {
             転記・検証の両方に使えます
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
+        <div className="border-t border-[#ece7dd] pt-5">
+          <div className="grid gap-4 md:grid-cols-[180px_180px_1fr_auto_auto] items-end">
             <label className="block">
               <span className="text-sm text-sub block mb-2">開始日</span>
               <input
@@ -348,6 +351,7 @@ export default function AudioAnalyticsDashboardClient() {
             >
               クリア
             </button>
+          </div>
         </div>
       </div>
 
