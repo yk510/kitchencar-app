@@ -10,6 +10,7 @@ import type {
   AudioOrderEventListRow,
   AudioAnalyticsProductsPayload,
   AudioAnalyticsProductRow,
+  AudioTranscriptImportResultPayload,
 } from '@/types/audio-analytics'
 
 function getTodayDateText() {
@@ -60,6 +61,7 @@ export default function AudioAnalyticsDashboardClient() {
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [importResult, setImportResult] = useState<AudioTranscriptImportResultPayload | null>(null)
 
   async function load(next?: { start?: string; end?: string; sessionId?: string }) {
     setLoading(true)
@@ -148,26 +150,23 @@ export default function AudioAnalyticsDashboardClient() {
     setImportLoading(true)
     setImportError(null)
     setImportMessage(null)
+    setImportResult(null)
 
     try {
       const text = await importFile.text()
       const payload = JSON.parse(text)
 
-      const data = await fetchApi<{
-        session: { id: string }
-        chunk_count: number
-        transcript_count: number
-        order_event_count: number
-      }>('/api/audio/import-transcripts', {
+      const data = await fetchApi<AudioTranscriptImportResultPayload>('/api/audio/import-transcripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
 
+      setImportResult(data)
       setImportMessage(
-        data.order_event_count > 0
-          ? `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント ${data.order_event_count}件`
-          : `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント 0件。商品マスタ未登録でも、JSON内の商品一覧があれば集計できます。`
+        data.unmatched_transcript_count > 0
+          ? `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 抽出成功 ${data.matched_transcript_count}件 / 未抽出 ${data.unmatched_transcript_count}件`
+          : `取込完了: chunk ${data.chunk_count}件 / transcript ${data.transcript_count}件 / 注文イベント ${data.order_event_count}件`
       )
 
       const nextSessionId = String(data.session?.id ?? '').trim()
@@ -287,6 +286,64 @@ export default function AudioAnalyticsDashboardClient() {
         {importMessage && (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {importMessage}
+          </div>
+        )}
+
+        {importResult && (
+          <div className="mt-4 rounded-[24px] border border-[#e4ddd2] bg-white px-5 py-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-2xl bg-[#fbfaf7] px-4 py-4">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-sub uppercase">chunk</p>
+                <p className="mt-2 text-2xl font-bold text-main">{formatCount(importResult.chunk_count)}</p>
+              </div>
+              <div className="rounded-2xl bg-[#fbfaf7] px-4 py-4">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-sub uppercase">transcript</p>
+                <p className="mt-2 text-2xl font-bold text-main">{formatCount(importResult.transcript_count)}</p>
+              </div>
+              <div className="rounded-2xl bg-[#f0fbf5] px-4 py-4">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-emerald-700 uppercase">抽出成功</p>
+                <p className="mt-2 text-2xl font-bold text-emerald-700">{formatCount(importResult.matched_transcript_count)}</p>
+              </div>
+              <div className="rounded-2xl bg-[#fff7ed] px-4 py-4">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-amber-700 uppercase">未抽出</p>
+                <p className="mt-2 text-2xl font-bold text-amber-700">{formatCount(importResult.unmatched_transcript_count)}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-[#faf7f1] px-4 py-3 text-sm text-sub">
+              session: <span className="font-medium text-main">{formatSessionDisplay(importResult.session.id)}</span>
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-soft">
+              <table className="min-w-full divide-y divide-[var(--line-soft)] bg-white text-sm">
+                <thead className="bg-[#fbfaf7]">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-main">chunk</th>
+                    <th className="px-4 py-3 text-right font-semibold text-main">transcript</th>
+                    <th className="px-4 py-3 text-right font-semibold text-main">抽出成功</th>
+                    <th className="px-4 py-3 text-right font-semibold text-main">未抽出</th>
+                    <th className="px-4 py-3 text-right font-semibold text-main">注文イベント</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--line-soft)]">
+                  {importResult.chunks.map((chunk, index) => (
+                    <tr key={chunk.chunk_id}>
+                      <td className="px-4 py-3 text-main">{chunk.chunk_label || `chunk ${index + 1}`}</td>
+                      <td className="px-4 py-3 text-right text-main">{formatCount(chunk.transcript_count)}</td>
+                      <td className="px-4 py-3 text-right text-emerald-700">{formatCount(chunk.matched_transcript_count)}</td>
+                      <td className="px-4 py-3 text-right text-amber-700">{formatCount(chunk.unmatched_transcript_count)}</td>
+                      <td className="px-4 py-3 text-right text-sub">{formatCount(chunk.order_event_count)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {importResult.unmatched_transcript_count > 0 && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                一部 transcript は商品・数量を抽出できませんでした。`音声Transcriptを見る` から未抽出の発話を確認し、alias 追加や文字起こし見直しに進めます。
+              </div>
+            )}
           </div>
         )}
       </div>

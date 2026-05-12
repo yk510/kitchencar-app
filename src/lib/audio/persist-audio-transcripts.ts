@@ -139,8 +139,13 @@ export async function persistAudioTranscriptsWithEvents(
     extracted_events: eventsByTranscriptId.get(transcript.id) ?? [],
   }))
 
+  const matchedTranscriptCount = transcripts.filter((transcript) => transcript.extracted_events.length > 0).length
+  const unmatchedTranscriptCount = transcripts.length - matchedTranscriptCount
+
   return {
     transcripts,
     orderEventCount: createdEvents.length,
+    matchedTranscriptCount,
+    unmatchedTranscriptCount,
   }
 }

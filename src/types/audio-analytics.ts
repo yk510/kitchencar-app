@@ -170,6 +170,16 @@ export type AudioTranscriptImportResultPayload = {
   chunk_count: number
   transcript_count: number
   order_event_count: number
+  matched_transcript_count: number
+  unmatched_transcript_count: number
+  chunks: Array<{
+    chunk_id: string
+    chunk_label: string | null
+    transcript_count: number
+    order_event_count: number
+    matched_transcript_count: number
+    unmatched_transcript_count: number
+  }>
 }
 
 export type ProductAliasCreatePayload = {

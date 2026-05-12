@@ -141,6 +141,9 @@ export async function POST(req: NextRequest) {
 
     let transcriptCount = 0
     let orderEventCount = 0
+    let matchedTranscriptCount = 0
+    let unmatchedTranscriptCount = 0
+    const chunkResults: AudioTranscriptImportResultPayload['chunks'] = []
 
     for (const chunk of chunks) {
       const chunkWindow = deriveChunkWindow(chunk)
@@ -177,6 +180,16 @@ export async function POST(req: NextRequest) {
 
       transcriptCount += result.transcripts.length
       orderEventCount += result.orderEventCount
+      matchedTranscriptCount += result.matchedTranscriptCount
+      unmatchedTranscriptCount += result.unmatchedTranscriptCount
+      chunkResults.push({
+        chunk_id: createdChunk.id,
+        chunk_label: normalizeText(chunk.chunk_label),
+        transcript_count: result.transcripts.length,
+        order_event_count: result.orderEventCount,
+        matched_transcript_count: result.matchedTranscriptCount,
+        unmatched_transcript_count: result.unmatchedTranscriptCount,
+      })
     }
 
     const payload: AudioTranscriptImportResultPayload = {
@@ -184,6 +197,9 @@ export async function POST(req: NextRequest) {
       chunk_count: chunks.length,
       transcript_count: transcriptCount,
       order_event_count: orderEventCount,
+      matched_transcript_count: matchedTranscriptCount,
+      unmatched_transcript_count: unmatchedTranscriptCount,
+      chunks: chunkResults,
     }
 
     return apiOk(payload)
