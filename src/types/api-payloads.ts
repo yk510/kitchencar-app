@@ -156,6 +156,12 @@ export type StoreOrderScheduleRow = Database['public']['Tables']['store_order_sc
 export type StoreOrderScheduleInventoryRow = Database['public']['Tables']['store_order_schedule_inventories']['Row']
 export type MobileOrderInventoryAdjustmentRow = Database['public']['Tables']['mobile_order_inventory_adjustments']['Row']
 export type MobileOrderInventoryStatus = 'unmanaged' | 'not_set' | 'available' | 'low_stock' | 'sold_out'
+export type MobileOrderSource = Database['public']['Tables']['mobile_orders']['Row']['order_source']
+export type MobileOrderPaymentStatus = Database['public']['Tables']['mobile_orders']['Row']['payment_status']
+export type MobileOrderPaymentMethod = NonNullable<
+  Database['public']['Tables']['mobile_orders']['Row']['payment_method']
+>
+export type StorePosPaymentMethod = Exclude<MobileOrderPaymentMethod, 'card_online'>
 
 export type VendorMobileOrderSchedulesPayload = {
   store: VendorStoreRow
@@ -241,6 +247,14 @@ export type PublicMobileOrderCreatePayload = {
   items: PublicMobileOrderCreateItemPayload[]
 }
 
+export type StorePosCreatePayload = {
+  public_token: string
+  pickup_nickname: string
+  payment_method: StorePosPaymentMethod
+  pos_device_label?: string | null
+  items: PublicMobileOrderCreateItemPayload[]
+}
+
 export type PublicMobileOrderCheckoutResponse = {
   order_id: string
   checkout_url: string
@@ -267,6 +281,12 @@ export type VendorMobileOrderDashboardItem = MobileOrderItemRow & {
 export type VendorMobileOrderDashboardOrder = MobileOrderRow & {
   mobile_order_items: VendorMobileOrderDashboardItem[]
   mobile_order_notifications: MobileOrderNotificationRow[]
+}
+
+export type StorePosPaymentReceiptPayload = {
+  order_id: string
+  payment_status: Extract<MobileOrderPaymentStatus, 'paid'>
+  paid_at: string
 }
 
 export type VendorMobileOrderOrdersPayload = {

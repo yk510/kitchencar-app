@@ -400,8 +400,11 @@ export interface VendorStore {
   description: string | null
   hero_image_url: string | null
   is_mobile_order_enabled: boolean
+  is_store_pos_enabled: boolean
   is_accepting_orders: boolean
   line_official_account_id: string | null
+  store_pos_terminal_name: string | null
+  store_pos_enabled_payment_methods: StorePosPaymentMethod[]
   created_at: string
   updated_at: string
 }
@@ -488,6 +491,23 @@ export interface MobileOrderProductOptionGroup {
   sort_order: number
 }
 
+export type MobileOrderSource = 'mobile_order' | 'store_pos'
+
+export type MobileOrderPaymentStatus =
+  | 'pending'
+  | 'authorized'
+  | 'paid'
+  | 'failed'
+  | 'refunded'
+
+export type MobileOrderPaymentMethod =
+  | 'card_online'
+  | 'cash'
+  | 'paypay'
+  | 'other'
+
+export type StorePosPaymentMethod = Exclude<MobileOrderPaymentMethod, 'card_online'>
+
 export interface MobileOrder {
   id: string
   store_id: string
@@ -498,17 +518,22 @@ export interface MobileOrder {
   customer_line_user_id: string | null
   customer_line_display_name: string | null
   pickup_nickname: string
+  order_source: MobileOrderSource
   status: 'placed' | 'preparing' | 'ready' | 'picked_up' | 'cancelled'
-  payment_status: 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded'
+  payment_status: MobileOrderPaymentStatus
   payment_provider: string
+  payment_method: MobileOrderPaymentMethod | null
   payment_reference: string | null
   subtotal_amount: number
   tax_amount: number
   total_amount: number
   ordered_at: string
+  paid_at: string | null
   ready_notified_at: string | null
   picked_up_at: string | null
   cancelled_at: string | null
+  accepted_by_user_id: string | null
+  pos_device_label: string | null
   created_at: string
   updated_at: string
 }
