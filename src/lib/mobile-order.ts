@@ -30,6 +30,17 @@ function buildDefaultSlug(storeName: string, userId: string) {
   return normalized ? `${normalized}-${suffix}` : `store-${suffix}`
 }
 
+function buildLegacyOrderNumberPrefix(storeName: string, userId: string) {
+  const normalized = storeName.normalize('NFKC').toUpperCase()
+  const alpha = normalized.match(/[A-Z]/)?.[0]
+  if (alpha) return alpha
+
+  const fallbackFromUser = userId.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 1)
+  if (fallbackFromUser) return fallbackFromUser
+
+  return 'K'
+}
+
 function formatStoreCode(value: number) {
   return String(value).padStart(4, '0')
 }
@@ -86,21 +97,33 @@ export async function ensureVendorStoreResources(
     const storeName = buildDefaultStoreName(options?.businessName, user.email)
     const slug = buildDefaultSlug(storeName, user.id)
     const storeCode = await allocateStoreCode(supabase)
+    const legacyOrderNumberPrefix = buildLegacyOrderNumberPrefix(storeName, user.id)
 
-    const { data: insertedStore, error: insertStoreError } = await supabase
-      .from('vendor_stores')
-      .insert([
-        {
-          vendor_user_id: user.id,
-          store_name: storeName,
-          slug,
-          store_code: storeCode,
-          is_mobile_order_enabled: false,
-          is_accepting_orders: true,
-        },
-      ])
-      .select('*')
-      .single()
+    const tryInsert = async (includeLegacyPrefix: boolean) =>
+      await supabase
+        .from('vendor_stores')
+        .insert([
+          {
+            vendor_user_id: user.id,
+            store_name: storeName,
+            slug,
+            store_code: storeCode,
+            ...(includeLegacyPrefix ? { order_number_prefix: legacyOrderNumberPrefix } : {}),
+            is_mobile_order_enabled: false,
+            is_accepting_orders: true,
+          },
+        ])
+        .select('*')
+        .single()
+
+    let insertedStore: any = null
+    let insertStoreError: any = null
+
+    ;({ data: insertedStore, error: insertStoreError } = await tryInsert(true))
+
+    if (insertStoreError && String(insertStoreError.message ?? '').includes('order_number_prefix')) {
+      ;({ data: insertedStore, error: insertStoreError } = await tryInsert(false))
+    }
 
     if (insertStoreError) {
       throw new Error(insertStoreError.message)
