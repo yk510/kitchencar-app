@@ -74,6 +74,11 @@ async function allocateStoreCode(supabase: any) {
   throw new Error('店舗コードの上限に達しました')
 }
 
+function isDuplicateStoreCodeError(error: unknown) {
+  const message = String((error as { message?: string } | null)?.message ?? '')
+  return message.includes('idx_vendor_stores_store_code') || message.includes('vendor_stores_store_code_key')
+}
+
 export async function ensureVendorStoreResources(
   supabase: any,
   user: User,
@@ -96,7 +101,6 @@ export async function ensureVendorStoreResources(
   if (!store) {
     const storeName = buildDefaultStoreName(options?.businessName, user.email)
     const slug = buildDefaultSlug(storeName, user.id)
-    const storeCode = await allocateStoreCode(supabase)
     const legacyOrderNumberPrefix = buildLegacyOrderNumberPrefix(storeName, user.id)
 
     const tryInsert = async (includeLegacyPrefix: boolean) =>
@@ -107,7 +111,7 @@ export async function ensureVendorStoreResources(
             vendor_user_id: user.id,
             store_name: storeName,
             slug,
-            store_code: storeCode,
+            store_code: await allocateStoreCode(supabase),
             ...(includeLegacyPrefix ? { order_number_prefix: legacyOrderNumberPrefix } : {}),
             is_mobile_order_enabled: false,
             is_accepting_orders: true,
@@ -116,20 +120,46 @@ export async function ensureVendorStoreResources(
         .select('*')
         .single()
 
-    let insertedStore: any = null
-    let insertStoreError: any = null
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const { data: latestStore, error: latestStoreError } = await supabase
+        .from('vendor_stores')
+        .select('*')
+        .eq('vendor_user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
 
-    ;({ data: insertedStore, error: insertStoreError } = await tryInsert(true))
+      if (latestStoreError) {
+        throw new Error(latestStoreError.message)
+      }
 
-    if (insertStoreError && String(insertStoreError.message ?? '').includes('order_number_prefix')) {
-      ;({ data: insertedStore, error: insertStoreError } = await tryInsert(false))
+      if (latestStore) {
+        store = latestStore
+        break
+      }
+
+      let insertedStore: any = null
+      let insertStoreError: any = null
+
+      ;({ data: insertedStore, error: insertStoreError } = await tryInsert(true))
+
+      if (insertStoreError && String(insertStoreError.message ?? '').includes('order_number_prefix')) {
+        ;({ data: insertedStore, error: insertStoreError } = await tryInsert(false))
+      }
+
+      if (!insertStoreError) {
+        store = insertedStore
+        break
+      }
+
+      if (!isDuplicateStoreCodeError(insertStoreError)) {
+        throw new Error(insertStoreError.message)
+      }
     }
+  }
 
-    if (insertStoreError) {
-      throw new Error(insertStoreError.message)
-    }
-
-    store = insertedStore
+  if (!store) {
+    throw new Error('店舗情報の作成に失敗しました。時間を置いて再度お試しください。')
   }
 
   const { data: existingOrderPage, error: pageError } = await supabase
