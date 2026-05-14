@@ -66,6 +66,7 @@ export default function VendorMobileOrderPage() {
   const nextSchedule = useMemo(() => (data ? getNextSchedule(data.schedules) : null), [data])
   const liffId = process.env.NEXT_PUBLIC_LINE_LIFF_ID?.trim() ?? null
   const publicUrl = data ? `/order/${data.orderPage.public_token}` : null
+  const storePosUrl = data ? `/store-pos/${data.orderPage.public_token}` : null
   const publicOrderUrl = publicUrl && origin ? new URL(publicUrl, origin).toString() : publicUrl
   const liffOrderUrl = data && liffId
     ? `https://liff.line.me/${liffId}?token=${encodeURIComponent(data.orderPage.public_token)}`
@@ -106,6 +107,13 @@ export default function VendorMobileOrderPage() {
               className="rounded-full bg-[var(--accent-blue)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm"
             >
               注文管理を開く
+            </Link>
+            <Link
+              href={storePosUrl ?? '#'}
+              className="rounded-full bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600"
+              aria-disabled={!storePosUrl}
+            >
+              店頭POSを開く
             </Link>
             <Link
               href="/vendor/mobile-order/products"
@@ -292,6 +300,14 @@ export default function VendorMobileOrderPage() {
                 >
                   注文ダッシュボード: 受付済、調理中、完成、受取済の更新
                 </Link>
+                {storePosUrl ? (
+                  <Link
+                    href={storePosUrl}
+                    className="block rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 transition hover:border-amber-400 hover:bg-amber-100"
+                  >
+                    店頭POS画面: タブレットで開く対面注文用の画面
+                  </Link>
+                ) : null}
                 <p className="rounded-2xl border border-[var(--line-soft)] bg-white px-4 py-3">
                   固定QRページ: 一般ユーザーがLINE内から開く注文画面
                 </p>
