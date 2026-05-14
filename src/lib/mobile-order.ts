@@ -49,29 +49,11 @@ function formatDailySequence(value: number) {
   return String(value).padStart(4, '0')
 }
 
-async function allocateStoreCode(supabase: any) {
-  const { data, error } = await supabase
-    .from('vendor_stores')
-    .select('store_code')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const usedCodes = new Set(
-    ((data ?? []) as Array<{ store_code: string | null }>)
-      .map((row) => String(row.store_code ?? '').trim())
-      .filter(Boolean)
-  )
-
-  for (let nextValue = 1; nextValue <= 9999; nextValue += 1) {
-    const nextCode = formatStoreCode(nextValue)
-    if (!usedCodes.has(nextCode)) {
-      return nextCode
-    }
-  }
-
-  throw new Error('店舗コードの上限に達しました')
+async function allocateStoreCode() {
+  const min = 1
+  const max = 9999
+  const nextValue = Math.floor(Math.random() * (max - min + 1)) + min
+  return formatStoreCode(nextValue)
 }
 
 function isDuplicateStoreCodeError(error: unknown) {
@@ -128,7 +110,7 @@ export async function ensureVendorStoreResources(
             vendor_user_id: user.id,
             store_name: storeName,
             slug,
-            store_code: await allocateStoreCode(supabase),
+            store_code: await allocateStoreCode(),
             ...(includeLegacyPrefix ? { order_number_prefix: legacyOrderNumberPrefix } : {}),
             is_mobile_order_enabled: false,
             is_accepting_orders: true,
@@ -139,7 +121,7 @@ export async function ensureVendorStoreResources(
 
     let lastInsertError: any = null
 
-    for (let attempt = 0; attempt < 12; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
       const latestStore = await findExistingVendorStore(supabase, user.id)
       if (latestStore) {
         store = latestStore
