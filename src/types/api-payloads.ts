@@ -171,6 +171,18 @@ export type VendorMobileOrderSchedulesPayload = {
 
 export type VendorMobileOrderScheduleMutationPayload = StoreOrderScheduleRow
 
+export type VendorStorePosSettingsUpdatePayload = {
+  is_store_pos_enabled: boolean
+  store_pos_terminal_name: string | null
+  store_pos_enabled_payment_methods: StorePosPaymentMethod[]
+}
+
+export type VendorStorePosSettingsPayload = {
+  store: VendorStoreRow
+  orderPage: StoreOrderPageRow
+  persistence: 'hybrid' | 'notes_fallback'
+}
+
 export type MobileOrderProductRow = Database['public']['Tables']['mobile_order_products']['Row']
 
 export type VendorMobileOrderProductsPayload = {

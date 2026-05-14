@@ -3,7 +3,21 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
-import type { VendorMobileOrderSchedulesPayload } from '@/types/api-payloads'
+import type {
+  StorePosPaymentMethod,
+  VendorMobileOrderSchedulesPayload,
+  VendorStorePosSettingsPayload,
+} from '@/types/api-payloads'
+
+const STORE_POS_PAYMENT_METHOD_OPTIONS: Array<{
+  value: StorePosPaymentMethod
+  label: string
+  hint: string
+}> = [
+  { value: 'cash', label: '現金', hint: '現金受領でそのまま会計できます。' },
+  { value: 'paypay', label: 'PayPay', hint: 'QR 決済の受領用として表示します。' },
+  { value: 'other', label: 'その他', hint: 'その他の受領方法をまとめて扱います。' },
+]
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('ja-JP', {
@@ -38,6 +52,20 @@ export default function VendorMobileOrderPage() {
   const [error, setError] = useState<string | null>(null)
   const [origin, setOrigin] = useState<string | null>(null)
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
+  const [storePosEnabled, setStorePosEnabled] = useState(true)
+  const [storePosTerminalName, setStorePosTerminalName] = useState('front-tablet')
+  const [storePosPaymentMethods, setStorePosPaymentMethods] = useState<StorePosPaymentMethod[]>(['cash', 'paypay'])
+  const [savingStorePosSettings, setSavingStorePosSettings] = useState(false)
+  const [storePosSettingsMessage, setStorePosSettingsMessage] = useState<string | null>(null)
+
+  function hydrateStorePosSettings(source: VendorMobileOrderSchedulesPayload | null) {
+    setStorePosEnabled(source?.store.is_store_pos_enabled !== false)
+    setStorePosTerminalName(source?.store.store_pos_terminal_name?.trim() || 'front-tablet')
+    const methods = Array.isArray(source?.store.store_pos_enabled_payment_methods)
+      ? (source!.store.store_pos_enabled_payment_methods as StorePosPaymentMethod[])
+      : (['cash', 'paypay', 'other'] as StorePosPaymentMethod[])
+    setStorePosPaymentMethods(methods.length > 0 ? methods : (['cash', 'paypay', 'other'] as StorePosPaymentMethod[]))
+  }
 
   async function load() {
     try {
@@ -45,6 +73,7 @@ export default function VendorMobileOrderPage() {
         cache: 'no-store',
       })
       setData(response)
+      hydrateStorePosSettings(response)
       setError(null)
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'モバイルオーダー設定の取得に失敗しました')
@@ -61,6 +90,58 @@ export default function VendorMobileOrderPage() {
   useEffect(() => {
     setOrigin(window.location.origin)
   }, [])
+
+  function toggleStorePosPaymentMethod(method: StorePosPaymentMethod) {
+    setStorePosPaymentMethods((current) =>
+      current.includes(method) ? current.filter((value) => value !== method) : [...current, method]
+    )
+  }
+
+  async function handleSaveStorePosSettings() {
+    if (storePosPaymentMethods.length === 0) {
+      setStorePosSettingsMessage('支払方法を1つ以上選択してください')
+      return
+    }
+
+    setSavingStorePosSettings(true)
+    setStorePosSettingsMessage(null)
+
+    try {
+      const response = await fetchApi<VendorStorePosSettingsPayload>('/api/vendor/mobile-order/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_store_pos_enabled: storePosEnabled,
+          store_pos_terminal_name: storePosTerminalName,
+          store_pos_enabled_payment_methods: storePosPaymentMethods,
+        }),
+      })
+
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              store: response.store,
+              orderPage: response.orderPage,
+            }
+          : current
+      )
+      hydrateStorePosSettings({
+        store: response.store,
+        orderPage: response.orderPage,
+        schedules: data?.schedules ?? [],
+      })
+      setStorePosSettingsMessage(
+        response.persistence === 'notes_fallback'
+          ? '設定を保存しました。現行DBではメモ領域に互換保存しています。'
+          : '店頭POSの設定を更新しました。'
+      )
+    } catch (err) {
+      setStorePosSettingsMessage(err instanceof ApiClientError ? err.message : '店頭POS設定の保存に失敗しました')
+    } finally {
+      setSavingStorePosSettings(false)
+    }
+  }
 
   const currentSchedule = useMemo(() => (data ? getCurrentSchedule(data.schedules) : null), [data])
   const nextSchedule = useMemo(() => (data ? getNextSchedule(data.schedules) : null), [data])
@@ -129,11 +210,104 @@ export default function VendorMobileOrderPage() {
         {copyMessage && (
           <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{copyMessage}</p>
         )}
+        {storePosSettingsMessage && (
+          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">{storePosSettingsMessage}</p>
+        )}
 
         {loading ? (
           <div className="soft-panel p-6 text-sm text-gray-500">読み込み中...</div>
         ) : data ? (
         <>
+          <section className="soft-panel p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">店頭POSの支払方法設定</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  タブレット注文画面でお客様に見せる支払方法をここで管理します。
+                </p>
+              </div>
+              <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                POS画面と連動
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+              <div className="rounded-[28px] border border-[var(--line-soft)] bg-white px-5 py-5">
+                <label className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">店頭POSを有効にする</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      無効にすると、タブレット注文画面からの新規注文を止めます。
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-5 w-5 rounded border-[var(--line-soft)] text-[var(--accent-blue)]"
+                    checked={storePosEnabled}
+                    onChange={(event) => setStorePosEnabled(event.target.checked)}
+                  />
+                </label>
+
+                <div className="mt-5">
+                  <label className="text-sm font-semibold text-gray-700">端末ラベル</label>
+                  <input
+                    type="text"
+                    value={storePosTerminalName}
+                    onChange={(event) => setStorePosTerminalName(event.target.value)}
+                    placeholder="front-tablet"
+                    className="mt-2 w-full rounded-2xl border border-[var(--line-soft)] bg-[#fbfdff] px-4 py-3 text-sm text-gray-700 shadow-inner outline-none focus:border-[var(--accent-blue)]"
+                  />
+                  <p className="mt-2 text-xs text-gray-500">注文の発生元メモとして使う端末名です。</p>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-[var(--line-soft)] bg-white px-5 py-5">
+                <p className="text-sm font-semibold text-gray-800">お客様に見せる支払方法</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  {STORE_POS_PAYMENT_METHOD_OPTIONS.map((option) => {
+                    const checked = storePosPaymentMethods.includes(option.value)
+                    return (
+                      <label
+                        key={option.value}
+                        className={`rounded-[24px] border px-4 py-4 transition ${
+                          checked
+                            ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
+                            : 'border-[var(--line-soft)] bg-[#fbfdff]'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 rounded border-[var(--line-soft)] text-[var(--accent-blue)]"
+                            checked={checked}
+                            onChange={() => toggleStorePosPaymentMethod(option.value)}
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{option.label}</p>
+                            <p className="mt-1 text-xs leading-5 text-gray-500">{option.hint}</p>
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-gray-500">
+                    POS画面では、ここで選んだ支払方法だけを表示します。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveStorePosSettings()}
+                    disabled={savingStorePosSettings}
+                    className="rounded-full bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-50"
+                  >
+                    {savingStorePosSettings ? '保存中...' : 'POS設定を保存'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <section className="soft-panel p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">店舗</p>

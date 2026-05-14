@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import StorePosPageClient from '@/components/StorePosPageClient'
 import type { PublicMobileOrderPagePayload } from '@/types/api-payloads'
 
@@ -28,7 +29,7 @@ export default async function StorePosPage({ params }: StorePosPageProps) {
     notFound()
   }
 
-  const store = orderPage.vendor_stores
+  const store = applyStorePosSettingsToStore(orderPage.vendor_stores, orderPage)
 
   const { data: schedules, error: schedulesError } = await (supabase as any)
     .from('store_order_schedules')

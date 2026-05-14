@@ -7,6 +7,7 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
+import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type {
   MobileOrderOptionChoiceRow,
@@ -120,7 +121,7 @@ export async function GET(
     return apiError('注文ページが見つかりません', 404)
   }
 
-  const store = orderPage.vendor_stores
+  const store = applyStorePosSettingsToStore(orderPage.vendor_stores, orderPage)
 
   const [{ data: schedules, error: schedulesError }, { data: products, error: productsError }, { data: optionGroups, error: groupsError }, { data: optionChoices, error: choicesError }, { data: links, error: linksError }] =
     await Promise.all([

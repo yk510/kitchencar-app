@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { ensureVendorStoreResources } from '@/lib/mobile-order'
+import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import type {
   VendorMobileOrderScheduleMutationPayload,
   VendorMobileOrderSchedulesPayload,
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     }
 
     const payload: VendorMobileOrderSchedulesPayload = {
-      store,
+      store: applyStorePosSettingsToStore(store, orderPage),
       orderPage,
       schedules: schedules ?? [],
     }

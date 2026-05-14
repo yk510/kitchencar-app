@@ -5,6 +5,7 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
+import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import type {
   MobileOrderOptionChoiceRow,
   MobileOrderOptionGroupRow,
@@ -24,6 +25,7 @@ type OrderPageRecord = {
   id: string
   public_token: string
   status: string
+  notes?: string | null
 }
 
 export type PreparedMobileOrderItem = {
@@ -76,7 +78,7 @@ export async function preparePublicOrderDraft(
 
   const { data: orderPage, error: pageError } = await (supabase as any)
     .from('store_order_pages')
-    .select('id, public_token, status, vendor_stores!inner(*)')
+    .select('id, public_token, status, notes, vendor_stores!inner(*)')
     .eq('public_token', publicToken)
     .eq('status', 'published')
     .maybeSingle()
@@ -84,7 +86,7 @@ export async function preparePublicOrderDraft(
   if (pageError) throw new Error(pageError.message)
   if (!orderPage?.vendor_stores) throw new Error('注文ページが見つかりません')
 
-  const store = orderPage.vendor_stores as VendorStoreRow
+  const store = applyStorePosSettingsToStore(orderPage.vendor_stores as VendorStoreRow, orderPage)
 
   const { data: schedules, error: schedulesError } = await (supabase as any)
     .from('store_order_schedules')
@@ -252,6 +254,7 @@ export async function preparePublicOrderDraft(
       id: orderPage.id,
       public_token: orderPage.public_token,
       status: orderPage.status,
+      notes: orderPage.notes ?? null,
     },
     activeSchedule,
     pickupNickname,
