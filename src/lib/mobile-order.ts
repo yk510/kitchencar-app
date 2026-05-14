@@ -79,24 +79,41 @@ function isDuplicateStoreCodeError(error: unknown) {
   return message.includes('idx_vendor_stores_store_code') || message.includes('vendor_stores_store_code_key')
 }
 
+function isDuplicateStoreSlugError(error: unknown) {
+  const message = String((error as { message?: string } | null)?.message ?? '')
+  return message.includes('vendor_stores_slug_key')
+}
+
+function isRetryableVendorStoreInsertError(error: unknown) {
+  return isDuplicateStoreCodeError(error) || isDuplicateStoreSlugError(error)
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function findExistingVendorStore(supabase: any, userId: string) {
+  const { data, error } = await supabase
+    .from('vendor_stores')
+    .select('*')
+    .eq('vendor_user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data
+}
+
 export async function ensureVendorStoreResources(
   supabase: any,
   user: User,
   options?: { businessName?: string | null }
 ) {
-  const { data: existingStore, error: storeError } = await supabase
-    .from('vendor_stores')
-    .select('*')
-    .eq('vendor_user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (storeError) {
-    throw new Error(storeError.message)
-  }
-
-  let store = existingStore
+  let store = await findExistingVendorStore(supabase, user.id)
 
   if (!store) {
     const storeName = buildDefaultStoreName(options?.businessName, user.email)
@@ -120,19 +137,10 @@ export async function ensureVendorStoreResources(
         .select('*')
         .single()
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const { data: latestStore, error: latestStoreError } = await supabase
-        .from('vendor_stores')
-        .select('*')
-        .eq('vendor_user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
+    let lastInsertError: any = null
 
-      if (latestStoreError) {
-        throw new Error(latestStoreError.message)
-      }
-
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const latestStore = await findExistingVendorStore(supabase, user.id)
       if (latestStore) {
         store = latestStore
         break
@@ -152,9 +160,21 @@ export async function ensureVendorStoreResources(
         break
       }
 
-      if (!isDuplicateStoreCodeError(insertStoreError)) {
+      lastInsertError = insertStoreError
+
+      if (!isRetryableVendorStoreInsertError(insertStoreError)) {
         throw new Error(insertStoreError.message)
       }
+
+      await sleep(50 * (attempt + 1))
+    }
+
+    if (!store) {
+      store = await findExistingVendorStore(supabase, user.id)
+    }
+
+    if (!store && lastInsertError) {
+      throw new Error(lastInsertError.message)
     }
   }
 
