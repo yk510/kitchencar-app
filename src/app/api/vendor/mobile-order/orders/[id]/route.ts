@@ -14,6 +14,43 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   cancelled: [],
 }
 
+function isStorePosOrder(order: { payment_provider?: string | null }) {
+  return String(order.payment_provider ?? '').startsWith('store_pos_')
+}
+
+async function updateOrderPaymentReceipt(supabase: any, orderId: string, actorUserId: string) {
+  const paidAt = new Date().toISOString()
+  const fullPatch = {
+    payment_status: 'paid',
+    paid_at: paidAt,
+    accepted_by_user_id: actorUserId,
+  }
+
+  let result = await supabase
+    .from('mobile_orders')
+    .update(fullPatch)
+    .eq('id', orderId)
+    .select('*')
+    .single()
+
+  const message = String(result.error?.message ?? '')
+  if (
+    result.error &&
+    (message.includes('paid_at') || message.includes('accepted_by_user_id'))
+  ) {
+    result = await supabase
+      .from('mobile_orders')
+      .update({
+        payment_status: 'paid',
+      })
+      .eq('id', orderId)
+      .select('*')
+      .single()
+  }
+
+  return result
+}
+
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -30,9 +67,10 @@ export async function PATCH(
 
   try {
     const body = await req.json()
+    const action = String(body.action ?? '').trim()
     const nextStatus = String(body.status ?? '').trim()
 
-    if (!ALLOWED_STATUSES.includes(nextStatus as (typeof ALLOWED_STATUSES)[number])) {
+    if (!action && !ALLOWED_STATUSES.includes(nextStatus as (typeof ALLOWED_STATUSES)[number])) {
       return apiError('不正な注文ステータスです', 400)
     }
 
@@ -44,6 +82,43 @@ export async function PATCH(
 
     if (currentError || !currentOrder) {
       return apiError('対象の注文が見つかりません', 404)
+    }
+
+    if (action === 'receive_payment') {
+      if (!isStorePosOrder(currentOrder)) {
+        return apiError('POS注文以外では料金受領できません', 409)
+      }
+
+      if (currentOrder.payment_status === 'paid') {
+        return apiError('この注文はすでに受領済みです', 409)
+      }
+
+      const { data: paidOrder, error: paymentUpdateError } = await updateOrderPaymentReceipt(
+        supabase,
+        currentOrder.id,
+        user.id
+      )
+
+      if (paymentUpdateError || !paidOrder) {
+        return apiError(paymentUpdateError?.message ?? '料金受領の更新に失敗しました')
+      }
+
+      await (supabase as any).from('mobile_order_audit_logs').insert([
+        {
+          order_id: currentOrder.id,
+          actor_user_id: user.id,
+          action_type: 'payment_received',
+          before_status: currentOrder.payment_status,
+          after_status: 'paid',
+          payload: {
+            payment_provider: currentOrder.payment_provider,
+            received_at: new Date().toISOString(),
+          },
+        },
+      ])
+
+      const payload: VendorMobileOrderOrderMutationPayload = paidOrder
+      return apiOk(payload)
     }
 
     const allowedNext = STATUS_TRANSITIONS[currentOrder.status] ?? []

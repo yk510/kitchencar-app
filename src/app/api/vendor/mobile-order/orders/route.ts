@@ -19,6 +19,10 @@ function pickSelectedSchedule(schedules: StoreOrderScheduleRow[], requestedSched
   return schedules[0] ?? null
 }
 
+function isStorePosOrder(order: { payment_provider?: string | null }) {
+  return String(order.payment_provider ?? '').startsWith('store_pos_')
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
@@ -62,14 +66,20 @@ export async function GET(req: NextRequest) {
         .select('*, mobile_order_items(*, mobile_order_item_option_choices(*)), mobile_order_notifications(*)')
         .eq('store_id', store.id)
         .eq('schedule_id', selectedSchedule.id)
-        .in('payment_status', ['paid', 'authorized'])
         .order('ordered_at', { ascending: false })
 
       if (error) {
         return apiError(error.message)
       }
 
-      orders = (data ?? []) as VendorMobileOrderDashboardOrder[]
+      const source = (data ?? []) as VendorMobileOrderDashboardOrder[]
+      orders = source.filter((order) => {
+        if (isStorePosOrder(order)) {
+          return ['pending', 'paid', 'authorized'].includes(order.payment_status)
+        }
+
+        return ['paid', 'authorized'].includes(order.payment_status)
+      })
     }
 
     const payload: VendorMobileOrderOrdersPayload = {

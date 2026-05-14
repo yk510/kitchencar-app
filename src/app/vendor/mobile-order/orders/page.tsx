@@ -43,6 +43,25 @@ const NEXT_ACTIONS: Record<string, Array<{ status: string; label: string }>> = {
   cancelled: [],
 }
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: '未受領',
+  authorized: '支払済み',
+  paid: '受領済み',
+  failed: '失敗',
+  refunded: '返金済み',
+}
+
+function isStorePosOrder(order: { payment_provider?: string | null }) {
+  return String(order.payment_provider ?? '').startsWith('store_pos_')
+}
+
+function getStorePosPaymentMethodLabel(order: { payment_provider?: string | null }) {
+  if (order.payment_provider === 'store_pos_cash') return '現金'
+  if (order.payment_provider === 'store_pos_paypay') return 'PayPay'
+  if (order.payment_provider === 'store_pos_other') return 'その他'
+  return '店頭POS'
+}
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('ja-JP', {
     month: 'numeric',
@@ -89,6 +108,7 @@ export default function VendorMobileOrderOrdersPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
+  const [pendingPaymentReceiptOrderId, setPendingPaymentReceiptOrderId] = useState<string | null>(null)
   const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [notificationBanner, setNotificationBanner] = useState<string | null>(null)
@@ -309,6 +329,25 @@ export default function VendorMobileOrderOrdersPage() {
     }
   }
 
+  async function handleReceivePayment(order: VendorMobileOrderDashboardOrder) {
+    setPendingPaymentReceiptOrderId(order.id)
+    setMessage(null)
+
+    try {
+      await fetchApi<VendorMobileOrderOrderMutationPayload>(`/api/vendor/mobile-order/orders/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'receive_payment' }),
+      })
+      setMessage(`注文 ${order.order_number} の料金受領を記録しました`)
+      await load(selectedScheduleId)
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : '料金受領の更新に失敗しました')
+    } finally {
+      setPendingPaymentReceiptOrderId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -454,13 +493,20 @@ export default function VendorMobileOrderOrdersPage() {
                             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[order.status]}`}>
                               {STATUS_LABELS[order.status]}
                             </span>
+                            {isStorePosOrder(order) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                POS / {getStorePosPaymentMethodLabel(order)}
+                              </span>
+                            ) : null}
                           </div>
                           <p className="mt-2 text-sm font-medium text-gray-800">{order.pickup_nickname}</p>
                           <p className="mt-1 text-xs text-gray-500">{formatDateTime(order.ordered_at)}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold text-gray-800">{formatPrice(order.total_amount)}</p>
-                          <p className="mt-1 text-xs text-gray-500">{order.mobile_order_items.length} 品目</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {order.mobile_order_items.length} 品目 / {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
+                          </p>
                         </div>
                       </div>
                     </button>
@@ -479,9 +525,17 @@ export default function VendorMobileOrderOrdersPage() {
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[selectedOrder.status]}`}>
                           {STATUS_LABELS[selectedOrder.status]}
                         </span>
+                        {isStorePosOrder(selectedOrder) ? (
+                          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                            店頭POS / {getStorePosPaymentMethodLabel(selectedOrder)}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-2 text-sm text-gray-700">受け取り名: {selectedOrder.pickup_nickname}</p>
                       <p className="mt-1 text-sm text-gray-500">注文時刻: {formatDateTime(selectedOrder.ordered_at)}</p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        支払状況: {PAYMENT_STATUS_LABELS[selectedOrder.payment_status] ?? selectedOrder.payment_status}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">合計</p>
@@ -524,6 +578,26 @@ export default function VendorMobileOrderOrdersPage() {
 
                   <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
                     <h3 className="text-base font-semibold text-gray-800">ステータスを進める</h3>
+                    {isStorePosOrder(selectedOrder) && selectedOrder.payment_status !== 'paid' ? (
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-amber-900">まだ料金受領が記録されていません</p>
+                            <p className="mt-1 text-xs text-amber-800">
+                              現金または PayPay の受領後に、このボタンで会計完了を記録します。
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleReceivePayment(selectedOrder)}
+                            disabled={pendingPaymentReceiptOrderId === selectedOrder.id}
+                            className="rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                          >
+                            {pendingPaymentReceiptOrderId === selectedOrder.id ? '記録中...' : '料金受領を記録'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-4 flex flex-wrap gap-3">
                       {(NEXT_ACTIONS[selectedOrder.status] ?? []).length === 0 ? (
                         <p className="text-sm text-gray-500">この注文はこれ以上ステータスを進められません。</p>
