@@ -90,6 +90,62 @@ async function findExistingVendorStore(supabase: any, userId: string) {
   return data
 }
 
+async function normalizePrimaryOrderPage(
+  supabase: any,
+  store: { id: string; store_name: string }
+) {
+  const { data: pages, error } = await supabase
+    .from('store_order_pages')
+    .select('*')
+    .eq('store_id', store.id)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const orderedPages = (pages ?? []) as Array<any>
+  const primaryCandidates = orderedPages.filter((page) => page.is_primary)
+  const canonicalPage = primaryCandidates[0] ?? orderedPages[0] ?? null
+
+  if (!canonicalPage) {
+    return null
+  }
+
+  const pagesToDemote = primaryCandidates.slice(1).map((page) => page.id)
+  if (pagesToDemote.length > 0) {
+    const { error: demoteError } = await supabase
+      .from('store_order_pages')
+      .update({ is_primary: false })
+      .in('id', pagesToDemote)
+
+    if (demoteError) {
+      throw new Error(demoteError.message)
+    }
+  }
+
+  if (canonicalPage.status !== 'published' || canonicalPage.is_primary !== true) {
+    const { data: updatedPage, error: updateError } = await supabase
+      .from('store_order_pages')
+      .update({
+        status: 'published',
+        is_primary: true,
+        page_title: canonicalPage.page_title || `${store.store_name} モバイルオーダー`,
+      })
+      .eq('id', canonicalPage.id)
+      .select('*')
+      .single()
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    return updatedPage
+  }
+
+  return canonicalPage
+}
+
 export async function ensureVendorStoreResources(
   supabase: any,
   user: User,
@@ -164,20 +220,7 @@ export async function ensureVendorStoreResources(
     throw new Error('店舗情報の作成に失敗しました。時間を置いて再度お試しください。')
   }
 
-  const { data: existingOrderPage, error: pageError } = await supabase
-    .from('store_order_pages')
-    .select('*')
-    .eq('store_id', store.id)
-    .eq('is_primary', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (pageError) {
-    throw new Error(pageError.message)
-  }
-
-  let orderPage = existingOrderPage
+  let orderPage = await normalizePrimaryOrderPage(supabase, store)
 
   if (!orderPage) {
     const { data: insertedPage, error: insertPageError } = await supabase
@@ -198,22 +241,9 @@ export async function ensureVendorStoreResources(
       throw new Error(insertPageError.message)
     }
 
-    orderPage = insertedPage
-  } else if (orderPage.status !== 'published') {
-    const { data: updatedPage, error: updatePageError } = await supabase
-      .from('store_order_pages')
-      .update({
-        status: 'published',
-      })
-      .eq('id', orderPage.id)
-      .select('*')
-      .single()
-
-    if (updatePageError) {
-      throw new Error(updatePageError.message)
-    }
-
-    orderPage = updatedPage
+    orderPage =
+      (await normalizePrimaryOrderPage(supabase, store)) ??
+      insertedPage
   }
 
   return {
