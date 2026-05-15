@@ -118,6 +118,15 @@ export default function VendorMobileOrderOrdersPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const notificationBannerTimeoutRef = useRef<number | null>(null)
 
+  function handleBackToPreviousPage() {
+    if (typeof window === 'undefined') return
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    window.location.href = '/vendor/mobile-order'
+  }
+
   function clearNotificationBannerLater() {
     if (notificationBannerTimeoutRef.current != null) {
       window.clearTimeout(notificationBannerTimeoutRef.current)
@@ -351,6 +360,23 @@ export default function VendorMobileOrderOrdersPage() {
 
   return (
     <div className="space-y-5">
+      <section className="flex justify-end">
+        <div className="flex flex-wrap items-center gap-2 rounded-full border border-[var(--line-soft)] bg-white/90 px-2 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+          <button
+            type="button"
+            onClick={handleBackToPreviousPage}
+            className="inline-flex items-center justify-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+          >
+            前に戻る
+          </button>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+          >
+            ホームへ
+          </Link>
+        </div>
+      </section>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="badge-blue badge-soft inline-block mb-3">注文ダッシュボード</div>

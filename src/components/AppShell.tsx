@@ -52,6 +52,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isSignupPage = pathname.startsWith('/signup/')
   const isLandingPage = pathname === '/lp' || pathname === '/lp/vendor' || pathname === '/lp/organizer'
   const isStorePosPage = pathname.startsWith('/store-pos/')
+  const isMobileOrderOrdersPage = pathname === '/vendor/mobile-order/orders'
   const routeAccessScope = getRouteAccessScope(pathname)
   const isPublicPage = routeAccessScope === 'public'
   const homePath = getHomePathByRole(role)
@@ -106,7 +107,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <LoadingScreen message="ログイン画面へ移動しています..." />
   }
 
-  if (isStorePosPage) {
+  if (isStorePosPage || isMobileOrderOrdersPage) {
     return (
       <>
         <Suspense fallback={null}>
