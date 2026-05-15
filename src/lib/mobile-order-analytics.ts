@@ -25,6 +25,32 @@ export type MobileOrderAnalyticsItem = {
   lineTotalAmount: number
 }
 
+function toJstDate(value: string) {
+  const date = new Date(value)
+  const year = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+  }).format(date)
+  const month = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    month: '2-digit',
+  }).format(date)
+  const day = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    day: '2-digit',
+  }).format(date)
+
+  return `${year}-${month}-${day}`
+}
+
+function toJstRangeStart(value: string) {
+  return new Date(`${value}T00:00:00+09:00`).toISOString()
+}
+
+function toJstRangeEnd(value: string) {
+  return new Date(`${value}T23:59:59.999+09:00`).toISOString()
+}
+
 type MobileOrderScheduleRow = {
   id: string
   business_date: string
@@ -90,40 +116,52 @@ export async function fetchMobileOrderAnalyticsData(
 }> {
   const { scope, start, end, stallLogByDate } = params
 
-  let schedulesQuery = (supabase as any)
-    .from('store_order_schedules')
-    .select('id, business_date')
-
-  if (start) schedulesQuery = schedulesQuery.gte('business_date', start)
-  if (end) schedulesQuery = schedulesQuery.lte('business_date', end)
-
-  const { data: schedules, error: schedulesError } = await schedulesQuery
-  if (schedulesError) {
-    throw new Error(schedulesError.message)
-  }
-
-  const scheduleRows = (schedules ?? []) as MobileOrderScheduleRow[]
-  if (scheduleRows.length === 0) {
-    return { orders: [], items: [] }
-  }
-
-  const scheduleDateMap = new Map(scheduleRows.map((row) => [row.id, row.business_date]))
-  const scheduleIds = scheduleRows.map((row) => row.id)
-
-  const { data: rawOrders, error: ordersError } = await (supabase as any)
+  let ordersQuery = (supabase as any)
     .from('mobile_orders')
     .select('id, schedule_id, ordered_at, total_amount, payment_status, status, payment_provider')
-    .in('schedule_id', scheduleIds)
+
+  if (start) ordersQuery = ordersQuery.gte('ordered_at', toJstRangeStart(start))
+  if (end) ordersQuery = ordersQuery.lte('ordered_at', toJstRangeEnd(end))
+
+  const { data: rawOrders, error: ordersError } = await ordersQuery
 
   if (ordersError) {
     throw new Error(ordersError.message)
   }
 
-  const normalizedOrders = ((rawOrders ?? []) as RawMobileOrderRow[])
+  const rawOrderRows = (rawOrders ?? []) as RawMobileOrderRow[]
+  if (rawOrderRows.length === 0) {
+    return { orders: [], items: [] }
+  }
+
+  const scheduleIds = Array.from(
+    new Set(
+      rawOrderRows
+        .map((order) => order.schedule_id)
+        .filter((value): value is string => Boolean(value))
+    )
+  )
+
+  let scheduleDateMap = new Map<string, string>()
+  if (scheduleIds.length > 0) {
+    const { data: schedules, error: schedulesError } = await (supabase as any)
+      .from('store_order_schedules')
+      .select('id, business_date')
+      .in('id', scheduleIds)
+
+    if (schedulesError) {
+      throw new Error(schedulesError.message)
+    }
+
+    scheduleDateMap = new Map(
+      ((schedules ?? []) as MobileOrderScheduleRow[]).map((row) => [row.id, row.business_date])
+    )
+  }
+
+  const normalizedOrders = rawOrderRows
     .filter(isCountableMobileOrder)
     .map((order) => {
-      const businessDate = scheduleDateMap.get(order.schedule_id)
-      if (!businessDate) return null
+      const businessDate = scheduleDateMap.get(order.schedule_id) ?? toJstDate(order.ordered_at)
 
       const resolvedEventId = resolveAnalyticsEventId(businessDate, null, stallLogByDate)
       if (!matchesAnalyticsScope(scope, resolvedEventId)) return null
