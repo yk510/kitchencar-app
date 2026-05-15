@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
   PublicMobileOrderOptionChoice,
@@ -290,6 +291,9 @@ function getInventoryBadge(product: PublicMobileOrderProduct) {
 }
 
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
   const [submitting, setSubmitting] = useState(false)
@@ -304,7 +308,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   )
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<ProductFilterKey>('recommended')
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false)
+  const isConfirmStep = searchParams.get('step') === 'confirm'
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
@@ -513,7 +517,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   function handleClearCart() {
     setCartItems([])
     setSubmitError(null)
-    setConfirmModalOpen(false)
+
+    if (isConfirmStep) {
+      router.replace(pathname, { scroll: true })
+    }
   }
 
   function handleBackToPreviousPage() {
@@ -525,13 +532,17 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     window.location.href = '/vendor/mobile-order'
   }
 
-  function openConfirmModal() {
+  function openConfirmPage() {
     if (cartItems.length === 0) {
       setSubmitError('商品を1件以上追加してください')
       return
     }
     setSubmitError(null)
-    setConfirmModalOpen(true)
+    router.push(`${pathname}?step=confirm`, { scroll: true })
+  }
+
+  function returnToProductSelection() {
+    router.push(pathname, { scroll: true })
   }
 
   async function handleSubmitOrder() {
@@ -573,7 +584,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         paid_at: null,
         cancelled_at: null,
       })
-      setConfirmModalOpen(false)
       setWaitingSettlement(true)
       setSettlementMessage('店員が会計確認を行っています。料金受領またはキャンセル後に自動で次の注文へ進みます。')
     } catch (error) {
@@ -693,6 +703,121 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     )
   }
 
+  if (isConfirmStep) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
+        <div className="mx-auto max-w-5xl space-y-6 pb-24">
+          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
+            <div className="inline-flex rounded-full bg-[var(--accent-blue-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
+              Final check
+            </div>
+            <h1 className="mt-4 text-3xl font-black tracking-tight text-[var(--text-main)]">ご注文内容をご確認ください</h1>
+            <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+              ご注文内容をご確認いただき、支払方法を選択の上、注文を確定してください。
+            </p>
+          </section>
+
+          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black text-[var(--text-main)]">ご注文内容</h2>
+                <p className="mt-1 text-sm text-[var(--text-sub)]">商品名、数量、トッピング、金額に間違いがないかご確認ください。</p>
+              </div>
+              <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">{totalItems} 点</div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {cartItems.map((item) => (
+                <div key={`confirm-page-${item.id}`} className="rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
+                      <p className="mt-1 text-sm text-[var(--text-sub)]">
+                        {formatPrice(item.unit_price)} / 1点 ・ 数量 {item.quantity}
+                      </p>
+                      {item.selected_options.length > 0 && (
+                        <div className="mt-3 space-y-1 text-sm text-[var(--text-sub)]">
+                          {item.selected_options.map((group) => (
+                            <p key={`confirm-page-${item.id}-${group.group_id}`}>
+                              {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="whitespace-nowrap text-xl font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
+            <h2 className="text-2xl font-black text-[var(--text-main)]">お支払い方法</h2>
+            <p className="mt-1 text-sm text-[var(--text-sub)]">店員へお支払いいただく方法をお選びください。</p>
+            <div className="mt-5 grid gap-3">
+              {paymentMethods.map((method) => {
+                const label = method === 'cash' ? '現金' : method === 'paypay' ? 'PayPay' : 'その他'
+                const active = selectedPaymentMethod === method
+                return (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod(method)}
+                    className={`rounded-[26px] px-5 py-4 text-left text-lg font-bold transition ${
+                      active
+                        ? 'bg-[var(--accent-blue)] text-white shadow-[0_14px_32px_rgba(37,99,235,0.26)]'
+                        : 'bg-[#fbfdff] text-[var(--text-main)] ring-1 ring-[var(--line-soft)] hover:bg-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-5 grid gap-3 rounded-[28px] bg-[#fffdf7] px-5 py-5 ring-1 ring-[var(--line-soft)] md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">お支払い方法</p>
+                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
+                  {selectedPaymentMethod === 'cash' ? '現金' : selectedPaymentMethod === 'paypay' ? 'PayPay' : 'その他'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">合計金額</p>
+                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
+              </div>
+            </div>
+
+            {submitError && (
+              <div className="mt-5 rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {submitError}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={returnToProductSelection}
+                className="inline-flex items-center justify-center rounded-[24px] bg-white px-5 py-4 text-base font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+              >
+                商品選択に戻る
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitOrder}
+                disabled={submitting || cartItems.length === 0}
+                className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? '注文を作成中...' : '注文を確定する'}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
       <div className="mx-auto max-w-7xl space-y-5 pb-36">
@@ -706,13 +831,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 {data.store.store_name}
               </h1>
               <p className="mt-2 text-base leading-7 text-[var(--text-sub)]">
-                商品を選んで、内容を確認したら注文を確定してください。お支払いは店員がご案内します。
+                商品を選んで、内容を確認したあと、お支払い方法を選んで注文を確定してください。お支払いは店員がご案内します。
               </p>
             </div>
             <div className="max-w-sm rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
               <p className="text-sm font-semibold text-gray-500">ご注文の進め方</p>
               <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">
-                1. 商品を選ぶ  2. オプションと数量を決める  3. お支払い方法を選ぶ  4. 注文を確定する
+                1. 商品を選ぶ  2. オプションと数量を決める  3. 注文内容を確認する  4. お支払い方法を選ぶ  5. 注文を確定する
               </p>
             </div>
           </div>
@@ -1036,31 +1161,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             </section>
 
             <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-              <h2 className="text-2xl font-black text-[var(--text-main)]">お支払い方法</h2>
-              <div className="mt-5 grid gap-3">
-                {paymentMethods.map((method) => {
-                  const label = method === 'cash' ? '現金' : method === 'paypay' ? 'PayPay' : 'その他'
-                  const active = selectedPaymentMethod === method
-                  return (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setSelectedPaymentMethod(method)}
-                      className={`rounded-[26px] px-5 py-4 text-left text-lg font-bold transition ${
-                        active
-                          ? 'bg-[var(--accent-blue)] text-white shadow-[0_14px_32px_rgba(37,99,235,0.26)]'
-                          : 'bg-[#fbfdff] text-[var(--text-main)] ring-1 ring-[var(--line-soft)] hover:bg-white'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="mt-4 rounded-[24px] bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-[var(--line-soft)]">
-                お支払い方法を選んだあと、右下の <span className="font-semibold text-[var(--text-main)]">注文を確定する</span> を押してください。
-              </div>
+              <h2 className="text-2xl font-black text-[var(--text-main)]">ご注文の最終確認へ</h2>
+              <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
+                ここでは商品だけを選びます。お支払い方法の選択と最終確認は、次の確認ページで行います。
+              </p>
 
               {submitError && (
                 <div className="mt-5 rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -1076,7 +1180,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                   </div>
                   <button
                     type="button"
-                    onClick={openConfirmModal}
+                    onClick={openConfirmPage}
                     disabled={cartItems.length === 0}
                     className={primaryButtonClassName}
                   >
@@ -1115,9 +1219,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <div className="mt-2 flex flex-wrap items-center gap-4">
                   <p className="text-lg font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
                   <p className="text-sm font-semibold text-slate-500">{totalItems} 点</p>
-                  <p className="text-sm font-semibold text-slate-500">
-                    支払方法: {selectedPaymentMethod === 'cash' ? '現金' : selectedPaymentMethod === 'paypay' ? 'PayPay' : 'その他'}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-500">お支払い方法は次の確認ページで選択します</p>
                 </div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1131,7 +1233,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 </button>
                 <button
                   type="button"
-                  onClick={openConfirmModal}
+                  onClick={openConfirmPage}
                   disabled={cartItems.length === 0}
                   className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1143,91 +1245,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         </section>
       </div>
 
-      {confirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-[32px] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
-            <div className="border-b border-[var(--line-soft)] px-6 py-5 md:px-8">
-              <div className="inline-flex rounded-full bg-[var(--accent-blue-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
-                Final check
-              </div>
-              <h2 className="mt-3 text-3xl font-black tracking-tight text-[var(--text-main)]">ご注文内容をご確認ください</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">
-                商品名、数量、トッピング、金額に間違いがないか確認してから、最後に注文を確定してください。
-              </p>
-            </div>
-
-            <div className="max-h-[calc(90vh-210px)] overflow-y-auto px-6 py-5 md:px-8">
-              <div className="space-y-4">
-                {cartItems.map((item) => (
-                  <div key={`confirm-${item.id}`} className="rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
-                        <p className="mt-1 text-sm text-[var(--text-sub)]">
-                          {formatPrice(item.unit_price)} / 1点 ・ 数量 {item.quantity}
-                        </p>
-                        {item.selected_options.length > 0 && (
-                          <div className="mt-3 space-y-1 text-sm text-[var(--text-sub)]">
-                            {item.selected_options.map((group) => (
-                              <p key={`confirm-${item.id}-${group.group_id}`}>
-                                {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <p className="whitespace-nowrap text-xl font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 grid gap-3 rounded-[28px] bg-[#fffdf7] px-5 py-5 ring-1 ring-[var(--line-soft)] md:grid-cols-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">商品数</p>
-                  <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{totalItems}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">お支払い方法</p>
-                  <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
-                    {selectedPaymentMethod === 'cash' ? '現金' : selectedPaymentMethod === 'paypay' ? 'PayPay' : 'その他'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">合計金額</p>
-                  <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
-                </div>
-              </div>
-
-              {submitError && (
-                <div className="mt-4 rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                  {submitError}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-[var(--line-soft)] bg-white px-6 py-5 md:px-8">
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setConfirmModalOpen(false)}
-                  className="inline-flex items-center justify-center rounded-[24px] bg-white px-5 py-4 text-base font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
-                >
-                  商品選択に戻る
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitOrder}
-                  disabled={submitting || cartItems.length === 0}
-                  className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? '注文を作成中...' : '注文を確定する'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
