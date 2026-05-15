@@ -350,7 +350,7 @@ export default function VendorMobileOrderOrdersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="badge-blue badge-soft inline-block mb-3">注文ダッシュボード</div>
@@ -398,46 +398,53 @@ export default function VendorMobileOrderOrdersPage() {
         <div className="soft-panel p-6 text-sm text-gray-500">読み込み中...</div>
       ) : data ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-            <section className="soft-panel p-5 xl:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">対象営業枠</p>
-              <h2 className="mt-2 text-lg font-semibold text-gray-800">
-                {data.selectedSchedule
-                  ? `${formatDateTime(data.selectedSchedule.opens_at)} - ${formatDateTime(data.selectedSchedule.closes_at)}`
-                  : '営業枠未選択'}
-              </h2>
-              <p className="mt-2 text-sm text-gray-500">
+          <div className="grid gap-3 lg:grid-cols-[minmax(280px,1.5fr)_repeat(4,minmax(0,1fr))]">
+            <section className="soft-panel p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">対象営業枠</p>
+                  <h2 className="mt-1 text-base font-semibold text-gray-800">
+                    {data.selectedSchedule
+                      ? `${formatDateTime(data.selectedSchedule.opens_at)} - ${formatDateTime(data.selectedSchedule.closes_at)}`
+                      : '営業枠未選択'}
+                  </h2>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {data.orders.length}件
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
                 {data.selectedSchedule
                   ? `営業日 ${data.selectedSchedule.business_date} / ${data.store.store_name}`
                   : 'まず営業スケジュールを追加してください'}
               </p>
             </section>
-            <section className="soft-panel p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">受付済</p>
+            <section className="soft-panel p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">受付済</p>
               <p className="mt-2 text-2xl font-bold text-sky-700">{counts.placed}</p>
             </section>
-            <section className="soft-panel p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">調理中</p>
+            <section className="soft-panel p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">調理中</p>
               <p className="mt-2 text-2xl font-bold text-violet-700">{counts.preparing}</p>
             </section>
-            <section className="soft-panel p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">完成</p>
+            <section className="soft-panel p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">完成</p>
               <p className="mt-2 text-2xl font-bold text-emerald-700">{counts.ready}</p>
             </section>
-            <section className="soft-panel p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">受取済</p>
+            <section className="soft-panel p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">受取済</p>
               <p className="mt-2 text-2xl font-bold text-slate-700">{counts.picked_up}</p>
             </section>
           </div>
 
-          <section className="soft-panel p-6">
+          <section className="soft-panel p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-gray-800">営業枠を切り替える</h2>
-                <p className="mt-1 text-sm text-gray-500">当日の営業枠だけでなく、過去の営業枠の注文も見返せます。</p>
+                <h2 className="text-base font-semibold text-gray-800">営業枠を切り替える</h2>
+                <p className="mt-1 text-xs text-gray-500">当日や過去の営業枠をすばやく切り替えられます。</p>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1">
               {data.schedules.length === 0 ? (
                 <p className="text-sm text-gray-500">営業枠がまだありません。</p>
               ) : (
@@ -446,7 +453,7 @@ export default function VendorMobileOrderOrdersPage() {
                     key={schedule.id}
                     type="button"
                     onClick={() => void handleChangeSchedule(schedule.id)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${
                       schedule.id === data.selectedSchedule?.id
                         ? 'bg-[var(--accent-blue)] text-white'
                         : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
@@ -459,18 +466,18 @@ export default function VendorMobileOrderOrdersPage() {
             </div>
           </section>
 
-          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-            <section className="soft-panel p-6">
+          <div className="grid gap-4 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
+            <section className="soft-panel p-4 lg:h-[calc(100vh-20rem)] lg:min-h-[620px] lg:overflow-hidden">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-800">注文一覧</h2>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h2 className="text-base font-semibold text-gray-800">注文一覧</h2>
+                  <p className="mt-1 text-xs text-gray-500">
                     {data.selectedSchedule ? `${data.orders.length} 件の注文` : '営業枠を選択してください'}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-3">
+              <div className="mt-4 space-y-3 lg:h-[calc(100%-2.5rem)] lg:overflow-y-auto lg:pr-1">
                 {data.orders.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-6 text-sm text-gray-500">
                     この営業枠の注文はまだありません。
@@ -481,7 +488,7 @@ export default function VendorMobileOrderOrdersPage() {
                       key={order.id}
                       type="button"
                       onClick={() => setSelectedOrderId(order.id)}
-                      className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                      className={`w-full rounded-3xl border px-4 py-4 text-left transition ${
                         selectedOrderId === order.id
                           ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
                           : 'border-[var(--line-soft)] bg-white hover:border-[var(--accent-blue-soft)]'
@@ -516,9 +523,9 @@ export default function VendorMobileOrderOrdersPage() {
               </div>
             </section>
 
-            <section className="soft-panel p-6">
+            <section className="soft-panel p-4 lg:h-[calc(100vh-20rem)] lg:min-h-[620px] lg:overflow-hidden">
               {selectedOrder ? (
-                <div className="space-y-5">
+                <div className="space-y-4 lg:h-full lg:overflow-y-auto lg:pr-1">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -544,11 +551,11 @@ export default function VendorMobileOrderOrdersPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
+                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-4">
                     <h3 className="text-base font-semibold text-gray-800">注文内容</h3>
-                    <div className="mt-4 space-y-4">
+                    <div className="mt-3 space-y-3">
                       {selectedOrder.mobile_order_items.map((item) => (
-                        <div key={item.id} className="rounded-2xl border border-[var(--line-soft)] bg-[#fafafa] px-4 py-4">
+                        <div key={item.id} className="rounded-2xl border border-[var(--line-soft)] bg-[#fafafa] px-4 py-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <p className="font-semibold text-gray-800">
@@ -577,7 +584,7 @@ export default function VendorMobileOrderOrdersPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
+                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-4">
                     <h3 className="text-base font-semibold text-gray-800">ステータスを進める</h3>
                     {isStorePosOrder(selectedOrder) && selectedOrder.payment_status !== 'paid' ? (
                       <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
@@ -618,7 +625,7 @@ export default function VendorMobileOrderOrdersPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
+                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-4">
                     <h3 className="text-base font-semibold text-gray-800">通知状況</h3>
                     <p className="mt-2 text-sm text-gray-500">
                       送信待ちの通知は、ここから手動でLINE送信できます。LIFF連携前は userId 未取得のため失敗理由もここに残ります。
@@ -694,7 +701,7 @@ export default function VendorMobileOrderOrdersPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
+                <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
                   左の注文を選ぶと、内容とステータス操作が表示されます。
                 </div>
               )}
