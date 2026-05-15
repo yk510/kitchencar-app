@@ -19,6 +19,8 @@ type ProductForm = {
   description: string
   price: string
   image_url: string
+  display_category: 'main' | 'side' | 'drink' | 'other'
+  is_recommended: boolean
   sort_order: string
   tracks_inventory: boolean
   low_stock_threshold: string
@@ -31,6 +33,8 @@ const EMPTY_FORM: ProductForm = {
   description: '',
   price: '',
   image_url: '',
+  display_category: 'other',
+  is_recommended: false,
   sort_order: '0',
   tracks_inventory: false,
   low_stock_threshold: '3',
@@ -44,6 +48,14 @@ function buildFormFromProduct(product: MobileOrderProductRow): ProductForm {
     description: product.description ?? '',
     price: String(product.price),
     image_url: product.image_url ?? '',
+    display_category:
+      product.display_category === 'main' ||
+      product.display_category === 'side' ||
+      product.display_category === 'drink' ||
+      product.display_category === 'other'
+        ? product.display_category
+        : 'other',
+    is_recommended: Boolean(product.is_recommended),
     sort_order: String(product.sort_order),
     tracks_inventory: product.tracks_inventory,
     low_stock_threshold: String(product.low_stock_threshold),
@@ -67,6 +79,13 @@ function formatDateTime(value: string) {
 
 function formatSignedQuantity(value: number) {
   return value > 0 ? `+${value}` : String(value)
+}
+
+function getCategoryLabel(value: ProductForm['display_category']) {
+  if (value === 'main') return 'メイン'
+  if (value === 'side') return 'サイド'
+  if (value === 'drink') return 'ドリンク'
+  return 'その他'
 }
 
 function getInventoryStatusLabel(product: VendorMobileOrderManagedProduct, hasCurrentSchedule: boolean) {
@@ -209,6 +228,8 @@ export default function VendorMobileOrderProductsPage() {
         description: form.description,
         price: Number(form.price),
         image_url: form.image_url,
+        display_category: form.display_category,
+        is_recommended: form.is_recommended,
         sort_order: Number(form.sort_order),
         tracks_inventory: form.tracks_inventory,
         low_stock_threshold: form.low_stock_threshold,
@@ -250,6 +271,14 @@ export default function VendorMobileOrderProductsPage() {
           description: product.description ?? '',
           price: product.price,
           image_url: product.image_url ?? '',
+          display_category:
+            product.display_category === 'main' ||
+            product.display_category === 'side' ||
+            product.display_category === 'drink' ||
+            product.display_category === 'other'
+              ? product.display_category
+              : 'other',
+          is_recommended: Boolean(product.is_recommended),
           sort_order: product.sort_order,
           tracks_inventory: product.tracks_inventory,
           low_stock_threshold: product.low_stock_threshold,
@@ -460,6 +489,21 @@ export default function VendorMobileOrderProductsPage() {
                                 <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-700 ring-1 ring-[var(--line-soft)]">
                                   注文済み {product.current_ordered_quantity}
                                 </span>
+                                {Boolean(product.is_recommended) && (
+                                  <span className="rounded-full bg-yellow-100 px-2.5 py-1 font-semibold text-yellow-800">
+                                    おすすめ
+                                  </span>
+                                )}
+                                <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-700 ring-1 ring-[var(--line-soft)]">
+                                  {getCategoryLabel(
+                                    product.display_category === 'main' ||
+                                      product.display_category === 'side' ||
+                                      product.display_category === 'drink' ||
+                                      product.display_category === 'other'
+                                      ? product.display_category
+                                      : 'other'
+                                  )}
+                                </span>
                                 {product.tracks_inventory && data.currentSchedule && product.current_initial_quantity != null && (
                                   <>
                                     <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-700 ring-1 ring-[var(--line-soft)]">
@@ -590,6 +634,41 @@ export default function VendorMobileOrderProductsPage() {
                       placeholder="例: 10"
                       required
                     />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">カテゴリ</label>
+                    <select
+                      value={form.display_category}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          display_category: event.target.value as ProductForm['display_category'],
+                        }))
+                      }
+                      className="w-full px-4 py-3"
+                    >
+                      <option value="main">メイン</option>
+                      <option value="side">サイド</option>
+                      <option value="drink">ドリンク</option>
+                      <option value="other">その他</option>
+                    </select>
+                    <p className="mt-2 text-xs text-gray-500">
+                      POS画面での商品の探しやすさに使います。
+                    </p>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="w-full rounded-2xl border border-[var(--line-soft)] bg-white px-4 py-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={form.is_recommended}
+                        onChange={(event) => setForm((prev) => ({ ...prev, is_recommended: event.target.checked }))}
+                        className="mr-2"
+                      />
+                      おすすめ商品として表示する
+                    </label>
                   </div>
                 </div>
 

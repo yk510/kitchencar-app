@@ -76,6 +76,15 @@ function normalizeText(value: string | null | undefined) {
 }
 
 function inferProductCategory(product: PublicMobileOrderProduct): ProductDisplayCategory {
+  if (
+    product.display_category === 'main' ||
+    product.display_category === 'side' ||
+    product.display_category === 'drink' ||
+    product.display_category === 'other'
+  ) {
+    return product.display_category
+  }
+
   const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
 
   if (
@@ -116,6 +125,10 @@ function inferProductCategory(product: PublicMobileOrderProduct): ProductDisplay
 }
 
 function isRecommendedProduct(product: PublicMobileOrderProduct, index: number) {
+  if (typeof product.is_recommended === 'boolean') {
+    return product.is_recommended
+  }
+
   const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
   return (
     source.includes('おすすめ') ||
@@ -743,8 +756,22 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
+                        <div className="mb-4 overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-[#f8fbff]">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="h-44 w-full object-cover" />
+                          ) : (
+                            <div className="flex h-44 items-center justify-center text-sm font-semibold text-slate-400">
+                              商品画像を準備中です
+                            </div>
+                          )}
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-xl font-black text-[var(--text-main)]">{product.name}</h3>
+                          {categorizedProducts.find((entry) => entry.product.id === product.id)?.recommended && (
+                            <span className="rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold text-yellow-800">
+                              おすすめ
+                            </span>
+                          )}
                           {inventoryBadge && (
                             <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${inventoryBadge.className}`}>
                               {inventoryBadge.label}
@@ -792,9 +819,23 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                   <div className="space-y-4">
                     <div className="rounded-[28px] bg-[#fbfdff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
                       <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="flex-1">
+                          <div className="mb-4 overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-white">
+                            {selectedProduct.image_url ? (
+                              <img src={selectedProduct.image_url} alt={selectedProduct.name} className="h-52 w-full object-cover" />
+                            ) : (
+                              <div className="flex h-52 items-center justify-center text-sm font-semibold text-slate-400">
+                                商品画像を準備中です
+                              </div>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-xl font-black text-[var(--text-main)]">{selectedProduct.name}</h3>
+                            {categorizedProducts.find((entry) => entry.product.id === selectedProduct.id)?.recommended && (
+                              <span className="rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold text-yellow-800">
+                                おすすめ
+                              </span>
+                            )}
                             {getInventoryBadge(selectedProduct) && (
                               <span
                                 className={`rounded-full px-3 py-1 text-[11px] font-semibold ${getInventoryBadge(selectedProduct)?.className}`}

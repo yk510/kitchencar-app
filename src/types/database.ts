@@ -450,6 +450,8 @@ export interface MobileOrderProduct {
   description: string | null
   price: number
   image_url: string | null
+  display_category: 'main' | 'side' | 'drink' | 'other'
+  is_recommended: boolean
   sort_order: number
   tracks_inventory: boolean
   inventory_quantity: number | null

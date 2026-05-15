@@ -93,6 +93,8 @@ create table if not exists mobile_order_products (
   description   text,
   price         integer not null,
   image_url     text,
+  display_category text not null default 'other',
+  is_recommended boolean not null default false,
   sort_order    integer not null default 0,
   tracks_inventory boolean not null default false,
   inventory_quantity integer,
@@ -103,6 +105,8 @@ create table if not exists mobile_order_products (
   updated_at    timestamptz not null default now(),
   constraint chk_mobile_order_products_inventory_quantity
     check (inventory_quantity is null or inventory_quantity >= 0),
+  constraint chk_mobile_order_products_display_category
+    check (display_category in ('main', 'side', 'drink', 'other')),
   constraint chk_mobile_order_products_low_stock_threshold
     check (low_stock_threshold >= 0)
 );

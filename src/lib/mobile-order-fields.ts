@@ -64,3 +64,8 @@ export function isMissingMobileOrderExtendedColumnsError(error: unknown) {
     message.includes('pos_device_label')
   )
 }
+
+export function isMissingMobileOrderProductDisplayColumnsError(error: unknown) {
+  const message = String((error as { message?: string } | null)?.message ?? '')
+  return message.includes('display_category') || message.includes('is_recommended')
+}

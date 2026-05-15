@@ -1,10 +1,15 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
+import { isMissingMobileOrderProductDisplayColumnsError } from '@/lib/mobile-order-fields'
 import type { VendorMobileOrderProductMutationPayload } from '@/types/api-payloads'
 
 function normalizeMaybeBoolean(value: unknown) {
   return typeof value === 'boolean' ? value : undefined
+}
+
+function normalizeProductDisplayCategory(value: unknown) {
+  return value === 'main' || value === 'side' || value === 'drink' || value === 'other' ? value : 'other'
 }
 
 export async function PATCH(
@@ -50,6 +55,11 @@ export async function PATCH(
           : current.image_url
     const nextPrice = body.price != null ? Number(body.price) : current.price
     const nextSortOrder = body.sort_order != null ? Number(body.sort_order) : current.sort_order
+    const nextDisplayCategory =
+      body.display_category != null
+        ? normalizeProductDisplayCategory(body.display_category)
+        : normalizeProductDisplayCategory(current.display_category)
+    const nextRecommended = normalizeMaybeBoolean(body.is_recommended) ?? (typeof current.is_recommended === 'boolean' ? current.is_recommended : false)
     const nextTracksInventory =
       typeof body.tracks_inventory === 'boolean' ? body.tracks_inventory : current.tracks_inventory
     const nextLowStockThreshold =
@@ -76,28 +86,50 @@ export async function PATCH(
       return apiError('残りわずか閾値は0以上の整数で入力してください', 400)
     }
 
-    const { data, error } = await (supabase as any)
+    const basePatch = {
+      name: nextName,
+      description: nextDescription,
+      price: nextPrice,
+      image_url: nextImageUrl,
+      sort_order: nextSortOrder,
+      tracks_inventory: nextTracksInventory,
+      low_stock_threshold: nextLowStockThreshold,
+      is_published: nextPublished,
+      is_sold_out: nextSoldOut,
+    }
+
+    let data
+    let error
+
+    ;({ data, error } = await (supabase as any)
       .from('mobile_order_products')
       .update({
-        name: nextName,
-        description: nextDescription,
-        price: nextPrice,
-        image_url: nextImageUrl,
-        sort_order: nextSortOrder,
-        tracks_inventory: nextTracksInventory,
-        low_stock_threshold: nextLowStockThreshold,
-        is_published: nextPublished,
-        is_sold_out: nextSoldOut,
+        ...basePatch,
+        display_category: nextDisplayCategory,
+        is_recommended: nextRecommended,
       })
       .eq('id', id)
       .select('*')
-      .single()
+      .single())
+
+    if (error && isMissingMobileOrderProductDisplayColumnsError(error)) {
+      ;({ data, error } = await (supabase as any)
+        .from('mobile_order_products')
+        .update(basePatch)
+        .eq('id', id)
+        .select('*')
+        .single())
+    }
 
     if (error) {
       return apiError(error.message)
     }
 
-    const payload: VendorMobileOrderProductMutationPayload = data
+    const payload: VendorMobileOrderProductMutationPayload = {
+      ...data,
+      display_category: normalizeProductDisplayCategory(data.display_category),
+      is_recommended: typeof data.is_recommended === 'boolean' ? data.is_recommended : false,
+    }
     return apiOk(payload)
   } catch (error) {
     console.error('[vendor/mobile-order/products/:id PATCH]', error)

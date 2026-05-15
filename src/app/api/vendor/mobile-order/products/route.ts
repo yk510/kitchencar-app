@@ -8,6 +8,7 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
+import { isMissingMobileOrderProductDisplayColumnsError } from '@/lib/mobile-order-fields'
 import type {
   MobileOrderInventoryAdjustmentRow,
   StoreOrderScheduleRow,
@@ -18,6 +19,10 @@ import type {
 
 function normalizeBoolean(value: unknown, fallback = false) {
   return typeof value === 'boolean' ? value : fallback
+}
+
+function normalizeProductDisplayCategory(value: unknown) {
+  return value === 'main' || value === 'side' || value === 'drink' || value === 'other' ? value : 'other'
 }
 
 export async function GET(req: NextRequest) {
@@ -93,6 +98,8 @@ export async function GET(req: NextRequest) {
 
       return {
         ...product,
+        display_category: normalizeProductDisplayCategory(product.display_category),
+        is_recommended: normalizeBoolean(product.is_recommended, false),
         current_schedule_inventory_id: currentInventory?.id ?? null,
         current_initial_quantity: currentInventory?.initial_quantity ?? null,
         current_adjustment_total: adjustmentTotal,
@@ -134,6 +141,8 @@ export async function POST(req: NextRequest) {
     const price = Number(body.price)
     const imageUrl = String(body.image_url ?? '').trim() || null
     const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 0
+    const displayCategory = normalizeProductDisplayCategory(body.display_category)
+    const isRecommended = normalizeBoolean(body.is_recommended, false)
     const tracksInventory = normalizeBoolean(body.tracks_inventory, false)
     const lowStockThreshold =
       body.low_stock_threshold == null || body.low_stock_threshold === ''
@@ -163,30 +172,51 @@ export async function POST(req: NextRequest) {
       businessName: vendorProfile?.business_name ?? null,
     })
 
-    const { data, error } = await (supabase as any)
+    const baseInsertRow = {
+      store_id: store.id,
+      name,
+      description,
+      price,
+      image_url: imageUrl,
+      sort_order: sortOrder,
+      tracks_inventory: tracksInventory,
+      low_stock_threshold: lowStockThreshold,
+      is_published: isPublished,
+      is_sold_out: isSoldOut,
+    }
+
+    let data
+    let error
+
+    ;({ data, error } = await (supabase as any)
       .from('mobile_order_products')
       .insert([
         {
-          store_id: store.id,
-          name,
-          description,
-          price,
-          image_url: imageUrl,
-          sort_order: sortOrder,
-          tracks_inventory: tracksInventory,
-          low_stock_threshold: lowStockThreshold,
-          is_published: isPublished,
-          is_sold_out: isSoldOut,
+          ...baseInsertRow,
+          display_category: displayCategory,
+          is_recommended: isRecommended,
         },
       ])
       .select('*')
-      .single()
+      .single())
+
+    if (error && isMissingMobileOrderProductDisplayColumnsError(error)) {
+      ;({ data, error } = await (supabase as any)
+        .from('mobile_order_products')
+        .insert([baseInsertRow])
+        .select('*')
+        .single())
+    }
 
     if (error) {
       return apiError(error.message)
     }
 
-    const payload: VendorMobileOrderProductMutationPayload = data
+    const payload: VendorMobileOrderProductMutationPayload = {
+      ...data,
+      display_category: normalizeProductDisplayCategory(data.display_category),
+      is_recommended: normalizeBoolean(data.is_recommended, false),
+    }
     return apiOk(payload)
   } catch (error) {
     console.error('[vendor/mobile-order/products POST]', error)
