@@ -14,12 +14,12 @@ export default async function DailyAnalyticsPage({
 }: {
   searchParams?: { start?: string; end?: string; month?: string }
 }) {
-  const { supabase } = await requireServerSession({ includeProfile: false })
+  const { supabase, user } = await requireServerSession({ includeProfile: false })
   const range = getMonthRange(searchParams?.month)
   const start = searchParams?.start ?? range.start
   const end = searchParams?.end ?? range.end
   const [rows, memos] = await Promise.all([
-    getVendorDailyAnalytics(supabase, start, end),
+    getVendorDailyAnalytics(supabase, user.id, start, end),
     getVendorDailyMemos(supabase, start, end),
   ])
 

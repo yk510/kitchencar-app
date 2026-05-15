@@ -51,7 +51,27 @@ export type MutationSuccessPayload = {
   success: true
 }
 
-export type ProductMasterListPayload = ProductMaster[]
+export type ProductMasterLinkMode = 'dedicated' | 'matched_existing'
+
+export type ProductMasterRecordPayload = ProductMaster
+
+export type ProductMasterMobileOrderLinkPayload = {
+  mobile_order_product_id: string
+  mobile_order_product_name: string
+  mobile_order_product_price: number
+  linked_product_master_id: string | null
+  linked_product_master_name: string | null
+  link_mode: ProductMasterLinkMode | null
+  cost_amount: number | null
+  cost_rate: number | null
+  cost_updated_at: string | null
+}
+
+export type ProductMasterListPayload = {
+  mobile_order_products: ProductMasterMobileOrderLinkPayload[]
+  standalone_products: ProductMasterRecordPayload[]
+  all_product_masters: ProductMasterRecordPayload[]
+}
 
 export type CrossAnalyticsDimensionKey =
   | 'location'

@@ -11,6 +11,7 @@ export type ManagedLocation = Location & {
 }
 
 export type ProductMaster = {
+  id: string
   product_name: string
   cost_amount: number | null
   cost_rate: number | null

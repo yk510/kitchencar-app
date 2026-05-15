@@ -1,6 +1,11 @@
 import { getDefaultHolidayFlag, getWeekdayLabel } from '@/lib/calendar'
 import { buildStallLogResolutionMap } from '@/lib/analytics-resolution'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
+import {
+  calculateCostFromProductMaster,
+  loadProductMasterCostContext,
+  resolveCostForMobileOrderProduct,
+} from '@/lib/product-master-links'
 import type {
   VendorDailyMemo,
   VendorDailySalesRow,
@@ -89,7 +94,13 @@ export function getWeekRanges(start: string, end: string): VendorWeekRange[] {
   return weeks
 }
 
-export async function getVendorDailyAnalytics(supabase: any, start: string, end: string): Promise<VendorDailySalesRow[]> {
+export async function getVendorDailyAnalytics(
+  supabase: any,
+  userId: string,
+  start: string,
+  end: string
+): Promise<VendorDailySalesRow[]> {
+  const costContextPromise = loadProductMasterCostContext(supabase, userId)
   const [
     { data: txns, error: txnError },
     { data: sales, error: salesError },
@@ -98,6 +109,7 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
     { data: locations, error: locationError },
     { data: stallLogs, error: stallLogError },
     { data: events, error: eventError },
+    costContext,
   ] = await Promise.all([
     (supabase as any)
       .from('transactions')
@@ -130,6 +142,7 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
     (supabase as any)
       .from('events')
       .select('id, event_name'),
+    costContextPromise,
   ])
 
   if (txnError) throw new Error(txnError.message)
@@ -187,10 +200,11 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
 
   const grossProfitByOrderId = new Map<string, number>()
   for (const item of mobileOrderAnalytics.items) {
-    const unitCost = costMap.get(item.productName) ?? 0
+    const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
     grossProfitByOrderId.set(
       item.orderId,
-      (grossProfitByOrderId.get(item.orderId) ?? 0) + unitCost * item.quantity
+      (grossProfitByOrderId.get(item.orderId) ?? 0) +
+        calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
     )
   }
 

@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [rows, memos] = await Promise.all([
-      getVendorDailyAnalytics(session.supabase, weekStart, weekEnd),
+      getVendorDailyAnalytics(session.supabase, session.user.id, weekStart, weekEnd),
       getVendorDailyMemos(session.supabase, weekStart, weekEnd),
     ])
 

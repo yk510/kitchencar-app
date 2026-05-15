@@ -20,6 +20,7 @@ export type MobileOrderAnalyticsOrder = {
 
 export type MobileOrderAnalyticsItem = {
   orderId: string
+  productId: string
   productName: string
   quantity: number
   lineTotalAmount: number
@@ -68,6 +69,7 @@ type RawMobileOrderRow = {
 
 type RawMobileOrderItemRow = {
   order_id: string
+  product_id: string
   product_name_snapshot: string
   quantity: number | null
   line_total_amount: number | null
@@ -191,7 +193,7 @@ export async function fetchMobileOrderAnalyticsData(
 
   const { data: rawItems, error: itemsError } = await (supabase as any)
     .from('mobile_order_items')
-    .select('order_id, product_name_snapshot, quantity, line_total_amount')
+    .select('order_id, product_id, product_name_snapshot, quantity, line_total_amount')
     .in('order_id', orderIds)
 
   if (itemsError) {
@@ -200,6 +202,7 @@ export async function fetchMobileOrderAnalyticsData(
 
   const items = ((rawItems ?? []) as RawMobileOrderItemRow[]).map((item) => ({
     orderId: item.order_id,
+    productId: item.product_id,
     productName: item.product_name_snapshot,
     quantity: item.quantity ?? 0,
     lineTotalAmount: item.line_total_amount ?? 0,

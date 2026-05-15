@@ -8,6 +8,11 @@ import {
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
+import {
+  calculateCostFromProductMaster,
+  loadProductMasterCostContext,
+  resolveCostForMobileOrderProduct,
+} from '@/lib/product-master-links'
 
 function normalizeScope(scope?: string): 'all' | 'normal' | 'event' {
   if (scope === 'normal') return 'normal'
@@ -18,7 +23,7 @@ function normalizeScope(scope?: string): 'all' | 'normal' | 'event' {
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
-  const { supabase } = auth.session
+  const { supabase, user } = auth.session
   const scope = normalizeScope(req.nextUrl.searchParams.get('scope') ?? undefined)
   const start = normalizeAnalyticsDate(req.nextUrl.searchParams.get('start') ?? undefined)
   const end = normalizeAnalyticsDate(req.nextUrl.searchParams.get('end') ?? undefined)
@@ -61,6 +66,7 @@ export async function GET(req: NextRequest) {
     end,
     stallLogByDate,
   })
+  const costContext = await loadProductMasterCostContext(supabase, user.id)
 
   // 商品ごとに集計
   const productMap = new Map<string, {
@@ -104,15 +110,10 @@ export async function GET(req: NextRequest) {
     entry.total_sales += item.lineTotalAmount
     entry.total_qty += item.quantity
 
-    const costInfo = costMap.get(item.productName)
-    if (costInfo) {
-      if (costInfo.cost_amount != null) {
-        entry.total_cost += costInfo.cost_amount * item.quantity
-        entry.has_cost = true
-      } else if (costInfo.cost_rate != null) {
-        entry.total_cost += (item.lineTotalAmount * costInfo.cost_rate) / 100
-        entry.has_cost = true
-      }
+    const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
+    if (linkedProductMaster) {
+      entry.total_cost += calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
+      entry.has_cost = true
     }
     productMap.set(item.productName, entry)
   }

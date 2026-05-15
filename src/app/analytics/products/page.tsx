@@ -8,6 +8,11 @@ import {
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
+import {
+  calculateCostFromProductMaster,
+  loadProductMasterCostContext,
+  resolveCostForMobileOrderProduct,
+} from '@/lib/product-master-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +24,7 @@ function normalizeScope(scope?: string): AnalyticsScope {
 
 async function getProductAnalytics(
   supabase: any,
+  userId: string,
   scope: AnalyticsScope,
   start?: string,
   end?: string
@@ -72,6 +78,7 @@ async function getProductAnalytics(
     end,
     stallLogByDate,
   })
+  const costContext = await loadProductMasterCostContext(supabase, userId)
 
   const filteredSales = ((sales ?? []) as any[]).filter((sale) =>
     matchesAnalyticsScope(
@@ -135,9 +142,9 @@ async function getProductAnalytics(
     entry.totalQty += item.quantity
     entry.txnSet.add(order.id)
 
-    const unitCost = costMap.get(name)
-    if (unitCost != null) {
-      entry.totalCost += unitCost * item.quantity
+    const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
+    if (linkedProductMaster) {
+      entry.totalCost += calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
     }
 
     productMap.set(name, entry)
@@ -168,12 +175,12 @@ export default async function ProductAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
-  const { supabase } = await requireServerSession({ includeProfile: false })
+  const { supabase, user } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
   const start = normalizeAnalyticsDate(searchParams?.start)
   const end = normalizeAnalyticsDate(searchParams?.end)
 
-  const data = await getProductAnalytics(supabase, scope, start, end)
+  const data = await getProductAnalytics(supabase, user.id, scope, start, end)
 
   const scopeLabel =
     scope === 'normal'
