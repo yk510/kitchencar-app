@@ -13,6 +13,7 @@ export type MobileOrderProductMasterLink = {
 
 type ProductMasterLinksMetadata = {
   mobile_order_product_links: Record<string, MobileOrderProductMasterLink>
+  mobile_order_option_choice_links: Record<string, MobileOrderProductMasterLink>
 }
 
 type ProductMasterRow = Database['public']['Tables']['product_master']['Row']
@@ -51,8 +52,13 @@ export function extractProductMasterLinksFromNotes(
     metadata.mobile_order_product_links && typeof metadata.mobile_order_product_links === 'object'
       ? (metadata.mobile_order_product_links as Record<string, unknown>)
       : {}
+  const rawOptionLinks =
+    metadata.mobile_order_option_choice_links && typeof metadata.mobile_order_option_choice_links === 'object'
+      ? (metadata.mobile_order_option_choice_links as Record<string, unknown>)
+      : {}
 
   const normalizedLinks: Record<string, MobileOrderProductMasterLink> = {}
+  const normalizedOptionLinks: Record<string, MobileOrderProductMasterLink> = {}
   for (const [productId, value] of Object.entries(rawLinks)) {
     if (!value || typeof value !== 'object') continue
 
@@ -67,17 +73,36 @@ export function extractProductMasterLinksFromNotes(
     }
   }
 
+  for (const [optionChoiceId, value] of Object.entries(rawOptionLinks)) {
+    if (!value || typeof value !== 'object') continue
+
+    const candidate = value as Record<string, unknown>
+    const productMasterId = typeof candidate.product_master_id === 'string' ? candidate.product_master_id.trim() : ''
+    const mode = candidate.mode === 'matched_existing' ? 'matched_existing' : candidate.mode === 'dedicated' ? 'dedicated' : null
+    if (!productMasterId || !mode) continue
+
+    normalizedOptionLinks[optionChoiceId] = {
+      product_master_id: productMasterId,
+      mode,
+    }
+  }
+
   return {
     mobile_order_product_links: normalizedLinks,
+    mobile_order_option_choice_links: normalizedOptionLinks,
   }
 }
 
 export function upsertProductMasterLinksInNotes(
   notes: string | null | undefined,
-  links: Record<string, MobileOrderProductMasterLink>
+  links: {
+    mobile_order_product_links: Record<string, MobileOrderProductMasterLink>
+    mobile_order_option_choice_links: Record<string, MobileOrderProductMasterLink>
+  }
 ) {
   const metadataBlock = `${PRODUCT_MASTER_LINKS_START}\n${JSON.stringify({
-    mobile_order_product_links: links,
+    mobile_order_product_links: links.mobile_order_product_links,
+    mobile_order_option_choice_links: links.mobile_order_option_choice_links,
   })}\n${PRODUCT_MASTER_LINKS_END}`
   const text = String(notes ?? '').trim()
   const pattern = new RegExp(
@@ -148,13 +173,16 @@ export async function loadProductMasterCostContext(supabase: any, userId: string
   const rows = (productMasters ?? []) as ProductMasterRow[]
   const byId = new Map(rows.map((row) => [row.id, row]))
   const byName = new Map(rows.map((row) => [row.product_name, row]))
-  const links = extractProductMasterLinksFromNotes(storePage.orderPage?.notes ?? null)?.mobile_order_product_links ?? {}
+  const metadata = extractProductMasterLinksFromNotes(storePage.orderPage?.notes ?? null)
+  const links = metadata?.mobile_order_product_links ?? {}
+  const optionChoiceLinks = metadata?.mobile_order_option_choice_links ?? {}
 
   return {
     rows,
     byId,
     byName,
     links,
+    optionChoiceLinks,
     storeId: storePage.storeId,
     orderPage: storePage.orderPage,
   }
@@ -190,4 +218,22 @@ export function calculateCostFromProductMaster(
   if (productMaster.cost_amount != null) return productMaster.cost_amount * quantity
   if (productMaster.cost_rate != null) return (salesAmount * productMaster.cost_rate) / 100
   return 0
+}
+
+export function resolveCostForMobileOrderOptionChoice(
+  optionChoiceId: string | null | undefined,
+  optionChoiceName: string,
+  context: {
+    byId: Map<string, ProductMasterRow>
+    byName: Map<string, ProductMasterRow>
+    optionChoiceLinks: Record<string, MobileOrderProductMasterLink>
+  }
+) {
+  const linked =
+    optionChoiceId && context.optionChoiceLinks[optionChoiceId]
+      ? context.byId.get(context.optionChoiceLinks[optionChoiceId].product_master_id) ?? null
+      : null
+
+  if (linked) return linked
+  return context.byName.get(optionChoiceName) ?? null
 }

@@ -14,6 +14,7 @@ import type {
   ProductMasterLinkMode as ProductMasterLinkModePayload,
   ProductMasterListPayload,
   ProductMasterMobileOrderLinkPayload,
+  ProductMasterMobileOrderOptionChoiceLinkPayload,
   ProductMasterRecordPayload,
 } from '@/types/api-payloads'
 import type { Database } from '@/types/database'
@@ -144,7 +145,10 @@ async function persistLinks(
   supabase: any,
   orderPageId: string,
   currentNotes: string | null | undefined,
-  links: Record<string, MobileOrderProductMasterLink>
+  links: {
+    mobile_order_product_links: Record<string, MobileOrderProductMasterLink>
+    mobile_order_option_choice_links: Record<string, MobileOrderProductMasterLink>
+  }
 ) {
   const nextNotes = upsertProductMasterLinksInNotes(currentNotes, links)
   const { error } = await (supabase as any)
@@ -167,8 +171,10 @@ export async function GET(req: NextRequest) {
     const context = await loadProductMasterCostContext(supabase, user.id)
     const productMasterById = context.byId
     const linkedProductMasterIds = new Set<string>()
+    const linkedOptionChoiceProductMasterIds = new Set<string>()
 
     let mobileOrderProducts: ProductMasterMobileOrderLinkPayload[] = []
+    let mobileOrderOptionChoices: ProductMasterMobileOrderOptionChoiceLinkPayload[] = []
     if (context.storeId) {
       const { data: products, error: mobileOrderProductsError } = await (supabase as any)
         .from('mobile_order_products')
@@ -199,6 +205,44 @@ export async function GET(req: NextRequest) {
           cost_updated_at: linked?.productMaster.cost_updated_at ?? null,
         }
       })
+
+      const { data: optionChoices, error: optionChoicesError } = await (supabase as any)
+        .from('mobile_order_option_choices')
+        .select('id, name, price_delta, mobile_order_option_groups!inner(name, store_id)')
+        .eq('mobile_order_option_groups.store_id', context.storeId)
+        .order('created_at', { ascending: true })
+
+      if (optionChoicesError) {
+        throw new Error(optionChoicesError.message)
+      }
+
+      mobileOrderOptionChoices = (
+        (optionChoices ?? []) as Array<{
+          id: string
+          name: string
+          price_delta: number
+          mobile_order_option_groups: { name: string; store_id: string }
+        }>
+      ).map((choice) => {
+        const link = context.optionChoiceLinks[choice.id] ?? null
+        const linked = link ? productMasterById.get(link.product_master_id) ?? null : context.byName.get(choice.name) ?? null
+        if (linked) {
+          linkedOptionChoiceProductMasterIds.add(linked.id)
+        }
+
+        return {
+          mobile_order_option_choice_id: choice.id,
+          mobile_order_option_choice_name: choice.name,
+          mobile_order_option_choice_price_delta: choice.price_delta,
+          mobile_order_option_group_name: choice.mobile_order_option_groups.name,
+          linked_product_master_id: linked?.id ?? null,
+          linked_product_master_name: linked?.product_name ?? null,
+          link_mode: (link?.mode ?? null) as ProductMasterLinkModePayload | null,
+          cost_amount: linked?.cost_amount ?? null,
+          cost_rate: linked?.cost_rate ?? null,
+          cost_updated_at: linked?.cost_updated_at ?? null,
+        }
+      })
     }
 
     const allProductMasters: ProductMasterRecordPayload[] = context.rows.map((row) => ({
@@ -209,10 +253,13 @@ export async function GET(req: NextRequest) {
       cost_updated_at: row.cost_updated_at,
     }))
 
-    const standaloneProducts = allProductMasters.filter((row) => !linkedProductMasterIds.has(row.id))
+    const standaloneProducts = allProductMasters.filter(
+      (row) => !linkedProductMasterIds.has(row.id) && !linkedOptionChoiceProductMasterIds.has(row.id)
+    )
 
     const payload: ProductMasterListPayload = {
       mobile_order_products: mobileOrderProducts,
+      mobile_order_option_choices: mobileOrderOptionChoices,
       standalone_products: standaloneProducts,
       all_product_masters: allProductMasters,
     }
@@ -239,6 +286,8 @@ export async function POST(req: NextRequest) {
     const productMasterId = typeof body.product_master_id === 'string' ? body.product_master_id.trim() : ''
     const mobileOrderProductId =
       typeof body.mobile_order_product_id === 'string' ? body.mobile_order_product_id.trim() : ''
+    const mobileOrderOptionChoiceId =
+      typeof body.mobile_order_option_choice_id === 'string' ? body.mobile_order_option_choice_id.trim() : ''
     const hasLinkedProductMasterField = Object.prototype.hasOwnProperty.call(body, 'linked_product_master_id')
     const linkedProductMasterId =
       typeof body.linked_product_master_id === 'string' ? body.linked_product_master_id.trim() : ''
@@ -263,6 +312,7 @@ export async function POST(req: NextRequest) {
 
       const context = await loadProductMasterCostContext(supabase, user.id)
       const links = { ...context.links }
+      const optionChoiceLinks = { ...context.optionChoiceLinks }
       const existingLink = links[mobileOrderProductId] ?? null
 
       let targetProductMaster: ProductMasterRow
@@ -323,7 +373,82 @@ export async function POST(req: NextRequest) {
         mode: nextMode,
       }
 
-      await persistLinks(supabase, orderPage.id, orderPage.notes ?? null, links)
+      await persistLinks(supabase, orderPage.id, orderPage.notes ?? null, {
+        mobile_order_product_links: links,
+        mobile_order_option_choice_links: optionChoiceLinks,
+      })
+      return apiOk<MutationSuccessPayload>({ success: true })
+    }
+
+    if (mobileOrderOptionChoiceId) {
+      const { storeId, orderPage } = await loadPrimaryStoreOrderPageForVendor(supabase, user.id)
+      if (!storeId || !orderPage) {
+        return apiError('モバイルオーダー設定が見つかりません', 400)
+      }
+
+      const { data: optionChoice, error: optionChoiceError } = await (supabase as any)
+        .from('mobile_order_option_choices')
+        .select('id, name, mobile_order_option_groups!inner(store_id)')
+        .eq('id', mobileOrderOptionChoiceId)
+        .eq('mobile_order_option_groups.store_id', storeId)
+        .single()
+
+      if (optionChoiceError || !optionChoice) {
+        return apiError('対象のトッピングが見つかりません', 404)
+      }
+
+      const context = await loadProductMasterCostContext(supabase, user.id)
+      const links = { ...context.links }
+      const optionChoiceLinks = { ...context.optionChoiceLinks }
+      const existingLink = optionChoiceLinks[mobileOrderOptionChoiceId] ?? null
+
+      let targetProductMaster: ProductMasterRow
+      let nextMode: ProductMasterLinkMode
+
+      if (linkedProductMasterId || productMasterId) {
+        targetProductMaster = await updateProductMasterById(
+          supabase,
+          user.id,
+          linkedProductMasterId || productMasterId,
+          nextCost
+        )
+        nextMode = 'matched_existing'
+      } else if (hasLinkedProductMasterField) {
+        const exactMatch = context.byName.get(optionChoice.name) ?? null
+        const existingDedicated =
+          existingLink?.mode === 'dedicated'
+            ? context.byId.get(existingLink.product_master_id) ?? null
+            : null
+
+        if (existingDedicated) {
+          targetProductMaster = await updateProductMasterById(supabase, user.id, existingDedicated.id, nextCost)
+        } else {
+          targetProductMaster = await upsertProductMasterByName(supabase, user.id, optionChoice.name, nextCost)
+        }
+        nextMode = exactMatch && exactMatch.id === targetProductMaster.id ? 'matched_existing' : 'dedicated'
+      } else if (existingLink) {
+        targetProductMaster = await updateProductMasterById(
+          supabase,
+          user.id,
+          existingLink.product_master_id,
+          nextCost
+        )
+        nextMode = existingLink.mode
+      } else {
+        const exactMatch = context.byName.get(optionChoice.name) ?? null
+        targetProductMaster = await upsertProductMasterByName(supabase, user.id, optionChoice.name, nextCost)
+        nextMode = exactMatch ? 'matched_existing' : 'dedicated'
+      }
+
+      optionChoiceLinks[mobileOrderOptionChoiceId] = {
+        product_master_id: targetProductMaster.id,
+        mode: nextMode,
+      }
+
+      await persistLinks(supabase, orderPage.id, orderPage.notes ?? null, {
+        mobile_order_product_links: links,
+        mobile_order_option_choice_links: optionChoiceLinks,
+      })
       return apiOk<MutationSuccessPayload>({ success: true })
     }
 

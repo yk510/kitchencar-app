@@ -7,6 +7,7 @@ import type {
   MutationSuccessPayload,
   ProductMasterListPayload,
   ProductMasterMobileOrderLinkPayload,
+  ProductMasterMobileOrderOptionChoiceLinkPayload,
   ProductMasterRecordPayload,
 } from '@/types/api-payloads'
 
@@ -44,6 +45,20 @@ function buildMobileDraft(product: ProductMasterMobileOrderLinkPayload): DraftIn
   }
 }
 
+function buildMobileOptionChoiceDraft(
+  optionChoice: ProductMasterMobileOrderOptionChoiceLinkPayload
+): DraftInput {
+  return {
+    amount: optionChoice.cost_amount != null ? String(optionChoice.cost_amount) : '',
+    rate: optionChoice.cost_rate != null ? String(optionChoice.cost_rate) : '',
+    mode: optionChoice.cost_rate != null ? 'rate' : 'amount',
+    matchProductMasterId:
+      optionChoice.link_mode === 'matched_existing'
+        ? optionChoice.linked_product_master_id ?? ''
+        : '',
+  }
+}
+
 function formatCurrentCost(costAmount: number | null, costRate: number | null) {
   if (costAmount != null) return `${costAmount.toLocaleString()} 円`
   if (costRate != null) return `${costRate} %`
@@ -58,9 +73,14 @@ function keyForMobile(productId: string) {
   return `mo:${productId}`
 }
 
+function keyForOptionChoice(optionChoiceId: string) {
+  return `moc:${optionChoiceId}`
+}
+
 export default function ProductMasterPage() {
   const draftState = usePersistentDraft<DraftMap>('draft:product-master-inputs', {})
   const [mobileOrderProducts, setMobileOrderProducts] = useState<ProductMasterMobileOrderLinkPayload[]>([])
+  const [mobileOrderOptionChoices, setMobileOrderOptionChoices] = useState<ProductMasterMobileOrderOptionChoiceLinkPayload[]>([])
   const [standaloneProducts, setStandaloneProducts] = useState<ProductMasterRecordPayload[]>([])
   const [allProductMasters, setAllProductMasters] = useState<ProductMasterRecordPayload[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,12 +100,17 @@ export default function ProductMasterPage() {
       })
 
       setMobileOrderProducts(data.mobile_order_products)
+      setMobileOrderOptionChoices(data.mobile_order_option_choices)
       setStandaloneProducts(data.standalone_products)
       setAllProductMasters(data.all_product_masters)
 
       const init: DraftMap = {}
       for (const product of data.mobile_order_products) {
         init[keyForMobile(product.mobile_order_product_id)] = buildMobileDraft(product)
+      }
+      for (const optionChoice of data.mobile_order_option_choices) {
+        init[keyForOptionChoice(optionChoice.mobile_order_option_choice_id)] =
+          buildMobileOptionChoiceDraft(optionChoice)
       }
       for (const product of data.standalone_products) {
         init[keyForStandalone(product.id)] = buildStandaloneDraft(product)
@@ -174,6 +199,42 @@ export default function ProductMasterPage() {
     }
   }
 
+  async function saveMobileOrderOptionChoice(optionChoice: ProductMasterMobileOrderOptionChoiceLinkPayload) {
+    const key = keyForOptionChoice(optionChoice.mobile_order_option_choice_id)
+    const input = inputs[key]
+    if (!input) return
+
+    const rawValue = input.mode === 'rate' ? input.rate : input.amount
+    const parsedValue = parseFloat(rawValue)
+    if (!rawValue || Number.isNaN(parsedValue) || parsedValue < 0) {
+      alert('正しい数値を入力してください')
+      return
+    }
+
+    setSaving(key)
+    try {
+      const body: Record<string, unknown> = {
+        mobile_order_option_choice_id: optionChoice.mobile_order_option_choice_id,
+        linked_product_master_id: input.matchProductMasterId,
+      }
+      if (input.mode === 'rate') body.cost_rate = parsedValue
+      else body.cost_amount = Math.round(parsedValue)
+
+      await fetchApi<MutationSuccessPayload>('/api/products/master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      draftState.clearDraft()
+      await load()
+    } catch (err) {
+      alert(err instanceof ApiClientError ? err.message : '保存に失敗しました')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   const unregisteredMobile = useMemo(
     () => mobileOrderProducts.filter((product) => product.cost_amount == null && product.cost_rate == null),
     [mobileOrderProducts]
@@ -181,6 +242,14 @@ export default function ProductMasterPage() {
   const registeredMobile = useMemo(
     () => mobileOrderProducts.filter((product) => product.cost_amount != null || product.cost_rate != null),
     [mobileOrderProducts]
+  )
+  const unregisteredOptionChoices = useMemo(
+    () => mobileOrderOptionChoices.filter((choice) => choice.cost_amount == null && choice.cost_rate == null),
+    [mobileOrderOptionChoices]
+  )
+  const registeredOptionChoices = useMemo(
+    () => mobileOrderOptionChoices.filter((choice) => choice.cost_amount != null || choice.cost_rate != null),
+    [mobileOrderOptionChoices]
   )
   const unregisteredStandalone = useMemo(
     () => standaloneProducts.filter((product) => product.cost_amount == null && product.cost_rate == null),
@@ -306,7 +375,60 @@ export default function ProductMasterPage() {
         </section>
       )}
 
-      {mobileOrderProducts.length === 0 && standaloneProducts.length === 0 && (
+      {mobileOrderOptionChoices.length > 0 && (
+        <section className="mb-10">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="bg-cyan-100 text-cyan-800 text-xs font-bold px-2 py-1 rounded-full">
+              トッピング {mobileOrderOptionChoices.length}件
+            </span>
+            <h2 className="text-lg font-semibold text-gray-700">モバイルオーダーのトッピングから原価を登録する</h2>
+          </div>
+          <div className="space-y-3">
+            {unregisteredOptionChoices.map((optionChoice) => (
+              <MobileOrderOptionChoiceRow
+                key={optionChoice.mobile_order_option_choice_id}
+                optionChoice={optionChoice}
+                allProductMasters={allProductMasters}
+                input={inputs[keyForOptionChoice(optionChoice.mobile_order_option_choice_id)] ?? EMPTY_DRAFT_INPUT}
+                onInputChange={(field, value) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [keyForOptionChoice(optionChoice.mobile_order_option_choice_id)]: {
+                      ...(prev[keyForOptionChoice(optionChoice.mobile_order_option_choice_id)] ?? EMPTY_DRAFT_INPUT),
+                      [field]: value,
+                    },
+                  }))
+                }
+                onSave={() => saveMobileOrderOptionChoice(optionChoice)}
+                saving={saving === keyForOptionChoice(optionChoice.mobile_order_option_choice_id)}
+                highlight
+              />
+            ))}
+            {registeredOptionChoices.map((optionChoice) => (
+              <MobileOrderOptionChoiceRow
+                key={optionChoice.mobile_order_option_choice_id}
+                optionChoice={optionChoice}
+                allProductMasters={allProductMasters}
+                input={inputs[keyForOptionChoice(optionChoice.mobile_order_option_choice_id)] ?? EMPTY_DRAFT_INPUT}
+                onInputChange={(field, value) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [keyForOptionChoice(optionChoice.mobile_order_option_choice_id)]: {
+                      ...(prev[keyForOptionChoice(optionChoice.mobile_order_option_choice_id)] ?? EMPTY_DRAFT_INPUT),
+                      [field]: value,
+                    },
+                  }))
+                }
+                onSave={() => saveMobileOrderOptionChoice(optionChoice)}
+                saving={saving === keyForOptionChoice(optionChoice.mobile_order_option_choice_id)}
+                highlight={false}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {mobileOrderProducts.length === 0 && mobileOrderOptionChoices.length === 0 && standaloneProducts.length === 0 && (
         <div className="text-center text-gray-400 py-20">
           <p className="text-5xl mb-4">📦</p>
           <p>商品がまだ登録されていません。</p>
@@ -316,6 +438,74 @@ export default function ProductMasterPage() {
           </a>
         </div>
       )}
+    </div>
+  )
+}
+
+function MobileOrderOptionChoiceRow({
+  optionChoice,
+  allProductMasters,
+  input,
+  onInputChange,
+  onSave,
+  saving,
+  highlight,
+}: BaseRowProps & {
+  optionChoice: ProductMasterMobileOrderOptionChoiceLinkPayload
+  allProductMasters: ProductMasterRecordPayload[]
+}) {
+  const currentCost = formatCurrentCost(optionChoice.cost_amount, optionChoice.cost_rate)
+
+  return (
+    <div
+      className={`bg-white rounded-xl border p-4 flex flex-col gap-4 ${
+        highlight ? 'border-cyan-300 bg-cyan-50/40' : 'border-gray-200'
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <p className="font-medium text-gray-800">{optionChoice.mobile_order_option_choice_name}</p>
+            <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-700">トッピング</span>
+          </div>
+          <p className="text-xs text-gray-500">
+            {optionChoice.mobile_order_option_group_name} / 追加価格: {optionChoice.mobile_order_option_choice_price_delta.toLocaleString()} 円
+          </p>
+          {currentCost && <p className="text-xs text-gray-400 mt-0.5">現在の原価: {currentCost}</p>}
+          {optionChoice.linked_product_master_name ? (
+            <p className="text-xs text-gray-500 mt-1">
+              原価連携先: <span className="font-medium text-gray-700">{optionChoice.linked_product_master_name}</span>
+              {optionChoice.link_mode === 'matched_existing' ? '（Airレジ商品と同じものとして扱う）' : '（このトッピングだけで管理）'}
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700 mt-1">まだ原価マスタと連携されていません。同じ材料なら、下で既存商品にひも付けできます。</p>
+          )}
+        </div>
+        <div className="min-w-[240px]">
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Airレジの商品と同じものとして扱う</label>
+          <p className="text-[11px] text-gray-400 mb-2">同じ材料なら選択してください。別管理にしたい場合はそのままでOKです。</p>
+          <select
+            value={input.matchProductMasterId}
+            onChange={(event) => onInputChange('matchProductMasterId', event.target.value)}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="">別の商品として管理する</option>
+            {allProductMasters.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.product_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <CostInputControls
+        input={input}
+        onInputChange={onInputChange}
+        onSave={onSave}
+        saving={saving}
+        highlight={highlight}
+      />
     </div>
   )
 }

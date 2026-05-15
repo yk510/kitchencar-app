@@ -27,6 +27,10 @@ export type MobileOrderAnalyticsItem = {
   productName: string
   quantity: number
   lineTotalAmount: number
+  optionChoices: Array<{
+    optionChoiceName: string
+    priceDelta: number
+  }>
 }
 
 function toJstDate(value: string) {
@@ -202,19 +206,46 @@ export async function fetchMobileOrderAnalyticsData(
 
     const { data: rawItems, error: itemsError } = await (supabase as any)
       .from('mobile_order_items')
-      .select('order_id, product_id, product_name_snapshot, quantity, line_total_amount')
+      .select('id, order_id, product_id, product_name_snapshot, quantity, line_total_amount')
       .in('order_id', orderIds)
 
     if (itemsError) {
       throw new Error(itemsError.message)
     }
 
-    const items = ((rawItems ?? []) as RawMobileOrderItemRow[]).map((item) => ({
+    const itemIds = ((rawItems ?? []) as Array<RawMobileOrderItemRow & { id: string }>).map((item) => item.id)
+    const { data: optionChoiceRows, error: optionChoicesError } = itemIds.length
+      ? await (supabase as any)
+          .from('mobile_order_item_option_choices')
+          .select('order_item_id, option_choice_name_snapshot, price_delta_snapshot')
+          .in('order_item_id', itemIds)
+      : { data: [], error: null }
+
+    if (optionChoicesError) {
+      throw new Error(optionChoicesError.message)
+    }
+
+    const optionChoicesByItemId = new Map<string, Array<{ optionChoiceName: string; priceDelta: number }>>()
+    for (const row of ((optionChoiceRows ?? []) as Array<{
+      order_item_id: string
+      option_choice_name_snapshot: string
+      price_delta_snapshot: number
+    }>)) {
+      const current = optionChoicesByItemId.get(row.order_item_id) ?? []
+      current.push({
+        optionChoiceName: row.option_choice_name_snapshot,
+        priceDelta: row.price_delta_snapshot,
+      })
+      optionChoicesByItemId.set(row.order_item_id, current)
+    }
+
+    const items = ((rawItems ?? []) as Array<RawMobileOrderItemRow & { id: string }>).map((item) => ({
       orderId: item.order_id,
       productId: item.product_id,
       productName: item.product_name_snapshot,
       quantity: item.quantity ?? 0,
       lineTotalAmount: item.line_total_amount ?? 0,
+      optionChoices: optionChoicesByItemId.get(item.id) ?? [],
     }))
 
     return {
@@ -270,6 +301,7 @@ export async function fetchMobileOrderAnalyticsData(
     productName: item.product_name_snapshot,
     quantity: item.quantity ?? 0,
     lineTotalAmount: item.line_total_amount ?? 0,
+    optionChoices: [],
   }))
 
   return {

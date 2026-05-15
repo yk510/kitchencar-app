@@ -11,6 +11,7 @@ import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import {
   calculateCostFromProductMaster,
   loadProductMasterCostContext,
+  resolveCostForMobileOrderOptionChoice,
   resolveCostForMobileOrderProduct,
 } from '@/lib/product-master-links'
 
@@ -113,6 +114,23 @@ export async function GET(req: NextRequest) {
     const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
     if (linkedProductMaster) {
       entry.total_cost += calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
+      entry.has_cost = true
+    }
+    let optionCost = 0
+    for (const optionChoice of item.optionChoices) {
+      const linkedOptionMaster = resolveCostForMobileOrderOptionChoice(
+        null,
+        optionChoice.optionChoiceName,
+        costContext
+      )
+      optionCost += calculateCostFromProductMaster(
+        linkedOptionMaster,
+        item.quantity,
+        optionChoice.priceDelta * item.quantity
+      )
+    }
+    if (optionCost > 0) {
+      entry.total_cost += optionCost
       entry.has_cost = true
     }
     productMap.set(item.productName, entry)

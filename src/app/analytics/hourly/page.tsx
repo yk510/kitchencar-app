@@ -8,6 +8,12 @@ import {
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
+import {
+  calculateCostFromProductMaster,
+  loadProductMasterCostContext,
+  resolveCostForMobileOrderOptionChoice,
+  resolveCostForMobileOrderProduct,
+} from '@/lib/product-master-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +29,7 @@ function hourLabel(hour: number) {
 
 async function getHourlyAnalytics(
   supabase: any,
+  userId: string,
   scope: AnalyticsScope,
   start?: string,
   end?: string
@@ -75,6 +82,7 @@ async function getHourlyAnalytics(
     end,
     stallLogByDate,
   })
+  const costContext = await loadProductMasterCostContext(supabase, userId)
 
   const txnHourMap = new Map<string, number>()
   for (const t of ((txns ?? []) as any[])) {
@@ -150,9 +158,27 @@ async function getHourlyAnalytics(
     const entry = hourMap.get(order.hourOfDay)
     if (!entry) continue
 
-    const unitCost = costMap.get(item.productName)
-    if (unitCost != null) {
-      entry.totalCost += unitCost * item.quantity
+    const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
+    if (linkedProductMaster) {
+      entry.totalCost += calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
+    } else {
+      const unitCost = costMap.get(item.productName)
+      if (unitCost != null) {
+        entry.totalCost += unitCost * item.quantity
+      }
+    }
+
+    for (const optionChoice of item.optionChoices) {
+      const linkedOptionMaster = resolveCostForMobileOrderOptionChoice(
+        null,
+        optionChoice.optionChoiceName,
+        costContext
+      )
+      entry.totalCost += calculateCostFromProductMaster(
+        linkedOptionMaster,
+        item.quantity,
+        optionChoice.priceDelta * item.quantity
+      )
     }
   }
 
@@ -200,12 +226,12 @@ export default async function HourlyAnalyticsPage({
 }: {
   searchParams?: { scope?: string; start?: string; end?: string }
 }) {
-  const { supabase } = await requireServerSession({ includeProfile: false })
+  const { supabase, user } = await requireServerSession({ includeProfile: false })
   const scope = normalizeScope(searchParams?.scope)
   const start = normalizeAnalyticsDate(searchParams?.start)
   const end = normalizeAnalyticsDate(searchParams?.end)
 
-  const data = await getHourlyAnalytics(supabase, scope, start, end)
+  const data = await getHourlyAnalytics(supabase, user.id, scope, start, end)
 
   const scopeLabel =
     scope === 'normal' ? '通常出店のみ' : scope === 'event' ? 'イベント出店のみ' : '全体'

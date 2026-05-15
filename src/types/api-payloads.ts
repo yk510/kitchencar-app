@@ -68,8 +68,22 @@ export type ProductMasterMobileOrderLinkPayload = {
   cost_updated_at: string | null
 }
 
+export type ProductMasterMobileOrderOptionChoiceLinkPayload = {
+  mobile_order_option_choice_id: string
+  mobile_order_option_choice_name: string
+  mobile_order_option_choice_price_delta: number
+  mobile_order_option_group_name: string
+  linked_product_master_id: string | null
+  linked_product_master_name: string | null
+  link_mode: ProductMasterLinkMode | null
+  cost_amount: number | null
+  cost_rate: number | null
+  cost_updated_at: string | null
+}
+
 export type ProductMasterListPayload = {
   mobile_order_products: ProductMasterMobileOrderLinkPayload[]
+  mobile_order_option_choices: ProductMasterMobileOrderOptionChoiceLinkPayload[]
   standalone_products: ProductMasterRecordPayload[]
   all_product_masters: ProductMasterRecordPayload[]
 }

@@ -4,6 +4,7 @@ import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import {
   calculateCostFromProductMaster,
   loadProductMasterCostContext,
+  resolveCostForMobileOrderOptionChoice,
   resolveCostForMobileOrderProduct,
 } from '@/lib/product-master-links'
 import type {
@@ -201,10 +202,26 @@ export async function getVendorDailyAnalytics(
   const grossProfitByOrderId = new Map<string, number>()
   for (const item of mobileOrderAnalytics.items) {
     const linkedProductMaster = resolveCostForMobileOrderProduct(item.productId, item.productName, costContext)
+    const optionCost = item.optionChoices.reduce((sum, optionChoice) => {
+      const linkedOptionMaster = resolveCostForMobileOrderOptionChoice(
+        null,
+        optionChoice.optionChoiceName,
+        costContext
+      )
+      return (
+        sum +
+        calculateCostFromProductMaster(
+          linkedOptionMaster,
+          item.quantity,
+          optionChoice.priceDelta * item.quantity
+        )
+      )
+    }, 0)
     grossProfitByOrderId.set(
       item.orderId,
       (grossProfitByOrderId.get(item.orderId) ?? 0) +
-        calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount)
+        calculateCostFromProductMaster(linkedProductMaster, item.quantity, item.lineTotalAmount) +
+        optionCost
     )
   }
 
