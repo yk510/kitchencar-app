@@ -1,5 +1,6 @@
 import { getDefaultHolidayFlag, getWeekdayLabel } from '@/lib/calendar'
 import { buildStallLogResolutionMap } from '@/lib/analytics-resolution'
+import { resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import {
   calculateCostFromProductMaster,
@@ -24,12 +25,6 @@ function normalizePaymentBucket(value: string | null | undefined): 'cash' | 'pay
   if (!normalized) return 'other'
   if (normalized.includes('現金') || normalized === 'cash') return 'cash'
   if (normalized.includes('paypay')) return 'paypay'
-  return 'other'
-}
-
-function paymentBucketFromProvider(value: string | null | undefined): 'cash' | 'paypay' | 'other' {
-  if (value === 'store_pos_cash') return 'cash'
-  if (value === 'store_pos_paypay') return 'paypay'
   return 'other'
 }
 
@@ -320,7 +315,7 @@ export async function getVendorDailyAnalytics(
     current.sales += order.totalAmount
     current.txnCount += 1
     current.grossProfit += order.totalAmount - (grossProfitByOrderId.get(order.id) ?? 0)
-    const paymentBucket = paymentBucketFromProvider(order.paymentProvider)
+    const paymentBucket = normalizePaymentBucket(resolveMobileOrderPaymentMethod(order))
     if (paymentBucket === 'cash') current.cashSales += order.totalAmount
     else if (paymentBucket === 'paypay') current.paypaySales += order.totalAmount
     else current.otherSales += order.totalAmount

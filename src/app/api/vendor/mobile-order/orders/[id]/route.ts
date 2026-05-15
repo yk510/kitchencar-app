@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
+import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
 import type { VendorMobileOrderOrderMutationPayload } from '@/types/api-payloads'
 
@@ -12,10 +13,6 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   ready: ['picked_up'],
   picked_up: [],
   cancelled: [],
-}
-
-function isStorePosOrder(order: { payment_provider?: string | null }) {
-  return String(order.payment_provider ?? '').startsWith('store_pos_')
 }
 
 async function updateOrderPaymentReceipt(supabase: any, orderId: string, actorUserId: string) {
@@ -112,6 +109,7 @@ export async function PATCH(
           after_status: 'paid',
           payload: {
             payment_provider: currentOrder.payment_provider,
+            payment_method: resolveMobileOrderPaymentMethod(currentOrder),
             received_at: new Date().toISOString(),
           },
         },

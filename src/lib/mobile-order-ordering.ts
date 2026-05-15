@@ -322,6 +322,9 @@ export async function createPreparedMobileOrder(
   overrides?: Partial<{
     payment_status: 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded'
     payment_provider: string
+    order_source: 'mobile_order' | 'store_pos'
+    payment_method: 'card_online' | 'cash' | 'paypay' | 'other'
+    pos_device_label: string | null
     payment_reference: string | null
   }>
 ) {
@@ -342,6 +345,9 @@ export async function createPreparedMobileOrder(
       status: 'placed',
       payment_status: overrides?.payment_status ?? 'pending',
       payment_provider: overrides?.payment_provider ?? 'stripe_checkout',
+      order_source: overrides?.order_source ?? 'mobile_order',
+      payment_method: overrides?.payment_method ?? 'card_online',
+      pos_device_label: overrides?.pos_device_label ?? null,
       payment_reference: overrides?.payment_reference ?? null,
       subtotal_amount: draft.subtotalAmount,
       tax_amount: 0,

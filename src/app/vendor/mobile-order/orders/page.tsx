@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import type {
   MobileOrderNotificationRow,
   VendorMobileOrderDashboardOrder,
@@ -51,14 +52,14 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   refunded: '返金済み',
 }
 
-function isStorePosOrder(order: { payment_provider?: string | null }) {
-  return String(order.payment_provider ?? '').startsWith('store_pos_')
-}
-
-function getStorePosPaymentMethodLabel(order: { payment_provider?: string | null }) {
-  if (order.payment_provider === 'store_pos_cash') return '現金'
-  if (order.payment_provider === 'store_pos_paypay') return 'PayPay'
-  if (order.payment_provider === 'store_pos_other') return 'その他'
+function getStorePosPaymentMethodLabel(order: {
+  payment_provider?: string | null
+  payment_method?: string | null
+}) {
+  const method = resolveMobileOrderPaymentMethod(order)
+  if (method === 'cash') return '現金'
+  if (method === 'paypay') return 'PayPay'
+  if (method === 'other') return 'その他'
   return '店頭POS'
 }
 

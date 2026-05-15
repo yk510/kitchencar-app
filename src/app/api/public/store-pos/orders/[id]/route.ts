@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
+import { isStorePosOrder } from '@/lib/mobile-order-fields'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type { PublicStorePosOrderStatusResponse } from '@/types/api-payloads'
 
 function isMissingPaidAtColumnError(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? '')
-  return message.includes('paid_at')
+  return message.includes('paid_at') || message.includes('order_source') || message.includes('payment_method')
 }
 
 export async function GET(
@@ -32,7 +33,7 @@ export async function GET(
 
   let orderResult = await (supabase as any)
     .from('mobile_orders')
-    .select('id, order_page_id, order_number, total_amount, payment_status, status, paid_at, cancelled_at, payment_provider')
+    .select('id, order_page_id, order_number, total_amount, payment_status, status, paid_at, cancelled_at, payment_provider, order_source, payment_method')
     .eq('id', id)
     .single()
 
@@ -54,7 +55,7 @@ export async function GET(
     return apiError('この注文情報にはアクセスできません', 403)
   }
 
-  if (!String(order.payment_provider ?? '').startsWith('store_pos_')) {
+  if (!isStorePosOrder(order)) {
     return apiError('POS注文ではありません', 409)
   }
 

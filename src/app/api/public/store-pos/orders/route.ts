@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
+import { getStorePosProviderForMethod } from '@/lib/mobile-order-fields'
 import { createPreparedMobileOrder, preparePublicOrderDraft } from '@/lib/mobile-order-ordering'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type { StorePosCreatePayload } from '@/types/api-payloads'
@@ -36,16 +37,14 @@ export async function POST(req: NextRequest) {
       return apiError('選択した支払方法は利用できません', 409)
     }
 
-    const paymentProvider =
-      paymentMethod === 'cash'
-        ? 'store_pos_cash'
-        : paymentMethod === 'paypay'
-          ? 'store_pos_paypay'
-          : 'store_pos_other'
+    const paymentProvider = getStorePosProviderForMethod(paymentMethod)
 
     const order = await createPreparedMobileOrder(supabase, draft, {
       payment_status: 'pending',
       payment_provider: paymentProvider,
+      order_source: 'store_pos',
+      payment_method: paymentMethod,
+      pos_device_label: draft.store.store_pos_terminal_name ?? 'front-tablet',
     })
 
     const payload: StorePosOrderCreateResponse = {

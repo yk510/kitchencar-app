@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
+import { isStorePosOrder } from '@/lib/mobile-order-fields'
 import { ensureVendorStoreResources, resolveActiveSchedule } from '@/lib/mobile-order'
 import type {
   StoreOrderScheduleRow,
@@ -17,10 +18,6 @@ function pickSelectedSchedule(schedules: StoreOrderScheduleRow[], requestedSched
   if (activeSchedule) return activeSchedule
 
   return schedules[0] ?? null
-}
-
-function isStorePosOrder(order: { payment_provider?: string | null }) {
-  return String(order.payment_provider ?? '').startsWith('store_pos_')
 }
 
 export async function GET(req: NextRequest) {

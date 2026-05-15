@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js'
+import { isMissingMobileOrderExtendedColumnsError } from '@/lib/mobile-order-fields'
 import type { Database } from '@/types/database'
 
 type StoreOrderScheduleInventoryRow = Database['public']['Tables']['store_order_schedule_inventories']['Row']
@@ -302,20 +303,38 @@ export async function insertMobileOrderWithGeneratedNumber(
   businessDate: string,
   payload: Record<string, unknown>
 ) {
+  const stripExtendedFields = (record: Record<string, unknown>) => {
+    const next = { ...record }
+    delete next.order_source
+    delete next.payment_method
+    delete next.paid_at
+    delete next.accepted_by_user_id
+    delete next.pos_device_label
+    return next
+  }
+
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const { orderNumber, dailySequence } = await generateNextOrderNumber(supabase, store, businessDate)
 
-    const { data, error } = await supabase
+    const record = {
+      ...payload,
+      order_number: orderNumber,
+      order_daily_sequence: dailySequence,
+    }
+
+    let { data, error } = await supabase
       .from('mobile_orders')
-      .insert([
-        {
-          ...payload,
-          order_number: orderNumber,
-          order_daily_sequence: dailySequence,
-        },
-      ])
+      .insert([record])
       .select('*')
       .single()
+
+    if (error && isMissingMobileOrderExtendedColumnsError(error)) {
+      ;({ data, error } = await supabase
+        .from('mobile_orders')
+        .insert([stripExtendedFields(record)])
+        .select('*')
+        .single())
+    }
 
     if (!error) {
       return data

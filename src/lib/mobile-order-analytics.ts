@@ -1,5 +1,9 @@
 import type { AnalyticsScopeFilter, StallLogResolution } from '@/lib/analytics-resolution'
 import { matchesAnalyticsScope, resolveAnalyticsEventId } from '@/lib/analytics-resolution'
+import {
+  resolveMobileOrderPaymentMethod,
+  resolveMobileOrderSource,
+} from '@/lib/mobile-order-fields'
 import { extractStoreOrderScheduleMetadata } from '@/lib/store-order-schedule-metadata'
 
 export type MobileOrderAnalyticsSource = 'mobile_order' | 'store_pos'
@@ -15,6 +19,7 @@ export type MobileOrderAnalyticsOrder = {
   paymentStatus: string
   status: string
   paymentProvider: string | null
+  paymentMethod: string | null
   source: MobileOrderAnalyticsSource
   eventId: string | null
   eventName: string | null
@@ -73,6 +78,8 @@ type RawMobileOrderRow = {
   payment_status: string
   status: string
   payment_provider: string | null
+  order_source?: string | null
+  payment_method?: string | null
 }
 
 type RawMobileOrderItemRow = {
@@ -89,14 +96,10 @@ const JST_HOUR_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   hour12: false,
 })
 
-function resolveMobileOrderSource(paymentProvider: string | null | undefined): MobileOrderAnalyticsSource {
-  return String(paymentProvider ?? '').startsWith('store_pos_') ? 'store_pos' : 'mobile_order'
-}
-
 function isCountableMobileOrder(order: RawMobileOrderRow) {
   if (order.status === 'cancelled') return false
 
-  const source = resolveMobileOrderSource(order.payment_provider)
+  const source = resolveMobileOrderSource(order)
   if (source === 'store_pos') {
     return order.payment_status === 'paid'
   }
@@ -128,12 +131,20 @@ export async function fetchMobileOrderAnalyticsData(
 
   let ordersQuery = (supabase as any)
     .from('mobile_orders')
-    .select('id, schedule_id, ordered_at, total_amount, payment_status, status, payment_provider')
+    .select('id, schedule_id, ordered_at, total_amount, payment_status, status, payment_provider, order_source, payment_method')
 
   if (start) ordersQuery = ordersQuery.gte('ordered_at', toJstRangeStart(start))
   if (end) ordersQuery = ordersQuery.lte('ordered_at', toJstRangeEnd(end))
 
-  const { data: rawOrders, error: ordersError } = await ordersQuery
+  let { data: rawOrders, error: ordersError } = await ordersQuery
+
+  if (ordersError && String(ordersError.message ?? '').match(/order_source|payment_method/)) {
+    ;({ data: rawOrders, error: ordersError } = await (supabase as any)
+      .from('mobile_orders')
+      .select('id, schedule_id, ordered_at, total_amount, payment_status, status, payment_provider')
+      .gte('ordered_at', start ? toJstRangeStart(start) : '0001-01-01T00:00:00.000Z')
+      .lte('ordered_at', end ? toJstRangeEnd(end) : '9999-12-31T23:59:59.999Z'))
+  }
 
   if (ordersError) {
     throw new Error(ordersError.message)
@@ -190,7 +201,8 @@ export async function fetchMobileOrderAnalyticsData(
           paymentStatus: order.payment_status,
           status: order.status,
           paymentProvider: order.payment_provider ?? null,
-          source: resolveMobileOrderSource(order.payment_provider),
+          paymentMethod: resolveMobileOrderPaymentMethod(order),
+          source: resolveMobileOrderSource(order),
           eventId: resolvedEventId,
           eventName: scheduleContext.event_name,
           locationId: scheduleContext.location_id ?? stallLogByDate.get(businessDate)?.locationId ?? null,
@@ -268,11 +280,12 @@ export async function fetchMobileOrderAnalyticsData(
         orderedAt: order.ordered_at,
         hourOfDay: getJstHour(order.ordered_at),
         dayOfWeek: getDayOfWeekFromBusinessDate(businessDate),
-        totalAmount: order.total_amount ?? 0,
-        paymentStatus: order.payment_status,
-        status: order.status,
-        paymentProvider: order.payment_provider ?? null,
-        source: resolveMobileOrderSource(order.payment_provider),
+          totalAmount: order.total_amount ?? 0,
+          paymentStatus: order.payment_status,
+          status: order.status,
+          paymentProvider: order.payment_provider ?? null,
+          paymentMethod: resolveMobileOrderPaymentMethod(order),
+          source: resolveMobileOrderSource(order),
         eventId: resolvedEventId,
         eventName: null,
         locationId: stallLogByDate.get(businessDate)?.locationId ?? null,

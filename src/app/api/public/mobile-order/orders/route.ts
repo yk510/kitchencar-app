@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     const order = await createPreparedMobileOrder(supabase, draft, {
       payment_status: 'pending',
       payment_provider: 'stripe_checkout',
+      order_source: 'mobile_order',
+      payment_method: 'card_online',
     })
 
     let checkoutUrl = ''
