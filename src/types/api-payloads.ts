@@ -281,6 +281,16 @@ export type PublicMobileOrderCheckoutStatusResponse = {
   payment_status: MobileOrderRow['payment_status']
 }
 
+export type PublicStorePosOrderStatusResponse = {
+  order_id: string
+  order_number: string
+  total_amount: number
+  payment_status: MobileOrderRow['payment_status']
+  status: MobileOrderRow['status']
+  paid_at: string | null
+  cancelled_at: string | null
+}
+
 export type MobileOrderRow = Database['public']['Tables']['mobile_orders']['Row']
 export type MobileOrderItemRow = Database['public']['Tables']['mobile_order_items']['Row']
 export type MobileOrderItemOptionChoiceRow = Database['public']['Tables']['mobile_order_item_option_choices']['Row']

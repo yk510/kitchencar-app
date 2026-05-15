@@ -6,6 +6,7 @@ import type {
   PublicMobileOrderPagePayload,
   PublicMobileOrderProduct,
   StorePosCreatePayload,
+  PublicStorePosOrderStatusResponse,
   StorePosPaymentMethod,
 } from '@/types/api-payloads'
 
@@ -24,6 +25,12 @@ type StorePosCreateResponse = {
   payment_status: 'pending' | 'paid'
   payment_method: StorePosPaymentMethod
   total_amount: number
+}
+
+type SubmittedStorePosOrder = StorePosCreateResponse & {
+  status: 'placed' | 'cancelled'
+  paid_at: string | null
+  cancelled_at: string | null
 }
 
 const primaryButtonClassName =
@@ -62,8 +69,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [completedOrder, setCompletedOrder] = useState<StorePosCreateResponse | null>(null)
-  const [countdownSeconds, setCountdownSeconds] = useState(12)
+  const [submittedOrder, setSubmittedOrder] = useState<SubmittedStorePosOrder | null>(null)
+  const [countdownSeconds, setCountdownSeconds] = useState(10)
+  const [waitingSettlement, setWaitingSettlement] = useState(false)
+  const [settlementMessage, setSettlementMessage] = useState<string | null>(null)
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
@@ -75,9 +84,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }, [paymentMethods, selectedPaymentMethod])
 
   useEffect(() => {
-    if (!completedOrder) return
+    if (!submittedOrder) return
+    if (submittedOrder.payment_status !== 'paid' && submittedOrder.status !== 'cancelled') return
 
-    setCountdownSeconds(12)
+    setCountdownSeconds(10)
     const intervalId = window.setInterval(() => {
       setCountdownSeconds((current) => {
         if (current <= 1) {
@@ -92,7 +102,57 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [completedOrder])
+  }, [submittedOrder])
+
+  useEffect(() => {
+    if (!submittedOrder) return
+    if (submittedOrder.payment_status === 'paid' || submittedOrder.status === 'cancelled') return
+
+    setWaitingSettlement(true)
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        try {
+          const response = await fetchApi<PublicStorePosOrderStatusResponse>(
+            `/api/public/store-pos/orders/${submittedOrder.order_id}?public_token=${encodeURIComponent(data.orderPage.public_token)}`,
+            {
+              cache: 'no-store',
+            }
+          )
+
+          setSubmittedOrder((current) =>
+            current
+              ? {
+                  ...current,
+                  payment_status: response.payment_status as SubmittedStorePosOrder['payment_status'],
+                  status: response.status as SubmittedStorePosOrder['status'],
+                  paid_at: response.paid_at,
+                  cancelled_at: response.cancelled_at,
+                }
+              : current
+          )
+
+          if (response.status === 'cancelled') {
+            setSettlementMessage('店員が注文をキャンセルしました。10秒後に次の注文画面へ戻ります。')
+            setWaitingSettlement(false)
+            window.clearInterval(intervalId)
+            return
+          }
+
+          if (response.payment_status === 'paid') {
+            setSettlementMessage('店員が料金受領を記録しました。10秒後に次の注文画面へ戻ります。')
+            setWaitingSettlement(false)
+            window.clearInterval(intervalId)
+          }
+        } catch {
+          // Keep polling; temporary fetch failure should not break the kiosk flow.
+        }
+      })()
+    }, 2000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [submittedOrder, data.orderPage.public_token])
 
   function addProductToCart(product: PublicMobileOrderProduct) {
     setCartItems((current) => {
@@ -134,11 +194,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   function handleResetForNextCustomer() {
-    setCompletedOrder(null)
+    setSubmittedOrder(null)
     setCartItems([])
     setSubmitError(null)
     setSelectedPaymentMethod(paymentMethods[0] ?? 'cash')
-    setCountdownSeconds(12)
+    setCountdownSeconds(10)
+    setWaitingSettlement(false)
+    setSettlementMessage(null)
   }
 
   async function handleSubmitOrder() {
@@ -174,7 +236,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         body: JSON.stringify(payload),
       })
 
-      setCompletedOrder(response)
+      setSubmittedOrder({
+        ...response,
+        status: 'placed',
+        paid_at: null,
+        cancelled_at: null,
+      })
+      setWaitingSettlement(true)
+      setSettlementMessage('店員が会計確認を行っています。料金受領またはキャンセル後に自動で次の注文へ進みます。')
     } catch (error) {
       setSubmitError(error instanceof ApiClientError ? error.message : '注文の作成に失敗しました')
     } finally {
@@ -182,44 +251,66 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     }
   }
 
-  if (completedOrder) {
+  if (submittedOrder) {
+    const isCancelled = submittedOrder.status === 'cancelled'
+    const isSettled = submittedOrder.payment_status === 'paid' || isCancelled
+
     return (
       <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-5 py-8">
         <div className="mx-auto max-w-5xl">
           <section className="rounded-[40px] border border-[var(--line-soft)] bg-white px-8 py-10 shadow-[0_28px_70px_rgba(15,23,42,0.08)]">
-            <div className="inline-flex rounded-full bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700">
-              ORDER COMPLETE
+            <div
+              className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${
+                isCancelled ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+              }`}
+            >
+              {isCancelled ? 'ORDER CANCELLED' : isSettled ? 'PAYMENT CONFIRMED' : 'WAITING FOR CASHIER'}
             </div>
-            <h1 className="mt-5 text-4xl font-black tracking-tight text-[var(--text-main)]">ご注文を受け付けました</h1>
+            <h1 className="mt-5 text-4xl font-black tracking-tight text-[var(--text-main)]">
+              {isCancelled ? 'この注文はキャンセルされました' : isSettled ? 'お支払い確認が完了しました' : 'ご注文を受け付けました'}
+            </h1>
             <p className="mt-4 text-lg leading-8 text-[var(--text-sub)]">
-              店員へお支払いください。受付番号を確認したあと、そのまま商品の準備に進みます。
+              {isCancelled
+                ? '内容の見直しが必要な場合は、店員にお声がけください。'
+                : isSettled
+                  ? '次のお客様のために、まもなく商品一覧へ戻ります。'
+                  : '店員へお支払いください。店員が会計確認を行うまで、この画面でお待ちください。'}
             </p>
 
             <div className="mt-8 grid gap-5 md:grid-cols-3">
               <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
                 <p className="text-sm font-semibold text-gray-500">受付番号</p>
                 <p className="mt-3 text-3xl font-black tracking-[0.08em] text-[var(--accent-blue)]">
-                  {completedOrder.order_number}
+                  {submittedOrder.order_number}
                 </p>
               </div>
               <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
                 <p className="text-sm font-semibold text-gray-500">支払方法</p>
                 <p className="mt-3 text-2xl font-black text-[var(--text-main)]">
-                  {completedOrder.payment_method === 'cash'
+                  {submittedOrder.payment_method === 'cash'
                     ? '現金'
-                    : completedOrder.payment_method === 'paypay'
+                    : submittedOrder.payment_method === 'paypay'
                       ? 'PayPay'
                       : 'その他'}
                 </p>
               </div>
               <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
                 <p className="text-sm font-semibold text-gray-500">合計金額</p>
-                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">{formatPrice(completedOrder.total_amount)}</p>
+                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">{formatPrice(submittedOrder.total_amount)}</p>
               </div>
             </div>
 
-            <div className="mt-8 rounded-[28px] border border-dashed border-[var(--line-soft)] bg-[#fffdf7] px-5 py-4 text-sm text-amber-700">
-              まもなく次の注文画面へ戻ります。あと {countdownSeconds} 秒
+            <div
+              className={`mt-8 rounded-[28px] border border-dashed px-5 py-4 text-sm ${
+                isCancelled
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : isSettled
+                    ? 'border-[var(--line-soft)] bg-[#fffdf7] text-amber-700'
+                    : 'border-sky-200 bg-sky-50 text-sky-700'
+              }`}
+            >
+              {settlementMessage}
+              {isSettled ? ` あと ${countdownSeconds} 秒` : waitingSettlement ? ' 店員側の処理を確認中です。' : ''}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
