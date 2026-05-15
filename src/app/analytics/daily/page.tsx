@@ -1,3 +1,5 @@
+import { Suspense } from 'react'
+import AnalyticsLoadingSkeleton from '@/components/AnalyticsLoadingSkeleton'
 import DailySalesAnalyticsClient from '@/components/DailySalesAnalyticsClient'
 import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { requireServerSession } from '@/lib/auth'
@@ -9,19 +11,35 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+async function DailyAnalyticsContent({
+  start,
+  end,
+}: {
+  start: string
+  end: string
+}) {
+  const { supabase, user } = await requireServerSession({ includeProfile: false })
+  const [rows, memos] = await Promise.all([
+    getVendorDailyAnalytics(supabase, user.id, start, end),
+    getVendorDailyMemos(supabase, start, end),
+  ])
+
+  return (
+    <DailySalesAnalyticsClient
+      rows={rows}
+      memos={memos}
+    />
+  )
+}
+
 export default async function DailyAnalyticsPage({
   searchParams,
 }: {
   searchParams?: { start?: string; end?: string; month?: string }
 }) {
-  const { supabase, user } = await requireServerSession({ includeProfile: false })
   const range = getMonthRange(searchParams?.month)
   const start = searchParams?.start ?? range.start
   const end = searchParams?.end ?? range.end
-  const [rows, memos] = await Promise.all([
-    getVendorDailyAnalytics(supabase, user.id, start, end),
-    getVendorDailyMemos(supabase, start, end),
-  ])
 
   return (
     <div>
@@ -33,10 +51,9 @@ export default async function DailyAnalyticsPage({
         currentEnd={end}
         showScopeTabs={false}
       />
-      <DailySalesAnalyticsClient
-        rows={rows}
-        memos={memos}
-      />
+      <Suspense fallback={<AnalyticsLoadingSkeleton variant="daily" />}>
+        <DailyAnalyticsContent start={start} end={end} />
+      </Suspense>
     </div>
   )
 }
