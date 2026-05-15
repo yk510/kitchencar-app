@@ -12,6 +12,7 @@ import type {
 } from '@/types/api-payloads'
 
 const NOTIFICATION_STORAGE_KEY = 'mobile-order-dashboard-notifications-enabled'
+const NEW_ORDER_HIGHLIGHT_MS = 15000
 
 const STATUS_LABELS: Record<string, string> = {
   placed: '受付済',
@@ -51,6 +52,8 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   failed: '失敗',
   refunded: '返金済み',
 }
+
+type OrderListFilter = 'all' | 'action_required' | 'preparing' | 'ready' | 'picked_up'
 
 function getStorePosPaymentMethodLabel(order: {
   payment_provider?: string | null
@@ -113,10 +116,13 @@ export default function VendorMobileOrderOrdersPage() {
   const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [notificationBanner, setNotificationBanner] = useState<string | null>(null)
+  const [orderListFilter, setOrderListFilter] = useState<OrderListFilter>('action_required')
+  const [newOrderIds, setNewOrderIds] = useState<string[]>([])
   const knownOrderIdsRef = useRef<string[]>([])
   const knownScheduleIdRef = useRef<string | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const notificationBannerTimeoutRef = useRef<number | null>(null)
+  const newOrderTimeoutsRef = useRef<Record<string, number>>({})
 
   function handleBackToPreviousPage() {
     if (typeof window === 'undefined') return
@@ -135,6 +141,36 @@ export default function VendorMobileOrderOrdersPage() {
     notificationBannerTimeoutRef.current = window.setTimeout(() => {
       setNotificationBanner(null)
     }, 7000)
+  }
+
+  function isUnhandledOrder(order: VendorMobileOrderDashboardOrder) {
+    return order.status !== 'picked_up' && order.status !== 'cancelled'
+  }
+
+  function clearNewOrderHighlight(orderId: string) {
+    setNewOrderIds((current) => current.filter((id) => id !== orderId))
+    const timeoutId = newOrderTimeoutsRef.current[orderId]
+    if (timeoutId != null) {
+      window.clearTimeout(timeoutId)
+      delete newOrderTimeoutsRef.current[orderId]
+    }
+  }
+
+  function highlightNewOrders(orderIds: string[]) {
+    if (orderIds.length === 0 || typeof window === 'undefined') return
+
+    setNewOrderIds((current) => Array.from(new Set([...current, ...orderIds])))
+
+    for (const orderId of orderIds) {
+      const existingTimeout = newOrderTimeoutsRef.current[orderId]
+      if (existingTimeout != null) {
+        window.clearTimeout(existingTimeout)
+      }
+
+      newOrderTimeoutsRef.current[orderId] = window.setTimeout(() => {
+        clearNewOrderHighlight(orderId)
+      }, NEW_ORDER_HIGHLIGHT_MS)
+    }
   }
 
   function playNotificationSound() {
@@ -225,6 +261,7 @@ export default function VendorMobileOrderOrdersPage() {
         const newOrders = response.orders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
         if (newOrders.length > 0) {
           announceNewOrders(newOrders)
+          highlightNewOrders(newOrders.map((order) => order.id))
         }
       }
 
@@ -272,6 +309,10 @@ export default function VendorMobileOrderOrdersPage() {
       if (notificationBannerTimeoutRef.current != null) {
         window.clearTimeout(notificationBannerTimeoutRef.current)
       }
+
+      for (const timeoutId of Object.values(newOrderTimeoutsRef.current)) {
+        window.clearTimeout(timeoutId)
+      }
     }
   }, [])
 
@@ -290,8 +331,40 @@ export default function VendorMobileOrderOrdersPage() {
     }
   }, [data?.orders])
 
+  const filteredOrders = useMemo(() => {
+    const orders = data?.orders ?? []
+
+    const matchesFilter = (order: VendorMobileOrderDashboardOrder) => {
+      if (orderListFilter === 'all') return true
+      if (orderListFilter === 'action_required') return isUnhandledOrder(order)
+      return order.status === orderListFilter
+    }
+
+    const priority = (order: VendorMobileOrderDashboardOrder) => {
+      if (!isUnhandledOrder(order)) return 1
+      if (order.status === 'placed') return 0
+      if (order.status === 'preparing') return 0
+      if (order.status === 'ready') return 0
+      return 0
+    }
+
+    return orders
+      .filter(matchesFilter)
+      .slice()
+      .sort((a, b) => {
+        const priorityDiff = priority(a) - priority(b)
+        if (priorityDiff !== 0) return priorityDiff
+        return new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime()
+      })
+  }, [data?.orders, orderListFilter])
+
   async function handleChangeSchedule(scheduleId: string) {
     setLoading(true)
+    setNewOrderIds([])
+    for (const timeoutId of Object.values(newOrderTimeoutsRef.current)) {
+      window.clearTimeout(timeoutId)
+    }
+    newOrderTimeoutsRef.current = {}
     await load(scheduleId)
   }
 
@@ -498,26 +571,54 @@ export default function VendorMobileOrderOrdersPage() {
                 <div>
                   <h2 className="text-base font-semibold text-gray-800">注文一覧</h2>
                   <p className="mt-1 text-xs text-gray-500">
-                    {data.selectedSchedule ? `${data.orders.length} 件の注文` : '営業枠を選択してください'}
+                    {data.selectedSchedule ? `${filteredOrders.length} / ${data.orders.length} 件を表示中` : '営業枠を選択してください'}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3 lg:h-[calc(100%-2.5rem)] lg:overflow-y-auto lg:pr-1">
-                {data.orders.length === 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {([
+                  { key: 'action_required', label: '未対応', count: data.orders.filter((order) => isUnhandledOrder(order)).length },
+                  { key: 'preparing', label: '調理中', count: counts.preparing },
+                  { key: 'ready', label: '完成', count: counts.ready },
+                  { key: 'picked_up', label: '受取済', count: counts.picked_up },
+                  { key: 'all', label: 'すべて', count: data.orders.length },
+                ] as Array<{ key: OrderListFilter; label: string; count: number }>).map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setOrderListFilter(filter.key)}
+                    className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                      orderListFilter === filter.key
+                        ? 'bg-[var(--accent-blue)] text-white'
+                        : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
+                    }`}
+                  >
+                    {filter.label} {filter.count}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 space-y-3 lg:h-[calc(100%-5.5rem)] lg:overflow-y-auto lg:pr-1">
+                {filteredOrders.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-6 text-sm text-gray-500">
-                    この営業枠の注文はまだありません。
+                    この条件に一致する注文はまだありません。
                   </div>
                 ) : (
-                  data.orders.map((order) => (
+                  filteredOrders.map((order) => (
                     <button
                       key={order.id}
                       type="button"
-                      onClick={() => setSelectedOrderId(order.id)}
+                      onClick={() => {
+                        setSelectedOrderId(order.id)
+                        clearNewOrderHighlight(order.id)
+                      }}
                       className={`w-full rounded-3xl border px-4 py-4 text-left transition ${
                         selectedOrderId === order.id
                           ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
-                          : 'border-[var(--line-soft)] bg-white hover:border-[var(--accent-blue-soft)]'
+                          : newOrderIds.includes(order.id)
+                            ? 'border-amber-300 bg-amber-50 shadow-[0_12px_28px_rgba(245,158,11,0.16)]'
+                            : 'border-[var(--line-soft)] bg-white hover:border-[var(--accent-blue-soft)]'
                       }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -530,6 +631,11 @@ export default function VendorMobileOrderOrdersPage() {
                             {isStorePosOrder(order) ? (
                               <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
                                 POS / {getStorePosPaymentMethodLabel(order)}
+                              </span>
+                            ) : null}
+                            {newOrderIds.includes(order.id) ? (
+                              <span className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white">
+                                新着
                               </span>
                             ) : null}
                           </div>
