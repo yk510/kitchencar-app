@@ -149,7 +149,7 @@ async function normalizePrimaryOrderPage(
 
 export async function ensureVendorStoreResources(
   supabase: any,
-  user: User,
+  user: Pick<User, 'id' | 'email'>,
   options?: { businessName?: string | null }
 ) {
   let store = await findExistingVendorStore(supabase, user.id)
