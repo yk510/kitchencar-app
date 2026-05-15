@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import LoadingLine from '@/components/LoadingLine'
+import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
+  PublicMobileOrderInventorySnapshot,
   PublicMobileOrderOptionChoice,
   PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
@@ -303,10 +305,13 @@ function getChoicePriceLabel(choice: PublicMobileOrderOptionChoice) {
 }
 
 function isProductUnavailable(product: PublicMobileOrderProduct) {
-  return ['sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
+  return ['loading', 'sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
 }
 
 function getUnavailableMessage(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'loading') {
+    return 'この商品の在庫を確認しています'
+  }
   if (product.current_inventory_status === 'not_set') {
     return 'この商品は本日分の在庫準備中です'
   }
@@ -314,6 +319,9 @@ function getUnavailableMessage(product: PublicMobileOrderProduct) {
 }
 
 function getInventoryBadge(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'loading') {
+    return { label: '在庫確認中', className: 'bg-sky-100 text-sky-700' }
+  }
   if (product.current_inventory_status === 'not_set') {
     return { label: '在庫準備中', className: 'bg-slate-100 text-slate-700' }
   }
@@ -330,6 +338,7 @@ function getInventoryBadge(product: PublicMobileOrderProduct) {
 }
 
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
+  const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -343,31 +352,32 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [countdownSeconds, setCountdownSeconds] = useState(10)
   const [waitingSettlement, setWaitingSettlement] = useState(false)
   const [settlementMessage, setSettlementMessage] = useState<string | null>(null)
+  const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
   const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultProductFilter(data.products))
   const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(() => {
     const defaultFilter = getDefaultProductFilter(data.products)
     return getInitialSelectedProduct(data.products, defaultFilter)
   })
   const [selection, setSelection] = useState<ProductSelection | null>(() => {
-    const defaultFilter = getDefaultProductFilter(data.products)
-    const initialProduct = getInitialSelectedProduct(data.products, defaultFilter)
+    const defaultFilter = getDefaultProductFilter(pageData.products)
+    const initialProduct = getInitialSelectedProduct(pageData.products, defaultFilter)
     return initialProduct ? buildInitialSelection(initialProduct) : null
   })
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const isConfirmStep = searchParams.get('step') === 'confirm'
 
-  const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
+  const paymentMethods = useMemo(() => buildDefaultPaymentMethods(pageData.store), [pageData.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
   const cartSummary = useMemo(() => formatCartSummary(cartItems), [cartItems])
   const categorizedProducts = useMemo(
     () =>
-      data.products.map((product, index) => ({
+      pageData.products.map((product, index) => ({
         product,
         category: inferProductCategory(product),
         recommended: isRecommendedProduct(product, index),
       })),
-    [data.products]
+    [pageData.products]
   )
   const filteredProducts = useMemo(() => {
     if (activeFilter === 'all') return categorizedProducts.map((entry) => entry.product)
@@ -384,11 +394,16 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }, [paymentMethods, selectedPaymentMethod])
 
   useEffect(() => {
-    if (!selectedProduct && data.products[0]) {
-      setSelectedProduct(data.products[0])
-      setSelection(buildInitialSelection(data.products[0]))
+    setPageData(data)
+    setInventoryRefreshing(!data.inventoryHydrated)
+  }, [data])
+
+  useEffect(() => {
+    if (!selectedProduct && pageData.products[0]) {
+      setSelectedProduct(pageData.products[0])
+      setSelection(buildInitialSelection(pageData.products[0]))
     }
-  }, [data.products, selectedProduct])
+  }, [pageData.products, selectedProduct])
 
   useEffect(() => {
     if (isConfirmStep) {
@@ -399,10 +414,38 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   useEffect(() => {
     if (!selectedProduct) return
     if (filteredProducts.some((product) => product.id === selectedProduct.id)) return
-    const nextProduct = filteredProducts[0] ?? data.products[0] ?? null
+    const nextProduct = filteredProducts[0] ?? pageData.products[0] ?? null
     setSelectedProduct(nextProduct)
     setSelection(nextProduct ? buildInitialSelection(nextProduct) : null)
-  }, [data.products, filteredProducts, selectedProduct])
+  }, [pageData.products, filteredProducts, selectedProduct])
+
+  async function refreshInventory() {
+    try {
+      const snapshot = await fetchApi<PublicMobileOrderInventorySnapshot>(
+        `/api/public/mobile-order/${pageData.orderPage.public_token}/inventory`,
+        { cache: 'no-store' }
+      )
+      setPageData((current) => applyInventorySnapshotToPayload(current, snapshot))
+    } catch {
+      // Keep current snapshot if inventory refresh fails.
+    } finally {
+      setInventoryRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    if (pageData.inventoryHydrated) return
+    setInventoryRefreshing(true)
+    void refreshInventory()
+  }, [pageData.inventoryHydrated])
+
+  useLiveRefresh({
+    enabled: !submittedOrder,
+    intervalMs: 15000,
+    run: async () => {
+      await refreshInventory()
+    },
+  })
 
   useEffect(() => {
     if (!submittedOrder) return
@@ -443,7 +486,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
       try {
         const response = await fetchApi<PublicStorePosOrderStatusResponse>(
-          `/api/public/store-pos/orders/${submittedOrder.order_id}?public_token=${encodeURIComponent(data.orderPage.public_token)}`,
+          `/api/public/store-pos/orders/${submittedOrder.order_id}?public_token=${encodeURIComponent(pageData.orderPage.public_token)}`,
           {
             cache: 'no-store',
           }
@@ -557,8 +600,8 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       return
     }
 
-    const defaultFilter = getDefaultProductFilter(data.products)
-    const initialProduct = getInitialSelectedProduct(data.products, defaultFilter)
+    const defaultFilter = getDefaultProductFilter(pageData.products)
+    const initialProduct = getInitialSelectedProduct(pageData.products, defaultFilter)
     setSubmittedOrder(null)
     setCartItems([])
     setSubmitError(null)
@@ -608,7 +651,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   async function handleSubmitOrder() {
-    if (!data.activeSchedule) {
+    if (!pageData.activeSchedule) {
       setSubmitError('現在は注文受付時間外です')
       return
     }
@@ -623,10 +666,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
     try {
       const payload: StorePosCreatePayload = {
-        public_token: data.orderPage.public_token,
+        public_token: pageData.orderPage.public_token,
         pickup_nickname: '店頭POS',
         payment_method: selectedPaymentMethod,
-        pos_device_label: data.store.store_pos_terminal_name ?? 'front-tablet',
+        pos_device_label: pageData.store.store_pos_terminal_name ?? 'front-tablet',
         items: cartItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -916,7 +959,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 Store POS
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight text-[var(--text-main)]">
-                {data.store.store_name}
+                {pageData.store.store_name}
               </h1>
               <p className="mt-2 text-base leading-7 text-[var(--text-sub)]">
                 商品を選んで、内容を確認したあと、お支払い方法を選んで注文を確定してください。お支払いは店員がご案内します。
@@ -939,7 +982,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <p className="mt-1 text-sm text-[var(--text-sub)]">おすすめやカテゴリから商品を選び、右側で数量やトッピングを決められます。</p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600">
-                {filteredProducts.length} / {data.products.length} 商品
+                {inventoryRefreshing ? '在庫確認中...' : `${filteredProducts.length} / ${pageData.products.length} 商品`}
               </div>
             </div>
 

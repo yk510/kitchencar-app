@@ -190,7 +190,13 @@ export type StoreOrderPageRow = Database['public']['Tables']['store_order_pages'
 export type StoreOrderScheduleRow = Database['public']['Tables']['store_order_schedules']['Row']
 export type StoreOrderScheduleInventoryRow = Database['public']['Tables']['store_order_schedule_inventories']['Row']
 export type MobileOrderInventoryAdjustmentRow = Database['public']['Tables']['mobile_order_inventory_adjustments']['Row']
-export type MobileOrderInventoryStatus = 'unmanaged' | 'not_set' | 'available' | 'low_stock' | 'sold_out'
+export type MobileOrderInventoryStatus =
+  | 'loading'
+  | 'unmanaged'
+  | 'not_set'
+  | 'available'
+  | 'low_stock'
+  | 'sold_out'
 export type MobileOrderSource = Database['public']['Tables']['mobile_orders']['Row']['order_source']
 export type MobileOrderPaymentStatus = Database['public']['Tables']['mobile_orders']['Row']['payment_status']
 export type MobileOrderPaymentMethod = NonNullable<
@@ -285,6 +291,26 @@ export type PublicMobileOrderPagePayload = {
   activeSchedule: StoreOrderScheduleRow | null
   nextSchedule: StoreOrderScheduleRow | null
   products: PublicMobileOrderProduct[]
+  inventoryHydrated: boolean
+}
+
+export type PublicMobileOrderInventorySnapshot = {
+  activeSchedule: StoreOrderScheduleRow | null
+  nextSchedule: StoreOrderScheduleRow | null
+  products: Array<
+    Pick<
+      PublicMobileOrderProduct,
+      | 'id'
+      | 'current_schedule_inventory_id'
+      | 'current_initial_quantity'
+      | 'current_adjustment_total'
+      | 'current_available_quantity'
+      | 'current_ordered_quantity'
+      | 'current_remaining_quantity'
+      | 'current_inventory_status'
+    >
+  >
+  inventoryHydrated: true
 }
 
 export type PublicMobileOrderCreateItemPayload = {

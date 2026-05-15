@@ -4,10 +4,12 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import LoadingLine from '@/components/LoadingLine'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderCheckoutResponse,
   PublicMobileOrderCheckoutStatusResponse,
+  PublicMobileOrderInventorySnapshot,
   PublicMobileOrderOptionChoice,
   PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
@@ -148,10 +150,13 @@ function getChoicePriceLabel(choice: PublicMobileOrderOptionChoice) {
 }
 
 function isProductUnavailable(product: PublicMobileOrderProduct) {
-  return ['sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
+  return ['loading', 'sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
 }
 
 function getUnavailableMessage(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'loading') {
+    return 'この商品の在庫を確認しています'
+  }
   if (product.current_inventory_status === 'not_set') {
     return 'この商品は本日分の在庫準備中です'
   }
@@ -159,6 +164,9 @@ function getUnavailableMessage(product: PublicMobileOrderProduct) {
 }
 
 function getInventoryBadge(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'loading') {
+    return { label: '在庫確認中', className: 'bg-sky-100 text-sky-700' }
+  }
   if (product.current_inventory_status === 'not_set') {
     return { label: '在庫準備中', className: 'bg-slate-100 text-slate-700' }
   }
@@ -224,6 +232,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false)
   const [transitioningStep, setTransitioningStep] = useState<'cart' | 'review' | null>(null)
+  const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
 
   const stepParam = searchParams.get('step')
   const currentStep = stepParam === 'review' ? 'review' : stepParam === 'cart' ? 'cart' : 'menu'
@@ -235,21 +244,34 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   useEffect(() => {
     setPageData(data)
+    setInventoryRefreshing(!data.inventoryHydrated)
   }, [data])
+
+  async function refreshInventory() {
+    try {
+      const snapshot = await fetchApi<PublicMobileOrderInventorySnapshot>(
+        `/api/public/mobile-order/${pageData.orderPage.public_token}/inventory`,
+        { cache: 'no-store' }
+      )
+      setPageData((current) => applyInventorySnapshotToPayload(current, snapshot))
+    } catch {
+      // Keep current snapshot if inventory refresh fails.
+    } finally {
+      setInventoryRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    if (pageData.inventoryHydrated) return
+    setInventoryRefreshing(true)
+    void refreshInventory()
+  }, [pageData.inventoryHydrated])
 
   useLiveRefresh({
     enabled: true,
     intervalMs: 15000,
     run: async () => {
-      try {
-        const next = await fetchApi<PublicMobileOrderPagePayload>(
-          `/api/public/mobile-order/${pageData.orderPage.public_token}`,
-          { cache: 'no-store' }
-        )
-        setPageData(next)
-      } catch {
-        // Public page should keep the current snapshot if refresh fails.
-      }
+      await refreshInventory()
     },
   })
 
@@ -355,12 +377,12 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           setPickupNickname('')
           replaceStep('menu')
           setIsVerifyingPayment(false)
-          const next = await fetchApi<PublicMobileOrderPagePayload>(
-            `/api/public/mobile-order/${pageData.orderPage.public_token}`,
+          const next = await fetchApi<PublicMobileOrderInventorySnapshot>(
+            `/api/public/mobile-order/${pageData.orderPage.public_token}/inventory`,
             { cache: 'no-store' }
           )
           if (!disposed) {
-            setPageData(next)
+            setPageData((current) => applyInventorySnapshotToPayload(current, next))
           }
           return
         }
@@ -949,6 +971,11 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
       ) : (
         <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
           <section className="space-y-4">
+            {inventoryRefreshing ? (
+              <div className="rounded-3xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700">
+                在庫を確認しています。売り切れや残りわずかの表示をまもなく更新します。
+              </div>
+            ) : null}
             {pageData.products.length === 0 ? (
               <div className="soft-panel rounded-[32px] p-6 text-sm text-gray-500">
                 公開中の商品はまだありません。しばらくしてからもう一度ご確認ください。

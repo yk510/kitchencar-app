@@ -190,6 +190,7 @@ export async function GET(
     },
     activeSchedule: resolvedSchedules.activeSchedule,
     nextSchedule: resolvedSchedules.nextSchedule,
+    inventoryHydrated: true,
     products: buildProducts({
       products: visibleProducts,
       optionGroups: (optionGroups ?? []) as MobileOrderOptionGroupRow[],
