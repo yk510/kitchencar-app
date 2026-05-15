@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import LoadingLine from '@/components/LoadingLine'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
   PublicMobileOrderCheckoutResponse,
@@ -221,6 +222,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const [completedOrder, setCompletedOrder] = useState<PublicMobileOrderCheckoutStatusResponse | null>(null)
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false)
+  const [transitioningStep, setTransitioningStep] = useState<'cart' | 'review' | null>(null)
 
   const stepParam = searchParams.get('step')
   const currentStep = stepParam === 'review' ? 'review' : stepParam === 'cart' ? 'cart' : 'menu'
@@ -330,6 +332,10 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
       replaceStep('menu')
     }
   }, [cartItems.length, currentStep])
+
+  useEffect(() => {
+    setTransitioningStep(null)
+  }, [currentStep])
 
   useEffect(() => {
     const checkoutSessionId = searchParams.get('checkout_session_id')?.trim() ?? ''
@@ -479,6 +485,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
 
     setCheckoutError(null)
+    setTransitioningStep('review')
     replaceStep('review')
   }
 
@@ -489,6 +496,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     }
 
     setCheckoutError(null)
+    setTransitioningStep('cart')
     replaceStep('cart')
   }
 
@@ -609,6 +617,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
           <p className="mt-4 text-sm leading-7 text-[var(--text-sub)]">
             クレジットカード決済の結果を確認しています。数秒そのままでお待ちください。
           </p>
+          <LoadingLine className="mt-6 text-left" label="決済状況を確認しています..." />
         </section>
       </div>
     )
@@ -636,6 +645,12 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             </button>
           </div>
         </section>
+
+        {transitioningStep === 'review' ? (
+          <section className="soft-panel rounded-[28px] px-5 py-4 lg:px-6">
+            <LoadingLine label="注文内容の確認ページを開いています..." />
+          </section>
+        ) : null}
 
         <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="soft-panel rounded-[32px] p-6">
@@ -684,6 +699,8 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
                 次の画面でクレジットカード情報を入力して、お支払いを完了します。
               </div>
+
+              {submitting ? <LoadingLine className="mt-5" label="決済ページを準備しています..." /> : null}
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <button
@@ -773,6 +790,8 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 {submitting ? '決済ページを準備中...' : '支払いへ進む'}
               </button>
             </div>
+
+            {submitting ? <LoadingLine className="mt-4" label="決済ページへ移動しています..." /> : null}
           </div>
         </div>
       )}
@@ -801,6 +820,12 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             </button>
           </div>
         </section>
+
+        {transitioningStep === 'cart' ? (
+          <section className="soft-panel rounded-[28px] px-5 py-4 lg:px-6">
+            <LoadingLine label="カート確認ページを開いています..." />
+          </section>
+        ) : null}
 
         <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="soft-panel rounded-[32px] p-6">
