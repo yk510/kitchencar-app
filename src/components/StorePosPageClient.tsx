@@ -632,6 +632,43 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               </div>
             </div>
 
+            <div className="mt-8 rounded-[32px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-black text-[var(--text-main)]">ご注文内容</h2>
+                  <p className="mt-1 text-sm text-[var(--text-sub)]">店員と一緒に、商品と金額をご確認ください。</p>
+                </div>
+                <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)]">
+                  {totalItems} 点
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {cartItems.map((item) => (
+                  <div key={`submitted-${item.id}`} className="rounded-[24px] bg-white px-5 py-4 ring-1 ring-[var(--line-soft)]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
+                        <p className="mt-1 text-sm text-[var(--text-sub)]">
+                          {formatPrice(item.unit_price)} / 1点 ・ 数量 {item.quantity}
+                        </p>
+                        {item.selected_options.length > 0 && (
+                          <div className="mt-2 space-y-1 text-sm text-[var(--text-sub)]">
+                            {item.selected_options.map((group) => (
+                              <p key={`submitted-${item.id}-${group.group_id}`}>
+                                {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="whitespace-nowrap text-xl font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div
               className={`mt-8 rounded-[28px] border border-dashed px-5 py-4 text-sm ${
                 isCancelled
