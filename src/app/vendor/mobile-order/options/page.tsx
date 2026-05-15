@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
@@ -210,13 +211,36 @@ export default function VendorMobileOrderOptionsPage() {
             トッピング、辛さ、サイズなどのオプションを作り、対象商品に紐づけます。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={startCreateMode}
-          className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/products/master#mobile-order-toppings"
+            className="rounded-full border border-[var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
+          >
+            トッピング原価へ
+          </Link>
+          <button
+            type="button"
+            onClick={startCreateMode}
+            className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+          >
+            新しいオプションを追加
+          </button>
+        </div>
+      </div>
+
+      <div className="soft-panel flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">トッピングも原価登録に連携できます</p>
+          <p className="mt-1 text-xs text-gray-500">
+            ここで設定した選択肢は原価登録画面に自動で並びます。Airレジ商品と同じ材料として扱いたい場合も後からひも付けできます。
+          </p>
+        </div>
+        <Link
+          href="/products/master#mobile-order-toppings"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
-          新しいオプションを追加
-        </button>
+          原価登録画面を開く
+        </Link>
       </div>
 
       {error && <p className="alert-danger px-4 py-3 text-sm text-red-700">{error}</p>}

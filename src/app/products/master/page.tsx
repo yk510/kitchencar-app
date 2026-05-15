@@ -272,7 +272,7 @@ export default function ProductMasterPage() {
       </p>
 
       {mobileOrderProducts.length > 0 && (
-        <section className="mb-10">
+        <section id="mobile-order-products" className="mb-10 scroll-mt-24">
           <div className="flex items-center gap-2 mb-4">
             <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">
               モバイルオーダー {mobileOrderProducts.length}件
@@ -325,7 +325,7 @@ export default function ProductMasterPage() {
       )}
 
       {standaloneProducts.length > 0 && (
-        <section className="mb-10">
+        <section id="standalone-products" className="mb-10 scroll-mt-24">
           <div className="flex items-center gap-2 mb-4">
             <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full">
               その他 {standaloneProducts.length}件
@@ -376,7 +376,7 @@ export default function ProductMasterPage() {
       )}
 
       {mobileOrderOptionChoices.length > 0 && (
-        <section className="mb-10">
+        <section id="mobile-order-toppings" className="mb-10 scroll-mt-24">
           <div className="flex items-center gap-2 mb-4">
             <span className="bg-cyan-100 text-cyan-800 text-xs font-bold px-2 py-1 rounded-full">
               トッピング {mobileOrderOptionChoices.length}件

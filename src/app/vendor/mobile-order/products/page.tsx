@@ -346,13 +346,36 @@ export default function VendorMobileOrderProductsPage() {
             公開する商品、価格、画像、売り切れ状態と、営業中の在庫運用をここから管理します。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={startCreateMode}
-          className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/products/master#mobile-order-products"
+            className="rounded-full border border-[var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
+          >
+            原価登録へ
+          </Link>
+          <button
+            type="button"
+            onClick={startCreateMode}
+            className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white"
+          >
+            新しい商品を追加
+          </button>
+        </div>
+      </div>
+
+      <div className="soft-panel flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">商品を追加・更新したら原価も登録できます</p>
+          <p className="mt-1 text-xs text-gray-500">
+            ここで設定した商品は原価登録画面に自動で並びます。商品名を変更しても同じ商品として追従します。
+          </p>
+        </div>
+        <Link
+          href="/products/master#mobile-order-products"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
-          新しい商品を追加
-        </button>
+          原価登録画面を開く
+        </Link>
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
