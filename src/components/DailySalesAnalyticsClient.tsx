@@ -2,6 +2,18 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { fetchApi } from '@/lib/api-client'
 import { getHolidayFlagTone, getWeekdayIndex } from '@/lib/calendar'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
@@ -10,6 +22,14 @@ import type { VendorDailyMemo, VendorDailySalesRow } from '@/types/operations'
 
 function fmtYen(value: number) {
   return `${value.toLocaleString('ja-JP')} 円`
+}
+
+function toCsvValue(value: string | number) {
+  const normalized = String(value ?? '')
+  if (/[",\n]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`
+  }
+  return normalized
 }
 
 const COLUMN_OPTIONS = [
@@ -94,6 +114,77 @@ export default function DailySalesAnalyticsClient({
     () => COLUMN_OPTIONS.filter((column) => visibleColumns[column.key] !== false),
     [visibleColumns]
   )
+
+  const chartRows = useMemo(
+    () =>
+      rows.map((row) => ({
+        label: row.date.slice(5),
+        売上: row.sales,
+        会計数: row.txnCount,
+      })),
+    [rows]
+  )
+
+  function downloadCsv() {
+    const headers = ['日付', ...activeColumns.map((column) => column.label)]
+    const lines = rows.map((row) => {
+      const memoValue = memoDrafts[row.date] ?? memoMap.get(row.date)?.memo_text ?? ''
+      const values = activeColumns.map((column) => {
+        switch (column.key) {
+          case 'weekday':
+            return row.weekday
+          case 'holidayFlag':
+            return row.holidayFlag || '-'
+          case 'locationName':
+            return row.locationName
+          case 'eventName':
+            return row.eventName
+          case 'municipality':
+            return row.municipality
+          case 'weatherType':
+            return row.weatherType
+          case 'avgTemperature':
+            return row.avgTemperature
+          case 'sales':
+            return row.sales
+          case 'txnCount':
+            return row.txnCount
+          case 'avgTicket':
+            return row.avgTicket
+          case 'itemCount':
+            return row.itemCount
+          case 'avgItemPrice':
+            return row.avgItemPrice
+          case 'cashSales':
+            return row.cashSales
+          case 'paypaySales':
+            return row.paypaySales
+          case 'otherSales':
+            return row.otherSales
+          case 'grossProfit':
+            return row.grossProfit
+          case 'memo':
+            return memoValue
+          default:
+            return ''
+        }
+      })
+
+      return [row.date, ...values].map(toCsvValue).join(',')
+    })
+
+    const csv = [headers.map(toCsvValue).join(','), ...lines].join('\n')
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    const stamp = new Date().toISOString().slice(0, 10)
+    anchor.href = url
+    anchor.download = `daily-sales-${stamp}.csv`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
 
   async function handleSaveMemo(date: string) {
     setSavingDate(date)
@@ -207,6 +298,15 @@ export default function DailySalesAnalyticsClient({
             )
           })}
         </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={downloadCsv}
+            className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white"
+          >
+            CSVをダウンロード
+          </button>
+        </div>
       </section>
 
       {saveMessage && (
@@ -226,8 +326,61 @@ export default function DailySalesAnalyticsClient({
           <p className="text-gray-600">この期間の売上データはありません。</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="min-w-[1780px] w-full border-separate border-spacing-0 text-sm">
+        <>
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">売上推移</h2>
+                <p className="mt-1 text-sm text-gray-500">日別の売上と会計数を並べて確認できます。</p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="h-[320px] rounded-2xl border border-[var(--line-soft)] bg-[#fcfdff] p-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartRows} margin={{ top: 16, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e9eef6" />
+                    <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 12 }} />
+                    <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#6b7280', fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) =>
+                        name === '売上' ? [`${value.toLocaleString()} 円`, name] : [`${value.toLocaleString()} 件`, name]
+                      }
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                    <Line yAxisId="right" type="monotone" dataKey="会計数" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="rounded-2xl border border-[var(--line-soft)] bg-[#fcfdff] p-4">
+                <h3 className="text-sm font-semibold text-gray-800">見どころ</h3>
+                <div className="mt-4 space-y-3 text-sm text-gray-600">
+                  <div className="rounded-2xl bg-white px-4 py-3">
+                    <p className="text-xs text-sub">最高売上日</p>
+                    <p className="mt-1 font-semibold text-main">
+                      {[...rows].sort((a, b) => b.sales - a.sales)[0]?.date ?? '-'}
+                    </p>
+                    <p className="text-xs text-sub">
+                      {fmtYen([...rows].sort((a, b) => b.sales - a.sales)[0]?.sales ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-4 py-3">
+                    <p className="text-xs text-sub">最多会計日</p>
+                    <p className="mt-1 font-semibold text-main">
+                      {[...rows].sort((a, b) => b.txnCount - a.txnCount)[0]?.date ?? '-'}
+                    </p>
+                    <p className="text-xs text-sub">
+                      {[...rows].sort((a, b) => b.txnCount - a.txnCount)[0]?.txnCount?.toLocaleString('ja-JP') ?? 0} 件
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="min-w-[1780px] w-full border-separate border-spacing-0 text-sm">
             <thead>
               <tr className="text-left text-gray-500">
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">日付</th>
@@ -392,8 +545,9 @@ export default function DailySalesAnalyticsClient({
                 )
               })}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )
