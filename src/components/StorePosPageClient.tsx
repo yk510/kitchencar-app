@@ -3,12 +3,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
+  PublicMobileOrderOptionChoice,
+  PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
   PublicMobileOrderProduct,
-  StorePosCreatePayload,
   PublicStorePosOrderStatusResponse,
+  StorePosCreatePayload,
   StorePosPaymentMethod,
 } from '@/types/api-payloads'
+
+type ProductSelection = {
+  selectedChoiceIdsByGroup: Record<string, string[]>
+  quantity: number
+}
 
 type CartItem = {
   id: string
@@ -17,6 +24,16 @@ type CartItem = {
   unit_price: number
   quantity: number
   line_total: number
+  selected_option_choice_ids: string[]
+  selected_options: Array<{
+    group_id: string
+    group_name: string
+    choices: Array<{
+      choice_id: string
+      choice_name: string
+      price_delta: number
+    }>
+  }>
 }
 
 type StorePosCreateResponse = {
@@ -42,17 +59,6 @@ function formatPrice(value: number) {
   return `${value.toLocaleString()} 円`
 }
 
-function buildCartItem(product: PublicMobileOrderProduct): CartItem {
-  return {
-    id: `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    product_id: product.id,
-    product_name: product.name,
-    unit_price: product.price,
-    quantity: 1,
-    line_total: product.price,
-  }
-}
-
 function buildDefaultPaymentMethods(
   store: PublicMobileOrderPagePayload['store']
 ): StorePosPaymentMethod[] {
@@ -64,6 +70,128 @@ function buildDefaultPaymentMethods(
   )
 }
 
+function buildInitialSelection(product: PublicMobileOrderProduct): ProductSelection {
+  const selectedChoiceIdsByGroup: Record<string, string[]> = {}
+
+  for (const group of product.option_groups) {
+    const activeChoices = group.choices.filter((choice) => choice.is_active)
+    if (group.selection_type === 'single' && group.is_required && activeChoices[0]) {
+      selectedChoiceIdsByGroup[group.id] = [activeChoices[0].id]
+    } else {
+      selectedChoiceIdsByGroup[group.id] = []
+    }
+  }
+
+  return {
+    selectedChoiceIdsByGroup,
+    quantity: 1,
+  }
+}
+
+function getCartLineTotal(product: PublicMobileOrderProduct, selection: ProductSelection) {
+  const optionTotal = product.option_groups.reduce((sum, group) => {
+    const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
+    const selectedChoices = group.choices.filter((choice) => selectedIds.includes(choice.id))
+    return sum + selectedChoices.reduce((choiceSum, choice) => choiceSum + choice.price_delta, 0)
+  }, 0)
+
+  return (product.price + optionTotal) * selection.quantity
+}
+
+function validateSelection(product: PublicMobileOrderProduct, selection: ProductSelection) {
+  for (const group of product.option_groups) {
+    const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
+
+    if (group.is_required && selectedIds.length === 0) {
+      return `${group.name} を選択してください`
+    }
+
+    if (group.selection_type === 'single' && selectedIds.length > 1) {
+      return `${group.name} は1つだけ選択できます`
+    }
+
+    if (group.min_select != null && selectedIds.length < group.min_select) {
+      return `${group.name} は ${group.min_select} 件以上選択してください`
+    }
+
+    if (group.max_select != null && selectedIds.length > group.max_select) {
+      return `${group.name} は ${group.max_select} 件まで選択できます`
+    }
+  }
+
+  if (selection.quantity < 1) {
+    return '数量は1以上にしてください'
+  }
+
+  return null
+}
+
+function buildCartItem(product: PublicMobileOrderProduct, selection: ProductSelection): CartItem {
+  const selectedOptions = product.option_groups
+    .map((group) => {
+      const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
+      const selectedChoices = group.choices
+        .filter((choice) => selectedIds.includes(choice.id))
+        .map((choice) => ({
+          choice_id: choice.id,
+          choice_name: choice.name,
+          price_delta: choice.price_delta,
+        }))
+
+      return {
+        group_id: group.id,
+        group_name: group.name,
+        choices: selectedChoices,
+      }
+    })
+    .filter((group) => group.choices.length > 0)
+
+  const selectedOptionChoiceIds = selectedOptions.flatMap((group) => group.choices.map((choice) => choice.choice_id))
+  const unitPrice = getCartLineTotal(product, { ...selection, quantity: 1 })
+
+  return {
+    id: `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    product_id: product.id,
+    product_name: product.name,
+    unit_price: unitPrice,
+    quantity: selection.quantity,
+    line_total: unitPrice * selection.quantity,
+    selected_option_choice_ids: selectedOptionChoiceIds,
+    selected_options: selectedOptions,
+  }
+}
+
+function getChoicePriceLabel(choice: PublicMobileOrderOptionChoice) {
+  return choice.price_delta > 0 ? `+${choice.price_delta.toLocaleString()}円` : '+0円'
+}
+
+function isProductUnavailable(product: PublicMobileOrderProduct) {
+  return ['sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
+}
+
+function getUnavailableMessage(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'not_set') {
+    return 'この商品は本日分の在庫準備中です'
+  }
+  return 'この商品は現在売り切れです'
+}
+
+function getInventoryBadge(product: PublicMobileOrderProduct) {
+  if (product.current_inventory_status === 'not_set') {
+    return { label: '在庫準備中', className: 'bg-slate-100 text-slate-700' }
+  }
+  if (product.current_inventory_status === 'sold_out') {
+    return { label: '売り切れ', className: 'bg-amber-100 text-amber-800' }
+  }
+  if (product.current_inventory_status === 'low_stock') {
+    return { label: '残りわずか', className: 'bg-orange-100 text-orange-800' }
+  }
+  if (product.tracks_inventory && product.current_remaining_quantity != null) {
+    return { label: `残り ${product.current_remaining_quantity}`, className: 'bg-emerald-50 text-emerald-700' }
+  }
+  return null
+}
+
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
@@ -73,6 +201,11 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [countdownSeconds, setCountdownSeconds] = useState(10)
   const [waitingSettlement, setWaitingSettlement] = useState(false)
   const [settlementMessage, setSettlementMessage] = useState<string | null>(null)
+  const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(data.products[0] ?? null)
+  const [selection, setSelection] = useState<ProductSelection | null>(
+    data.products[0] ? buildInitialSelection(data.products[0]) : null
+  )
+  const [selectionError, setSelectionError] = useState<string | null>(null)
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
@@ -82,6 +215,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       setSelectedPaymentMethod(paymentMethods[0] ?? 'cash')
     }
   }, [paymentMethods, selectedPaymentMethod])
+
+  useEffect(() => {
+    if (!selectedProduct && data.products[0]) {
+      setSelectedProduct(data.products[0])
+      setSelection(buildInitialSelection(data.products[0]))
+    }
+  }, [data.products, selectedProduct])
 
   useEffect(() => {
     if (!submittedOrder) return
@@ -154,23 +294,57 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     }
   }, [submittedOrder, data.orderPage.public_token])
 
-  function addProductToCart(product: PublicMobileOrderProduct) {
-    setCartItems((current) => {
-      const existing = current.find((item) => item.product_id === product.id)
-      if (!existing) {
-        return [...current, buildCartItem(product)]
+  function selectProduct(product: PublicMobileOrderProduct) {
+    setSelectedProduct(product)
+    setSelection(buildInitialSelection(product))
+    setSelectionError(null)
+  }
+
+  function toggleChoice(group: PublicMobileOrderOptionGroup, choiceId: string) {
+    if (!selection) return
+
+    setSelection((current) => {
+      if (!current) return current
+      const selectedIds = current.selectedChoiceIdsByGroup[group.id] ?? []
+      const isSelected = selectedIds.includes(choiceId)
+      let nextSelectedIds: string[]
+
+      if (group.selection_type === 'single') {
+        nextSelectedIds = isSelected ? [] : [choiceId]
+      } else {
+        nextSelectedIds = isSelected
+          ? selectedIds.filter((id) => id !== choiceId)
+          : [...selectedIds, choiceId]
       }
 
-      return current.map((item) =>
-        item.product_id === product.id
-          ? {
-              ...item,
-              quantity: item.quantity + 1,
-              line_total: (item.quantity + 1) * item.unit_price,
-            }
-          : item
-      )
+      return {
+        ...current,
+        selectedChoiceIdsByGroup: {
+          ...current.selectedChoiceIdsByGroup,
+          [group.id]: nextSelectedIds,
+        },
+      }
     })
+    setSelectionError(null)
+  }
+
+  function updateQuantity(nextQuantity: number) {
+    setSelection((current) => (current ? { ...current, quantity: Math.max(1, nextQuantity) } : current))
+    setSelectionError(null)
+  }
+
+  function handleAddSelectedProduct() {
+    if (!selectedProduct || !selection) return
+
+    const validationError = validateSelection(selectedProduct, selection)
+    if (validationError) {
+      setSelectionError(validationError)
+      return
+    }
+
+    setCartItems((current) => [...current, buildCartItem(selectedProduct, selection)])
+    setSelection(buildInitialSelection(selectedProduct))
+    setSelectionError(null)
     setSubmitError(null)
   }
 
@@ -201,6 +375,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setCountdownSeconds(10)
     setWaitingSettlement(false)
     setSettlementMessage(null)
+    if (data.products[0]) {
+      setSelectedProduct(data.products[0])
+      setSelection(buildInitialSelection(data.products[0]))
+    } else {
+      setSelectedProduct(null)
+      setSelection(null)
+    }
+    setSelectionError(null)
   }
 
   async function handleSubmitOrder() {
@@ -226,7 +408,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         items: cartItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
-          selected_option_choice_ids: [],
+          selected_option_choice_ids: item.selected_option_choice_ids,
         })),
       }
 
@@ -337,7 +519,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 {data.store.store_name}
               </h1>
               <p className="mt-2 text-base leading-7 text-[var(--text-sub)]">
-                商品を選んで、お支払い方法を決めるだけで注文できます。店員へお支払いください。
+                商品を選んで、オプションとお支払い方法を決めるだけで注文できます。店員へお支払いください。
               </p>
             </div>
             <div className="rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
@@ -347,12 +529,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-[var(--text-main)]">商品を選ぶ</h2>
-                <p className="mt-1 text-sm text-[var(--text-sub)]">大きなボタンで、人数を問わず押しやすくしています。</p>
+                <p className="mt-1 text-sm text-[var(--text-sub)]">商品を選ぶと、右側でオプションや数量を調整できます。</p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600">
                 {data.products.length} 商品
@@ -360,35 +542,194 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {data.products.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addProductToCart(product)}
-                  className="rounded-[30px] border border-[var(--line-soft)] bg-[#fcfdff] px-5 py-5 text-left shadow-[0_10px_28px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:bg-white"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-xl font-black text-[var(--text-main)]">{product.name}</h3>
-                      {product.description ? (
-                        <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">{product.description}</p>
-                      ) : (
-                        <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">店頭POSの簡易注文です</p>
-                      )}
+              {data.products.map((product) => {
+                const inventoryBadge = getInventoryBadge(product)
+                const active = selectedProduct?.id === product.id
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => selectProduct(product)}
+                    className={`rounded-[30px] border px-5 py-5 text-left shadow-[0_10px_28px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 ${
+                      active
+                        ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
+                        : 'border-[var(--line-soft)] bg-[#fcfdff] hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-xl font-black text-[var(--text-main)]">{product.name}</h3>
+                          {inventoryBadge && (
+                            <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${inventoryBadge.className}`}>
+                              {inventoryBadge.label}
+                            </span>
+                          )}
+                        </div>
+                        {product.description ? (
+                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">{product.description}</p>
+                        ) : (
+                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">店頭POSの簡易注文です</p>
+                        )}
+                      </div>
+                      <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
+                        {formatPrice(product.price)}
+                      </div>
                     </div>
-                    <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
-                      {formatPrice(product.price)}
+                    <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+                      <span className="text-[var(--text-sub)]">
+                        {product.option_groups.length > 0 ? `${product.option_groups.length}個のオプション` : 'オプションなし'}
+                      </span>
+                      <span className="font-semibold text-[var(--accent-blue)]">{active ? '選択中' : '詳細を見る'}</span>
                     </div>
-                  </div>
-                  <div className="mt-5 inline-flex rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white">
-                    カートに追加
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           <div className="space-y-6">
+            <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+              <h2 className="text-2xl font-black text-[var(--text-main)]">オプションと数量</h2>
+              <p className="mt-1 text-sm text-[var(--text-sub)]">右側で内容を確認してからカートに追加します。</p>
+
+              <div className="mt-5">
+                {!selectedProduct || !selection ? (
+                  <div className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-[#fbfdff] px-5 py-8 text-center text-sm text-[var(--text-sub)]">
+                    左側の商品をタップしてください。
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-[28px] bg-[#fbfdff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-xl font-black text-[var(--text-main)]">{selectedProduct.name}</h3>
+                            {getInventoryBadge(selectedProduct) && (
+                              <span
+                                className={`rounded-full px-3 py-1 text-[11px] font-semibold ${getInventoryBadge(selectedProduct)?.className}`}
+                              >
+                                {getInventoryBadge(selectedProduct)?.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">
+                            {selectedProduct.description || '商品の説明は準備中です。'}
+                          </p>
+                        </div>
+                        <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
+                          {formatPrice(selectedProduct.price)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isProductUnavailable(selectedProduct) && (
+                      <div className="rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                        {getUnavailableMessage(selectedProduct)}ため、カートに追加できません。
+                      </div>
+                    )}
+
+                    {selectedProduct.option_groups.length === 0 ? (
+                      <div className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-[#fbfdff] px-5 py-5 text-sm text-[var(--text-sub)]">
+                        この商品にはオプションがありません。
+                      </div>
+                    ) : (
+                      selectedProduct.option_groups.map((group) => {
+                        const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
+                        return (
+                          <div key={group.id} className="rounded-[28px] bg-[#fbfdff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-base font-bold text-[var(--text-main)]">{group.name}</h4>
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                {group.selection_type === 'single' ? '単一選択' : '複数選択'}
+                              </span>
+                              {group.is_required && (
+                                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
+                                  必須
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-3 space-y-2">
+                              {group.choices.map((choice) => {
+                                const selected = selectedIds.includes(choice.id)
+                                return (
+                                  <button
+                                    key={choice.id}
+                                    type="button"
+                                    disabled={!choice.is_active}
+                                    onClick={() => toggleChoice(group, choice.id)}
+                                    className={`flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left text-sm transition ${
+                                      selected
+                                        ? 'bg-[var(--accent-blue-soft)] text-[var(--accent-blue)] ring-1 ring-[var(--accent-blue)]'
+                                        : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
+                                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                                  >
+                                    <span className={choice.is_active ? '' : 'line-through'}>{choice.name}</span>
+                                    <span className="font-medium">{getChoicePriceLabel(choice)}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+
+                    <div className="rounded-[28px] bg-[#fbfdff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-gray-500">数量</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(selection.quantity - 1)}
+                            className={secondaryButtonClassName}
+                          >
+                            −
+                          </button>
+                          <div className="min-w-[72px] rounded-[20px] bg-white px-4 py-3 text-center text-lg font-black text-[var(--text-main)] ring-1 ring-[var(--line-soft)]">
+                            {selection.quantity}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(selection.quantity + 1)}
+                            className={secondaryButtonClassName}
+                          >
+                            ＋
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectionError && (
+                      <div className="rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                        {selectionError}
+                      </div>
+                    )}
+
+                    <div className="rounded-[28px] bg-[#f8fbff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-500">この商品の合計</p>
+                          <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
+                            {formatPrice(getCartLineTotal(selectedProduct, selection))}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddSelectedProduct}
+                          disabled={isProductUnavailable(selectedProduct)}
+                          className={primaryButtonClassName}
+                        >
+                          {isProductUnavailable(selectedProduct) ? '売り切れ中です' : 'カートに追加'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
             <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
               <h2 className="text-2xl font-black text-[var(--text-main)]">カート</h2>
               <p className="mt-1 text-sm text-[var(--text-sub)]">内容を確認しながら、そのまま会計へ進めます。</p>
@@ -396,7 +737,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               <div className="mt-5 space-y-3">
                 {cartItems.length === 0 ? (
                   <div className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-[#fbfdff] px-5 py-8 text-center text-sm text-[var(--text-sub)]">
-                    まだ商品が入っていません。左側の商品をタップしてください。
+                    まだ商品が入っていません。左側の商品を選んで追加してください。
                   </div>
                 ) : (
                   cartItems.map((item) => (
@@ -405,6 +746,15 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                         <div>
                           <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
                           <p className="mt-1 text-sm text-[var(--text-sub)]">{formatPrice(item.unit_price)} / 1点</p>
+                          {item.selected_options.length > 0 && (
+                            <div className="mt-2 space-y-1 text-xs text-[var(--text-sub)]">
+                              {item.selected_options.map((group) => (
+                                <p key={`${item.id}-${group.group_id}`}>
+                                  {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <p className="text-lg font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
                       </div>
