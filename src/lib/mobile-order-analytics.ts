@@ -1,5 +1,6 @@
 import type { AnalyticsScopeFilter, StallLogResolution } from '@/lib/analytics-resolution'
 import { matchesAnalyticsScope, resolveAnalyticsEventId } from '@/lib/analytics-resolution'
+import { extractStoreOrderScheduleMetadata } from '@/lib/store-order-schedule-metadata'
 
 export type MobileOrderAnalyticsSource = 'mobile_order' | 'store_pos'
 
@@ -16,6 +17,8 @@ export type MobileOrderAnalyticsOrder = {
   paymentProvider: string | null
   source: MobileOrderAnalyticsSource
   eventId: string | null
+  eventName: string | null
+  locationId: string | null
 }
 
 export type MobileOrderAnalyticsItem = {
@@ -55,6 +58,7 @@ function toJstRangeEnd(value: string) {
 type MobileOrderScheduleRow = {
   id: string
   business_date: string
+  notes: string | null
 }
 
 type RawMobileOrderRow = {
@@ -148,7 +152,7 @@ export async function fetchMobileOrderAnalyticsData(
   if (scheduleIds.length > 0) {
     const { data: schedules, error: schedulesError } = await (supabase as any)
       .from('store_order_schedules')
-      .select('id, business_date')
+      .select('id, business_date, notes')
       .in('id', scheduleIds)
 
     if (schedulesError) {
@@ -158,13 +162,71 @@ export async function fetchMobileOrderAnalyticsData(
     scheduleDateMap = new Map(
       ((schedules ?? []) as MobileOrderScheduleRow[]).map((row) => [row.id, row.business_date])
     )
+    const scheduleContextMap = new Map(
+      ((schedules ?? []) as MobileOrderScheduleRow[]).map((row) => [row.id, extractStoreOrderScheduleMetadata(row.notes)])
+    )
+
+    const normalizedOrders = rawOrderRows
+      .filter(isCountableMobileOrder)
+      .map((order): MobileOrderAnalyticsOrder | null => {
+        const businessDate = scheduleDateMap.get(order.schedule_id) ?? toJstDate(order.ordered_at)
+        const scheduleContext = scheduleContextMap.get(order.schedule_id) ?? { location_id: null, event_name: null }
+        const fallbackEventId = resolveAnalyticsEventId(businessDate, null, stallLogByDate)
+        const resolvedEventId = scheduleContext.event_name ? `schedule:${scheduleContext.event_name}` : fallbackEventId
+        if (!matchesAnalyticsScope(scope, resolvedEventId)) return null
+
+        return {
+          id: order.id,
+          scheduleId: order.schedule_id,
+          businessDate,
+          orderedAt: order.ordered_at,
+          hourOfDay: getJstHour(order.ordered_at),
+          dayOfWeek: getDayOfWeekFromBusinessDate(businessDate),
+          totalAmount: order.total_amount ?? 0,
+          paymentStatus: order.payment_status,
+          status: order.status,
+          paymentProvider: order.payment_provider ?? null,
+          source: resolveMobileOrderSource(order.payment_provider),
+          eventId: resolvedEventId,
+          eventName: scheduleContext.event_name,
+          locationId: scheduleContext.location_id ?? stallLogByDate.get(businessDate)?.locationId ?? null,
+        } satisfies MobileOrderAnalyticsOrder
+      })
+      .filter((order): order is MobileOrderAnalyticsOrder => order != null)
+
+    if (normalizedOrders.length === 0) {
+      return { orders: [], items: [] }
+    }
+
+    const orderIds = normalizedOrders.map((order) => order.id)
+
+    const { data: rawItems, error: itemsError } = await (supabase as any)
+      .from('mobile_order_items')
+      .select('order_id, product_id, product_name_snapshot, quantity, line_total_amount')
+      .in('order_id', orderIds)
+
+    if (itemsError) {
+      throw new Error(itemsError.message)
+    }
+
+    const items = ((rawItems ?? []) as RawMobileOrderItemRow[]).map((item) => ({
+      orderId: item.order_id,
+      productId: item.product_id,
+      productName: item.product_name_snapshot,
+      quantity: item.quantity ?? 0,
+      lineTotalAmount: item.line_total_amount ?? 0,
+    }))
+
+    return {
+      orders: normalizedOrders,
+      items,
+    }
   }
 
-  const normalizedOrders = rawOrderRows
+    const normalizedOrders = rawOrderRows
     .filter(isCountableMobileOrder)
-    .map((order) => {
+    .map((order): MobileOrderAnalyticsOrder | null => {
       const businessDate = scheduleDateMap.get(order.schedule_id) ?? toJstDate(order.ordered_at)
-
       const resolvedEventId = resolveAnalyticsEventId(businessDate, null, stallLogByDate)
       if (!matchesAnalyticsScope(scope, resolvedEventId)) return null
 
@@ -181,6 +243,8 @@ export async function fetchMobileOrderAnalyticsData(
         paymentProvider: order.payment_provider ?? null,
         source: resolveMobileOrderSource(order.payment_provider),
         eventId: resolvedEventId,
+        eventName: null,
+        locationId: stallLogByDate.get(businessDate)?.locationId ?? null,
       } satisfies MobileOrderAnalyticsOrder
     })
     .filter((order): order is MobileOrderAnalyticsOrder => order != null)

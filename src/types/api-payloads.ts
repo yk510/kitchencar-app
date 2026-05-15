@@ -1,4 +1,5 @@
 import type { AppRole } from '@/lib/user-role'
+import type { StoreOrderScheduleWithContext } from '@/lib/store-order-schedule-metadata'
 import type { Database } from '@/types/database'
 import type {
   ApplicationStatus,
@@ -183,10 +184,17 @@ export type MobileOrderPaymentMethod = NonNullable<
 >
 export type StorePosPaymentMethod = Exclude<MobileOrderPaymentMethod, 'card_online'>
 
+export type VendorLocationOption = {
+  id: string
+  name: string
+  address: string
+}
+
 export type VendorMobileOrderSchedulesPayload = {
   store: VendorStoreRow
   orderPage: StoreOrderPageRow
-  schedules: StoreOrderScheduleRow[]
+  schedules: StoreOrderScheduleWithContext[]
+  locations: VendorLocationOption[]
 }
 
 export type VendorMobileOrderScheduleMutationPayload = StoreOrderScheduleRow

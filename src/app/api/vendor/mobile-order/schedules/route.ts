@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { ensureVendorStoreResources } from '@/lib/mobile-order'
+import {
+  applyMetadataToSchedule,
+  upsertStoreOrderScheduleMetadataInNotes,
+} from '@/lib/store-order-schedule-metadata'
 import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import type {
   VendorMobileOrderScheduleMutationPayload,
@@ -43,14 +47,24 @@ export async function GET(req: NextRequest) {
       .order('business_date', { ascending: true })
       .order('opens_at', { ascending: true })
 
+    const { data: locations, error: locationsError } = await (supabase as any)
+      .from('locations')
+      .select('id, name, address')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true })
+
     if (error) {
       return apiError(error.message)
+    }
+    if (locationsError) {
+      return apiError(locationsError.message)
     }
 
     const payload: VendorMobileOrderSchedulesPayload = {
       store: applyStorePosSettingsToStore(store, orderPage),
       orderPage,
-      schedules: schedules ?? [],
+      schedules: ((schedules ?? []) as any[]).map((schedule) => applyMetadataToSchedule(schedule)),
+      locations: (locations ?? []) as any[],
     }
 
     return apiOk(payload)
@@ -76,9 +90,14 @@ export async function POST(req: NextRequest) {
     const opensAt = parseIsoDatetime(body.opens_at)
     const closesAt = parseIsoDatetime(body.closes_at)
     const notes = String(body.notes ?? '').trim() || null
+    const locationId = String(body.location_id ?? '').trim()
+    const eventName = String(body.event_name ?? '').trim() || null
 
     if (!businessDate || !opensAt || !closesAt) {
       return apiError('営業日と受付開始・終了日時は必須です', 400)
+    }
+    if (!locationId) {
+      return apiError('出店場所は必須です', 400)
     }
 
     if (new Date(opensAt).getTime() >= new Date(closesAt).getTime()) {
@@ -95,6 +114,25 @@ export async function POST(req: NextRequest) {
       businessName: vendorProfile?.business_name ?? null,
     })
 
+    const { data: location, error: locationError } = await (supabase as any)
+      .from('locations')
+      .select('id')
+      .eq('id', locationId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (locationError) {
+      return apiError(locationError.message)
+    }
+    if (!location) {
+      return apiError('出店場所が見つかりません', 400)
+    }
+
+    const scheduleNotes = upsertStoreOrderScheduleMetadataInNotes(notes, {
+      location_id: locationId,
+      event_name: eventName,
+    })
+
     const { data, error } = await (supabase as any)
       .from('store_order_schedules')
       .insert([
@@ -105,7 +143,7 @@ export async function POST(req: NextRequest) {
           opens_at: opensAt,
           closes_at: closesAt,
           status: 'scheduled',
-          notes,
+          notes: scheduleNotes,
         },
       ])
       .select('*')

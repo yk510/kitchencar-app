@@ -6,6 +6,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,12 @@ async function getEventAnalytics(supabase: any, start?: string, end?: string) {
   }
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope: 'event',
+    start,
+    end,
+    stallLogByDate,
+  })
 
   const resolvedTxns = ((txns ?? []) as any[]).map((txn) => ({
     ...txn,
@@ -135,6 +142,28 @@ async function getEventAnalytics(supabase: any, start?: string, end?: string) {
     const unitCost = costMap.get(s.product_name)
     if (unitCost != null) {
       entry.total_cost += unitCost * (s.quantity ?? 0)
+    }
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    if (!order.eventName) continue
+    const eventKey = `mobile-order:${order.eventName}`
+    if (!eventMap.has(eventKey)) {
+      eventMap.set(eventKey, {
+        id: eventKey,
+        event_name: order.eventName,
+        event_date: order.businessDate,
+        location_name: order.locationId ? locationNameMap.get(order.locationId) ?? '-' : '-',
+        total_sales: 0,
+        total_cost: 0,
+        txnSet: new Set(),
+      })
+    }
+    const entry = eventMap.get(eventKey)!
+    entry.total_sales += order.totalAmount
+    entry.txnSet.add(order.id)
+    if (!entry.location_name || entry.location_name === '-') {
+      entry.location_name = '-'
     }
   }
 

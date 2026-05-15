@@ -2,6 +2,7 @@ import AnalyticsPageHeader from '@/components/AnalyticsPageHeader'
 import { AnalyticsScope } from '@/components/AnalyticsScopeTabs'
 import { requireServerSession } from '@/lib/auth'
 import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,6 +118,21 @@ async function getLocationAnalytics(
           scope === 'normal' ? sale.resolved_event_id == null : sale.resolved_event_id != null
         )
 
+  const analyticsStallLogByDate = new Map<string, { locationId: string | null; eventId: string | null }>()
+  for (const row of ((stallLogs ?? []) as any[])) {
+    analyticsStallLogByDate.set(row.log_date, {
+      locationId: row.location_id ?? null,
+      eventId: row.event_id ?? null,
+    })
+  }
+
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate: analyticsStallLogByDate,
+  })
+
   const locMap = new Map<
     string,
     {
@@ -177,6 +193,25 @@ async function getLocationAnalytics(
     if (unitCost != null) {
       entry.total_cost += unitCost * (s.quantity ?? 0)
     }
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const locationId = order.locationId
+    if (!locationId) continue
+    if (!locMap.has(locationId)) {
+      locMap.set(locationId, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        txnSet: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(locationId)!
+    entry.total_sales += order.totalAmount
+    entry.days.add(order.businessDate)
+    entry.txnSet.add(order.id)
   }
 
   for (const w of ((weather ?? []) as any[])) {

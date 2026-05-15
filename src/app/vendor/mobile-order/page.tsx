@@ -130,6 +130,7 @@ export default function VendorMobileOrderPage() {
         store: response.store,
         orderPage: response.orderPage,
         schedules: data?.schedules ?? [],
+        locations: data?.locations ?? [],
       })
       setStorePosSettingsMessage(
         response.persistence === 'notes_fallback'

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { normalizeAnalyticsDate } from '@/lib/analytics-date'
 import { apiError, apiOk } from '@/lib/api-response'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -95,6 +96,21 @@ export async function GET(req: NextRequest) {
     stallLogByDate.set(row.log_date, row.location_id ?? null)
   }
 
+  const analyticsStallLogByDate = new Map<string, { locationId: string | null; eventId: string | null }>()
+  for (const row of (stallLogs ?? []) as any[]) {
+    analyticsStallLogByDate.set(row.log_date, {
+      locationId: row.location_id ?? null,
+      eventId: null,
+    })
+  }
+
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope: 'all',
+    start,
+    end,
+    stallLogByDate: analyticsStallLogByDate,
+  })
+
   const locMap = new Map<
     string,
     {
@@ -154,6 +170,23 @@ export async function GET(req: NextRequest) {
     if (unitCost != null) {
       entry.total_cost += unitCost * (s.quantity ?? 1)
     }
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const locationId = order.locationId
+    if (!locationId) continue
+    if (!locMap.has(locationId)) {
+      locMap.set(locationId, {
+        name: '未設定の出店場所',
+        total_sales: 0,
+        days: new Set(),
+        total_cost: 0,
+        weather_counts: {},
+      })
+    }
+    const entry = locMap.get(locationId)!
+    entry.total_sales += order.totalAmount
+    entry.days.add(order.businessDate)
   }
 
   for (const w of (weather ?? []) as any[]) {

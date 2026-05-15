@@ -1,8 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { stripStoreOrderScheduleMetadata } from '@/lib/store-order-schedule-metadata'
 import type {
+  VendorLocationOption,
   StoreOrderScheduleRow,
   VendorMobileOrderScheduleMutationPayload,
   VendorMobileOrderSchedulesPayload,
@@ -36,6 +39,8 @@ function getDefaultFormValues() {
     business_date: start.toISOString().slice(0, 10),
     opens_at: toLocalInputValue(start.toISOString()),
     closes_at: toLocalInputValue(end.toISOString()),
+    location_id: '',
+    event_name: '',
     notes: '',
   }
 }
@@ -80,13 +85,15 @@ export default function VendorMobileOrderSchedulesPage() {
       await fetchApi<VendorMobileOrderScheduleMutationPayload>('/api/vendor/mobile-order/schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_date: form.business_date,
-          opens_at: new Date(form.opens_at).toISOString(),
-          closes_at: new Date(form.closes_at).toISOString(),
-          notes: form.notes,
-        }),
-      })
+                body: JSON.stringify({
+                  business_date: form.business_date,
+                  opens_at: new Date(form.opens_at).toISOString(),
+                  closes_at: new Date(form.closes_at).toISOString(),
+                  location_id: form.location_id,
+                  event_name: form.event_name,
+                  notes: form.notes,
+                }),
+              })
 
       setForm(getDefaultFormValues())
       await load()
@@ -148,6 +155,46 @@ export default function VendorMobileOrderSchedulesPage() {
                   className="w-full px-4 py-3"
                   required
                 />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label className="block text-sm font-medium text-gray-700">出店場所</label>
+                    <Link
+                      href="/locations"
+                      className="text-xs font-medium text-[var(--accent-blue)] underline underline-offset-2"
+                    >
+                      出店場所登録へ
+                    </Link>
+                  </div>
+                  <select
+                    value={form.location_id}
+                    onChange={(event) => setForm((prev) => ({ ...prev, location_id: event.target.value }))}
+                    className="w-full px-4 py-3"
+                    required
+                  >
+                    <option value="">出店場所を選択してください</option>
+                    {data.locations.map((location: VendorLocationOption) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-gray-500">
+                    新しい出店場所が見当たらない場合は、先に「出店場所登録」で追加してください。
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">イベント名（任意）</label>
+                  <input
+                    type="text"
+                    value={form.event_name}
+                    onChange={(event) => setForm((prev) => ({ ...prev, event_name: event.target.value }))}
+                    className="w-full px-4 py-3"
+                    placeholder="例: 春のフードフェス"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -218,7 +265,17 @@ export default function VendorMobileOrderSchedulesPage() {
                           {formatDateTime(schedule.opens_at)} - {formatDateTime(schedule.closes_at)}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">営業日 {schedule.business_date}</p>
-                        {schedule.notes && <p className="mt-2 text-sm text-gray-600">{schedule.notes}</p>}
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+                            出店場所: {schedule.location_id ? data.locations.find((location) => location.id === schedule.location_id)?.name ?? '未設定' : '未設定'}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+                            イベント名: {schedule.event_name ?? 'なし'}
+                          </span>
+                        </div>
+                        {stripStoreOrderScheduleMetadata(schedule.notes) && (
+                          <p className="mt-2 text-sm text-gray-600">{stripStoreOrderScheduleMetadata(schedule.notes)}</p>
+                        )}
                       </div>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                         {schedule.status}

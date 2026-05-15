@@ -289,8 +289,15 @@ export async function getVendorDailyAnalytics(
       cashSales: 0,
       paypaySales: 0,
       otherSales: 0,
-      locationId: stallLog?.locationId ?? null,
-      eventName: stallLog?.eventName ?? null,
+      locationId: order.locationId ?? stallLog?.locationId ?? null,
+      eventName: order.eventName ?? stallLog?.eventName ?? null,
+    }
+
+    if (!current.locationId) {
+      current.locationId = order.locationId ?? stallLog?.locationId ?? null
+    }
+    if (!current.eventName) {
+      current.eventName = order.eventName ?? stallLog?.eventName ?? null
     }
 
     current.sales += order.totalAmount
