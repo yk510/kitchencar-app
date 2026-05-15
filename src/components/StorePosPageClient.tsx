@@ -696,35 +696,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
       <div className="mx-auto max-w-7xl space-y-5 pb-36">
-        <section className="sticky top-0 z-30 overflow-hidden rounded-[32px] border border-[var(--line-soft)] bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-3 md:px-6">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Store POS</p>
-              <p className="truncate text-sm font-semibold text-slate-500">{data.store.store_name}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToPreviousPage}
-                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
-              >
-                前の画面へ
-              </button>
-              <Link
-                href="/"
-                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
-              >
-                ホームへ
-              </Link>
-            </div>
-          </div>
-          <div className="px-4 py-4 md:px-6">
-            <p className="text-sm font-medium leading-6 text-slate-500">
-              商品を選んで、内容を確認したら注文を確定してください。ご注文内容とお支払い合計は画面下部に固定表示されます。
-            </p>
-          </div>
-        </section>
-
         <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1114,6 +1085,24 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 </div>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-white/80 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={handleBackToPreviousPage}
+              className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+            >
+              前の画面へ
+            </button>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+            >
+              ホームへ
+            </Link>
           </div>
         </section>
 
