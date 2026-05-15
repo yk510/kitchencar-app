@@ -13,6 +13,20 @@ function formatAverageTemperature(min: number | null, max: number | null) {
   return `${((min + max) / 2).toFixed(1)}℃`
 }
 
+function normalizePaymentBucket(value: string | null | undefined): 'cash' | 'paypay' | 'other' {
+  const normalized = String(value ?? '').normalize('NFKC').toLowerCase()
+  if (!normalized) return 'other'
+  if (normalized.includes('現金') || normalized === 'cash') return 'cash'
+  if (normalized.includes('paypay')) return 'paypay'
+  return 'other'
+}
+
+function paymentBucketFromProvider(value: string | null | undefined): 'cash' | 'paypay' | 'other' {
+  if (value === 'store_pos_cash') return 'cash'
+  if (value === 'store_pos_paypay') return 'paypay'
+  return 'other'
+}
+
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10)
 }
@@ -87,7 +101,7 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
   ] = await Promise.all([
     (supabase as any)
       .from('transactions')
-      .select('txn_no, txn_date, total_amount, location_id, event_id')
+      .select('txn_no, txn_date, total_amount, location_id, event_id, payment_method')
       .eq('is_return', false)
       .gte('txn_date', start)
       .lte('txn_date', end)
@@ -198,7 +212,11 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
       date: string
       sales: number
       txnCount: number
+      itemCount: number
       grossProfit: number
+      cashSales: number
+      paypaySales: number
+      otherSales: number
       locationId: string | null
       eventName: string | null
     }
@@ -211,7 +229,11 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
       date,
       sales: 0,
       txnCount: 0,
+      itemCount: 0,
       grossProfit: 0,
+      cashSales: 0,
+      paypaySales: 0,
+      otherSales: 0,
       locationId: stallLog?.locationId ?? txn.location_id ?? null,
       eventName:
         (txn.event_id ? eventNameMap.get(txn.event_id) ?? null : null) ??
@@ -222,6 +244,10 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
     current.sales += txn.total_amount ?? 0
     current.txnCount += 1
     current.grossProfit += (txn.total_amount ?? 0) - (grossProfitByTxnNo.get(txn.txn_no) ?? 0)
+    const paymentBucket = normalizePaymentBucket(txn.payment_method)
+    if (paymentBucket === 'cash') current.cashSales += txn.total_amount ?? 0
+    else if (paymentBucket === 'paypay') current.paypaySales += txn.total_amount ?? 0
+    else current.otherSales += txn.total_amount ?? 0
 
     if (!current.locationId) {
       current.locationId = txn.location_id ?? stallLog?.locationId ?? null
@@ -244,7 +270,11 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
       date,
       sales: 0,
       txnCount: 0,
+      itemCount: 0,
       grossProfit: 0,
+      cashSales: 0,
+      paypaySales: 0,
+      otherSales: 0,
       locationId: stallLog?.locationId ?? null,
       eventName: stallLog?.eventName ?? null,
     }
@@ -252,8 +282,28 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
     current.sales += order.totalAmount
     current.txnCount += 1
     current.grossProfit += order.totalAmount - (grossProfitByOrderId.get(order.id) ?? 0)
+    const paymentBucket = paymentBucketFromProvider(order.paymentProvider)
+    if (paymentBucket === 'cash') current.cashSales += order.totalAmount
+    else if (paymentBucket === 'paypay') current.paypaySales += order.totalAmount
+    else current.otherSales += order.totalAmount
 
     rows.set(date, current)
+  }
+
+  const mobileOrderById = new Map(mobileOrderAnalytics.orders.map((order) => [order.id, order]))
+
+  for (const row of (sales ?? []) as any[]) {
+    const current = rows.get(row.txn_date)
+    if (!current) continue
+    current.itemCount += row.quantity ?? 0
+  }
+
+  for (const item of mobileOrderAnalytics.items) {
+    const order = mobileOrderById.get(item.orderId)
+    if (!order) continue
+    const current = rows.get(order.businessDate)
+    if (!current) continue
+    current.itemCount += item.quantity
   }
 
   return Array.from(rows.values())
@@ -281,6 +331,11 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
         sales: row.sales,
         txnCount: row.txnCount,
         avgTicket: row.txnCount > 0 ? Math.round(row.sales / row.txnCount) : 0,
+        itemCount: row.itemCount,
+        avgItemPrice: row.itemCount > 0 ? Math.round(row.sales / row.itemCount) : 0,
+        cashSales: row.cashSales,
+        paypaySales: row.paypaySales,
+        otherSales: row.otherSales,
         grossProfit: row.grossProfit,
       }
     })

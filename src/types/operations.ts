@@ -129,6 +129,11 @@ export type VendorDailySalesRow = {
   sales: number
   txnCount: number
   avgTicket: number
+  itemCount: number
+  avgItemPrice: number
+  cashSales: number
+  paypaySales: number
+  otherSales: number
   grossProfit: number
 }
 
