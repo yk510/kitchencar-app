@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import type {
   PublicMobileOrderOptionChoice,
@@ -57,6 +58,14 @@ const secondaryButtonClassName =
 
 function formatPrice(value: number) {
   return `${value.toLocaleString()} 円`
+}
+
+function formatCartSummary(cartItems: CartItem[]) {
+  if (cartItems.length === 0) return 'まだ商品が入っていません'
+
+  return cartItems
+    .map((item) => `${item.product_name} × ${item.quantity}`)
+    .join(' / ')
 }
 
 function buildDefaultPaymentMethods(
@@ -209,6 +218,8 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
+  const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
+  const cartSummary = useMemo(() => formatCartSummary(cartItems), [cartItems])
 
   useEffect(() => {
     if (!paymentMethods.includes(selectedPaymentMethod)) {
@@ -385,6 +396,15 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setSelectionError(null)
   }
 
+  function handleBackToPreviousPage() {
+    if (typeof window === 'undefined') return
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    window.location.href = '/vendor/mobile-order'
+  }
+
   async function handleSubmitOrder() {
     if (!data.activeSchedule) {
       setSubmitError('現在は注文受付時間外です')
@@ -507,8 +527,46 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-5 py-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <section className="sticky top-0 z-30 overflow-hidden rounded-[32px] border border-[var(--line-soft)] bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-3 md:px-6">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Store POS</p>
+              <p className="truncate text-sm font-semibold text-slate-500">{data.store.store_name}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToPreviousPage}
+                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+              >
+                前の画面へ
+              </button>
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
+              >
+                ホームへ
+              </Link>
+            </div>
+          </div>
+          <div className="grid gap-3 px-4 py-4 md:grid-cols-[1.5fr_0.8fr_0.8fr] md:px-6">
+            <div className="rounded-[24px] bg-[#f8fbff] px-4 py-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">ご注文内容</p>
+              <p className="mt-2 line-clamp-2 text-base font-bold leading-7 text-[var(--text-main)]">{cartSummary}</p>
+            </div>
+            <div className="rounded-[24px] bg-[#f8fbff] px-4 py-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">商品数</p>
+              <p className="mt-2 text-3xl font-black text-[var(--text-main)]">{totalItems}</p>
+            </div>
+            <div className="rounded-[24px] bg-[var(--accent-blue)] px-4 py-4 text-white shadow-[0_14px_32px_rgba(37,99,235,0.22)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/70">お支払い合計</p>
+              <p className="mt-2 text-3xl font-black">{formatPrice(cartTotal)}</p>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -519,12 +577,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 {data.store.store_name}
               </h1>
               <p className="mt-2 text-base leading-7 text-[var(--text-sub)]">
-                商品を選んで、オプションとお支払い方法を決めるだけで注文できます。店員へお支払いください。
+                商品を選んで、内容を確認したら注文を確定してください。お支払いは店員がご案内します。
               </p>
             </div>
-            <div className="rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
-              <p className="text-sm font-semibold text-gray-500">現在の合計</p>
-              <p className="mt-2 text-3xl font-black text-[var(--accent-blue)]">{formatPrice(cartTotal)}</p>
+            <div className="max-w-sm rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
+              <p className="text-sm font-semibold text-gray-500">ご注文の進め方</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">
+                1. 商品を選ぶ  2. オプションと数量を決める  3. お支払い方法を選ぶ  4. 注文を確定する
+              </p>
             </div>
           </div>
         </section>
@@ -534,7 +594,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-[var(--text-main)]">商品を選ぶ</h2>
-                <p className="mt-1 text-sm text-[var(--text-sub)]">商品を選ぶと、右側でオプションや数量を調整できます。</p>
+                <p className="mt-1 text-sm text-[var(--text-sub)]">大きめのカードをタップすると、右側で数量やトッピングを選べます。</p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600">
                 {data.products.length} 商品
@@ -613,9 +673,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                               </span>
                             )}
                           </div>
-                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">
-                            {selectedProduct.description || '商品の説明は準備中です。'}
-                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">{selectedProduct.description || '商品の説明は準備中です。'}</p>
                         </div>
                         <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
                           {formatPrice(selectedProduct.price)}
@@ -732,7 +790,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
             <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
               <h2 className="text-2xl font-black text-[var(--text-main)]">カート</h2>
-              <p className="mt-1 text-sm text-[var(--text-sub)]">内容を確認しながら、そのまま会計へ進めます。</p>
+              <p className="mt-1 text-sm text-[var(--text-sub)]">間違いがないか確認して、そのまま会計へ進めます。</p>
 
               <div className="mt-5 space-y-3">
                 {cartItems.length === 0 ? (
@@ -804,6 +862,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                     </button>
                   )
                 })}
+              </div>
+
+              <div className="mt-4 rounded-[24px] bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-[var(--line-soft)]">
+                お支払い方法を選んだあと、右下の <span className="font-semibold text-[var(--text-main)]">注文を確定する</span> を押してください。
               </div>
 
               {submitError && (
