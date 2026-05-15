@@ -405,20 +405,21 @@ function MobileOrderProductRow({
           {product.linked_product_master_name ? (
             <p className="text-xs text-gray-500 mt-1">
               原価連携先: <span className="font-medium text-gray-700">{product.linked_product_master_name}</span>
-              {product.link_mode === 'matched_existing' ? '（既存商品と突合）' : '（この商品専用）'}
+              {product.link_mode === 'matched_existing' ? '（Airレジ商品と同じものとして扱う）' : '（この商品だけで管理）'}
             </p>
           ) : (
-            <p className="text-xs text-amber-700 mt-1">まだ原価マスタと連携されていません。必要なら既存商品を選んで突合できます。</p>
+            <p className="text-xs text-amber-700 mt-1">まだ原価マスタと連携されていません。Airレジの商品と同じなら、下で選択してひも付けできます。</p>
           )}
         </div>
         <div className="min-w-[240px]">
-          <label className="text-xs font-semibold text-gray-500 block mb-1">既存のAirレジ商品と突合</label>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Airレジの商品と同じものとして扱う</label>
+          <p className="text-[11px] text-gray-400 mb-2">同じ商品なら選択してください。別管理にしたい場合はそのままでOKです。</p>
           <select
             value={input.matchProductMasterId}
             onChange={(event) => onInputChange('matchProductMasterId', event.target.value)}
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           >
-            <option value="">この商品専用で管理する</option>
+            <option value="">別の商品として管理する</option>
             {allProductMasters.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.product_name}
