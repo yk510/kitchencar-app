@@ -245,6 +245,27 @@ export default function VendorMobileOrderOrdersPage() {
     oscillator.stop(now + 0.36)
   }
 
+  function primeNotificationAudio() {
+    if (typeof window === 'undefined') return
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+
+    if (AudioContextCtor) {
+      const audioContext = audioContextRef.current ?? new AudioContextCtor()
+      audioContextRef.current = audioContext
+
+      if (audioContext.state === 'suspended') {
+        void audioContext.resume().catch(() => undefined)
+      }
+    }
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices()
+    }
+  }
+
   function speakNotification(messageToSpeak: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
 
@@ -275,6 +296,7 @@ export default function VendorMobileOrderOrdersPage() {
 
   async function enableNotifications() {
     try {
+      primeNotificationAudio()
       playNotificationSound()
       speakNotification('通知を有効にしました')
       window.localStorage.setItem(NOTIFICATION_STORAGE_KEY, 'true')
@@ -354,6 +376,28 @@ export default function VendorMobileOrderOrdersPage() {
     const saved = window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)
     setNotificationsEnabled(saved === 'true')
   }, [])
+
+  useEffect(() => {
+    if (!notificationsEnabled) return
+
+    primeNotificationAudio()
+
+    const rearmAudio = () => {
+      primeNotificationAudio()
+    }
+
+    window.addEventListener('pointerdown', rearmAudio, { passive: true })
+    window.addEventListener('touchstart', rearmAudio, { passive: true })
+    window.addEventListener('keydown', rearmAudio)
+    window.addEventListener('focus', rearmAudio)
+
+    return () => {
+      window.removeEventListener('pointerdown', rearmAudio)
+      window.removeEventListener('touchstart', rearmAudio)
+      window.removeEventListener('keydown', rearmAudio)
+      window.removeEventListener('focus', rearmAudio)
+    }
+  }, [notificationsEnabled])
 
   useEffect(() => {
     if (!selectedScheduleId) return
