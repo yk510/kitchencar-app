@@ -51,6 +51,9 @@ type SubmittedStorePosOrder = StorePosCreateResponse & {
   cancelled_at: string | null
 }
 
+type ProductDisplayCategory = 'main' | 'side' | 'drink' | 'other'
+type ProductFilterKey = 'all' | 'recommended' | ProductDisplayCategory
+
 const primaryButtonClassName =
   'inline-flex items-center justify-center rounded-[28px] bg-[var(--accent-blue)] px-6 py-4 text-base font-semibold text-white shadow-[0_14px_32px_rgba(37,99,235,0.28)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButtonClassName =
@@ -66,6 +69,78 @@ function formatCartSummary(cartItems: CartItem[]) {
   return cartItems
     .map((item) => `${item.product_name} × ${item.quantity}`)
     .join(' / ')
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? '').toLowerCase()
+}
+
+function inferProductCategory(product: PublicMobileOrderProduct): ProductDisplayCategory {
+  const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
+
+  if (
+    source.includes('ラッシー') ||
+    source.includes('コーヒー') ||
+    source.includes('ドリンク') ||
+    source.includes('ジュース') ||
+    source.includes('ティー') ||
+    source.includes('ソーダ') ||
+    source.includes('drink')
+  ) {
+    return 'drink'
+  }
+
+  if (
+    source.includes('ポテト') ||
+    source.includes('サイド') ||
+    source.includes('トッピング') ||
+    source.includes('副菜') ||
+    source.includes('セット') ||
+    source.includes('side')
+  ) {
+    return 'side'
+  }
+
+  if (
+    source.includes('カレー') ||
+    source.includes('丼') ||
+    source.includes('メイン') ||
+    source.includes('プレート') ||
+    source.includes('main') ||
+    source.includes('スペシャル')
+  ) {
+    return 'main'
+  }
+
+  return 'other'
+}
+
+function isRecommendedProduct(product: PublicMobileOrderProduct, index: number) {
+  const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
+  return (
+    source.includes('おすすめ') ||
+    source.includes('人気') ||
+    source.includes('定番') ||
+    source.includes('スペシャル') ||
+    index < 2
+  )
+}
+
+function getCategoryLabel(category: ProductFilterKey) {
+  switch (category) {
+    case 'all':
+      return 'すべて'
+    case 'recommended':
+      return 'おすすめ'
+    case 'main':
+      return 'メイン'
+    case 'side':
+      return 'サイド'
+    case 'drink':
+      return 'ドリンク'
+    default:
+      return 'その他'
+  }
 }
 
 function buildDefaultPaymentMethods(
@@ -215,11 +290,28 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     data.products[0] ? buildInitialSelection(data.products[0]) : null
   )
   const [selectionError, setSelectionError] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>('recommended')
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
   const cartSummary = useMemo(() => formatCartSummary(cartItems), [cartItems])
+  const categorizedProducts = useMemo(
+    () =>
+      data.products.map((product, index) => ({
+        product,
+        category: inferProductCategory(product),
+        recommended: isRecommendedProduct(product, index),
+      })),
+    [data.products]
+  )
+  const filteredProducts = useMemo(() => {
+    if (activeFilter === 'all') return categorizedProducts.map((entry) => entry.product)
+    if (activeFilter === 'recommended') {
+      return categorizedProducts.filter((entry) => entry.recommended).map((entry) => entry.product)
+    }
+    return categorizedProducts.filter((entry) => entry.category === activeFilter).map((entry) => entry.product)
+  }, [activeFilter, categorizedProducts])
 
   useEffect(() => {
     if (!paymentMethods.includes(selectedPaymentMethod)) {
@@ -233,6 +325,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       setSelection(buildInitialSelection(data.products[0]))
     }
   }, [data.products, selectedProduct])
+
+  useEffect(() => {
+    if (!selectedProduct) return
+    if (filteredProducts.some((product) => product.id === selectedProduct.id)) return
+    const nextProduct = filteredProducts[0] ?? data.products[0] ?? null
+    setSelectedProduct(nextProduct)
+    setSelection(nextProduct ? buildInitialSelection(nextProduct) : null)
+  }, [data.products, filteredProducts, selectedProduct])
 
   useEffect(() => {
     if (!submittedOrder) return
@@ -396,6 +496,11 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setSelectionError(null)
   }
 
+  function handleClearCart() {
+    setCartItems([])
+    setSubmitError(null)
+  }
+
   function handleBackToPreviousPage() {
     if (typeof window === 'undefined') return
     if (window.history.length > 1) {
@@ -528,7 +633,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5 pb-36">
         <section className="sticky top-0 z-30 overflow-hidden rounded-[32px] border border-[var(--line-soft)] bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-3 md:px-6">
             <div className="min-w-0">
@@ -594,15 +699,35 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-[var(--text-main)]">商品を選ぶ</h2>
-                <p className="mt-1 text-sm text-[var(--text-sub)]">大きめのカードをタップすると、右側で数量やトッピングを選べます。</p>
+                <p className="mt-1 text-sm text-[var(--text-sub)]">おすすめやカテゴリから商品を選び、右側で数量やトッピングを決められます。</p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600">
-                {data.products.length} 商品
+                {filteredProducts.length} / {data.products.length} 商品
               </div>
             </div>
 
+            <div className="mt-5 flex flex-wrap gap-2">
+              {(['recommended', 'all', 'main', 'side', 'drink', 'other'] as ProductFilterKey[]).map((filterKey) => {
+                const active = activeFilter === filterKey
+                return (
+                  <button
+                    key={filterKey}
+                    type="button"
+                    onClick={() => setActiveFilter(filterKey)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? 'bg-[var(--accent-blue)] text-white shadow-[0_10px_24px_rgba(37,99,235,0.24)]'
+                        : 'bg-white text-slate-600 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
+                    }`}
+                  >
+                    {getCategoryLabel(filterKey)}
+                  </button>
+                )
+              })}
+            </div>
+
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {data.products.map((product) => {
+              {filteredProducts.map((product) => {
                 const inventoryBadge = getInventoryBadge(product)
                 const active = selectedProduct?.id === product.id
                 return (
@@ -637,9 +762,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                       </div>
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3 text-sm">
-                      <span className="text-[var(--text-sub)]">
-                        {product.option_groups.length > 0 ? `${product.option_groups.length}個のオプション` : 'オプションなし'}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-[var(--line-soft)]">
+                          {getCategoryLabel(inferProductCategory(product))}
+                        </span>
+                        <span className="text-[var(--text-sub)]">
+                          {product.option_groups.length > 0 ? `${product.option_groups.length}個のオプション` : 'オプションなし'}
+                        </span>
+                      </div>
                       <span className="font-semibold text-[var(--accent-blue)]">{active ? '選択中' : '詳細を見る'}</span>
                     </div>
                   </button>
@@ -789,8 +919,20 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             </section>
 
             <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-              <h2 className="text-2xl font-black text-[var(--text-main)]">カート</h2>
-              <p className="mt-1 text-sm text-[var(--text-sub)]">間違いがないか確認して、そのまま会計へ進めます。</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-black text-[var(--text-main)]">カート</h2>
+                  <p className="mt-1 text-sm text-[var(--text-sub)]">間違いがないか確認して、そのまま会計へ進めます。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearCart}
+                  disabled={cartItems.length === 0}
+                  className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  カートを空にする
+                </button>
+              </div>
 
               <div className="mt-5 space-y-3">
                 {cartItems.length === 0 ? (
@@ -891,6 +1033,42 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 </div>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4 md:px-6">
+          <div className="pointer-events-auto mx-auto max-w-7xl rounded-[28px] border border-[var(--line-soft)] bg-white/95 px-4 py-4 shadow-[0_-12px_40px_rgba(15,23,42,0.12)] backdrop-blur md:px-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">注文内容の確認</p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-500">{cartSummary}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-4">
+                  <p className="text-lg font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
+                  <p className="text-sm font-semibold text-slate-500">{totalItems} 点</p>
+                  <p className="text-sm font-semibold text-slate-500">
+                    支払方法: {selectedPaymentMethod === 'cash' ? '現金' : selectedPaymentMethod === 'paypay' ? 'PayPay' : 'その他'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleClearCart}
+                  disabled={cartItems.length === 0}
+                  className="inline-flex items-center justify-center rounded-[24px] bg-white px-5 py-4 text-base font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  カートを空にする
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitOrder}
+                  disabled={submitting || cartItems.length === 0}
+                  className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? '注文を作成中...' : '注文を確定する'}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
       </div>
