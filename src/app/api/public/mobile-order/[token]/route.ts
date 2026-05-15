@@ -128,7 +128,7 @@ export async function GET(
       (supabase as any)
         .from('store_order_schedules')
         .select('*')
-        .eq('order_page_id', orderPage.id)
+        .eq('store_id', store.id)
         .order('business_date', { ascending: true })
         .order('opens_at', { ascending: true }),
       (supabase as any)

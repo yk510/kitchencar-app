@@ -91,7 +91,7 @@ export async function preparePublicOrderDraft(
   const { data: schedules, error: schedulesError } = await (supabase as any)
     .from('store_order_schedules')
     .select('*')
-    .eq('order_page_id', orderPage.id)
+    .eq('store_id', store.id)
     .order('opens_at', { ascending: true })
 
   if (schedulesError) throw new Error(schedulesError.message)
