@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import LoadingLine from '@/components/LoadingLine'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderOptionChoice,
   PublicMobileOrderOptionGroup,
@@ -427,52 +428,54 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   useEffect(() => {
     if (!submittedOrder) return
     if (submittedOrder.payment_status === 'paid' || submittedOrder.status === 'cancelled') return
-
     setWaitingSettlement(true)
-    const intervalId = window.setInterval(() => {
-      void (async () => {
-        try {
-          const response = await fetchApi<PublicStorePosOrderStatusResponse>(
-            `/api/public/store-pos/orders/${submittedOrder.order_id}?public_token=${encodeURIComponent(data.orderPage.public_token)}`,
-            {
-              cache: 'no-store',
-            }
-          )
+  }, [submittedOrder])
 
-          setSubmittedOrder((current) =>
-            current
-              ? {
-                  ...current,
-                  payment_status: response.payment_status as SubmittedStorePosOrder['payment_status'],
-                  status: response.status as SubmittedStorePosOrder['status'],
-                  paid_at: response.paid_at,
-                  cancelled_at: response.cancelled_at,
-                }
-              : current
-          )
+  useLiveRefresh({
+    enabled:
+      !!submittedOrder &&
+      submittedOrder.payment_status !== 'paid' &&
+      submittedOrder.status !== 'cancelled',
+    intervalMs: 2000,
+    minGapMs: 900,
+    run: async () => {
+      if (!submittedOrder) return
 
-          if (response.status === 'cancelled') {
-            setSettlementMessage('店員が注文をキャンセルしました。10秒後に次の注文画面へ戻ります。')
-            setWaitingSettlement(false)
-            window.clearInterval(intervalId)
-            return
+      try {
+        const response = await fetchApi<PublicStorePosOrderStatusResponse>(
+          `/api/public/store-pos/orders/${submittedOrder.order_id}?public_token=${encodeURIComponent(data.orderPage.public_token)}`,
+          {
+            cache: 'no-store',
           }
+        )
 
-          if (response.payment_status === 'paid') {
-            setSettlementMessage('店員が料金受領を記録しました。10秒後に次の注文画面へ戻ります。')
-            setWaitingSettlement(false)
-            window.clearInterval(intervalId)
-          }
-        } catch {
-          // Keep polling; temporary fetch failure should not break the kiosk flow.
+        setSubmittedOrder((current) =>
+          current
+            ? {
+                ...current,
+                payment_status: response.payment_status as SubmittedStorePosOrder['payment_status'],
+                status: response.status as SubmittedStorePosOrder['status'],
+                paid_at: response.paid_at,
+                cancelled_at: response.cancelled_at,
+              }
+            : current
+        )
+
+        if (response.status === 'cancelled') {
+          setSettlementMessage('店員が注文をキャンセルしました。10秒後に次の注文画面へ戻ります。')
+          setWaitingSettlement(false)
+          return
         }
-      })()
-    }, 2000)
 
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [submittedOrder, data.orderPage.public_token])
+        if (response.payment_status === 'paid') {
+          setSettlementMessage('店員が料金受領を記録しました。10秒後に次の注文画面へ戻ります。')
+          setWaitingSettlement(false)
+        }
+      } catch {
+        // Keep polling; temporary fetch failure should not break the kiosk flow.
+      }
+    },
+  })
 
   function selectProduct(product: PublicMobileOrderProduct) {
     setSelectedProduct(product)

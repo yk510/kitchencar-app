@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import LoadingLine from '@/components/LoadingLine'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderCheckoutResponse,
   PublicMobileOrderCheckoutStatusResponse,
@@ -236,41 +237,21 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     setPageData(data)
   }, [data])
 
-  useEffect(() => {
-    let disposed = false
-
-    async function refreshPageData() {
+  useLiveRefresh({
+    enabled: true,
+    intervalMs: 15000,
+    run: async () => {
       try {
         const next = await fetchApi<PublicMobileOrderPagePayload>(
           `/api/public/mobile-order/${pageData.orderPage.public_token}`,
           { cache: 'no-store' }
         )
-        if (!disposed) {
-          setPageData(next)
-        }
+        setPageData(next)
       } catch {
         // Public page should keep the current snapshot if refresh fails.
       }
-    }
-
-    const intervalId = window.setInterval(() => {
-      void refreshPageData()
-    }, 15000)
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        void refreshPageData()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      disposed = true
-      window.clearInterval(intervalId)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [pageData.orderPage.public_token])
+    },
+  })
 
   useEffect(() => {
     if (!selectedProduct) return

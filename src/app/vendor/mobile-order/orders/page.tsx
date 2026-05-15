@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   MobileOrderNotificationRow,
   VendorMobileOrderDashboardOrder,
@@ -399,34 +400,13 @@ export default function VendorMobileOrderOrdersPage() {
     }
   }, [notificationsEnabled])
 
-  useEffect(() => {
-    if (!selectedScheduleId) return
-
-    const intervalId = window.setInterval(() => {
-      void load(selectedScheduleId)
-    }, 5000)
-
-    return () => window.clearInterval(intervalId)
-  }, [selectedScheduleId])
-
-  useEffect(() => {
-    function reloadOnResume() {
-      if (document.visibilityState !== 'visible') return
-      void load(selectedScheduleId)
-    }
-
-    function reloadOnFocus() {
-      void load(selectedScheduleId)
-    }
-
-    document.addEventListener('visibilitychange', reloadOnResume)
-    window.addEventListener('focus', reloadOnFocus)
-
-    return () => {
-      document.removeEventListener('visibilitychange', reloadOnResume)
-      window.removeEventListener('focus', reloadOnFocus)
-    }
-  }, [selectedScheduleId, notificationsEnabled])
+  useLiveRefresh({
+    enabled: !!selectedScheduleId,
+    intervalMs: 5000,
+    run: async () => {
+      await load(selectedScheduleId)
+    },
+  })
 
   useEffect(() => {
     return () => {

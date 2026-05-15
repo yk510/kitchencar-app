@@ -76,8 +76,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hasProfile, setHasProfile] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
   const activeUserIdRef = useRef<string | null>(null)
+  const roleRef = useRef<'vendor' | 'organizer' | null>(null)
 
-  async function refreshProfile() {
+  useEffect(() => {
+    roleRef.current = role
+  }, [role])
+
+  async function refreshProfile(targetSession: Session | null = session) {
     if (!supabase) {
       setRole(null)
       setHasProfile(true)
@@ -91,10 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await fetchUserProfileSummary({
         supabase,
-        session,
+        session: targetSession,
         signal: controller.signal,
       })
-      setRole(data.role ?? getRoleFromSupabaseUser(session?.user) ?? null)
+      setRole(data.role ?? getRoleFromSupabaseUser(targetSession?.user) ?? null)
       setHasProfile(!!data.hasProfile)
       setProfileReady(true)
     } finally {
@@ -129,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRole(nextRole)
           setHasProfile(false)
           setProfileReady(false)
-          void refreshProfile()
+          void refreshProfile(data.session ?? null)
         } else {
           clearLocalDraftsAndTransientState()
           setRole(null)
@@ -171,17 +176,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (nextSession?.access_token) {
         const shouldRefreshProfile =
           event === 'SIGNED_IN' ||
-          event === 'USER_UPDATED' ||
           userChanged ||
           !nextRole ||
-          !profileReady
+          !profileReady ||
+          (event === 'USER_UPDATED' && nextRole !== roleRef.current)
 
         setRole(nextRole)
 
         if (shouldRefreshProfile) {
           setHasProfile(false)
           setProfileReady(false)
-          void refreshProfile()
+          void refreshProfile(nextSession ?? null)
         }
       } else {
         setRole(null)
@@ -190,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setLoading(false)
 
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED' || userChanged || signedOut) {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || userChanged || signedOut) {
         router.refresh()
       }
     })
