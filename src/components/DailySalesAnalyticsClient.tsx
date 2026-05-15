@@ -1,24 +1,24 @@
 'use client'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { fetchApi } from '@/lib/api-client'
 import { getHolidayFlagTone, getWeekdayIndex } from '@/lib/calendar'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 import type { VendorDailyMemoMutationPayload } from '@/types/api-payloads'
 import type { VendorDailyMemo, VendorDailySalesRow } from '@/types/operations'
+
+const DailySalesTrendChart = dynamic(() => import('@/components/DailySalesTrendChart'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[320px] rounded-2xl border border-[var(--line-soft)] bg-[#fcfdff] p-3">
+      <div className="flex h-full items-center justify-center text-sm text-gray-500">
+        グラフを読み込んでいます...
+      </div>
+    </div>
+  ),
+})
 
 function fmtYen(value: number) {
   return `${value.toLocaleString('ja-JP')} 円`
@@ -335,24 +335,7 @@ export default function DailySalesAnalyticsClient({
               </div>
             </div>
             <div className="mt-5 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="h-[320px] rounded-2xl border border-[var(--line-soft)] bg-[#fcfdff] p-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartRows} margin={{ top: 16, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e9eef6" />
-                    <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 12 }} />
-                    <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#6b7280', fontSize: 12 }} />
-                    <Tooltip
-                      formatter={(value: number, name: string) =>
-                        name === '売上' ? [`${value.toLocaleString()} 円`, name] : [`${value.toLocaleString()} 件`, name]
-                      }
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="会計数" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <DailySalesTrendChart data={chartRows} />
               <div className="rounded-2xl border border-[var(--line-soft)] bg-[#fcfdff] p-4">
                 <h3 className="text-sm font-semibold text-gray-800">見どころ</h3>
                 <div className="mt-4 space-y-3 text-sm text-gray-600">
