@@ -669,19 +669,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               </Link>
             </div>
           </div>
-          <div className="grid gap-3 px-4 py-4 md:grid-cols-[1.5fr_0.8fr_0.8fr] md:px-6">
-            <div className="rounded-[24px] bg-[#f8fbff] px-4 py-4 ring-1 ring-[var(--line-soft)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">ご注文内容</p>
-              <p className="mt-2 line-clamp-2 text-base font-bold leading-7 text-[var(--text-main)]">{cartSummary}</p>
-            </div>
-            <div className="rounded-[24px] bg-[#f8fbff] px-4 py-4 ring-1 ring-[var(--line-soft)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">商品数</p>
-              <p className="mt-2 text-3xl font-black text-[var(--text-main)]">{totalItems}</p>
-            </div>
-            <div className="rounded-[24px] bg-[var(--accent-blue)] px-4 py-4 text-white shadow-[0_14px_32px_rgba(37,99,235,0.22)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/70">お支払い合計</p>
-              <p className="mt-2 text-3xl font-black">{formatPrice(cartTotal)}</p>
-            </div>
+          <div className="px-4 py-4 md:px-6">
+            <p className="text-sm font-medium leading-6 text-slate-500">
+              商品を選んで、内容を確認したら注文を確定してください。ご注文内容とお支払い合計は画面下部に固定表示されます。
+            </p>
           </div>
         </section>
 
