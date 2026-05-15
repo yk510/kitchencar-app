@@ -7,6 +7,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 // 0=月 〜 6=日
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
@@ -56,6 +57,12 @@ export async function GET(req: NextRequest) {
   if (stallLogsErr) return apiError(stallLogsErr.message)
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate,
+  })
 
   const txnDayMap = new Map<string, number>()
   const dayTotals = Array.from({ length: 7 }, () => ({ total: 0, days: new Set<string>() }))
@@ -82,6 +89,14 @@ export async function GET(req: NextRequest) {
   for (const s of ((sales ?? []) as any[])) {
     const resolvedEventId = resolveAnalyticsEventId(s.txn_date, s.event_id, stallLogByDate)
     if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const dow = order.dayOfWeek
+    const entry = dayTotals[dow]
+    if (!entry) continue
+    entry.total += order.totalAmount
+    entry.days.add(order.businessDate)
   }
 
   const result = DAY_LABELS.map((label, dow) => {

@@ -7,6 +7,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
 
@@ -46,6 +47,12 @@ export async function GET(req: NextRequest) {
   if (stallLogsErr) return apiError(stallLogsErr.message)
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate,
+  })
 
   const hourTotals = Array.from({ length: 24 }, () => ({ total: 0, count: 0 }))
   const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0))
@@ -60,6 +67,15 @@ export async function GET(req: NextRequest) {
     hourTotals[h].total += t.total_amount
     hourTotals[h].count += 1
     heatmap[dow][h] += t.total_amount
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const h = order.hourOfDay
+    const dow = order.dayOfWeek
+    if (h == null || dow == null) continue
+    hourTotals[h].total += order.totalAmount
+    hourTotals[h].count += 1
+    heatmap[dow][h] += order.totalAmount
   }
 
   const hourlyData = hourTotals

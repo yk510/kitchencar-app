@@ -1,4 +1,6 @@
 import { getDefaultHolidayFlag, getWeekdayLabel } from '@/lib/calendar'
+import { buildStallLogResolutionMap } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import type {
   VendorDailyMemo,
   VendorDailySalesRow,
@@ -161,6 +163,23 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
     })
   }
 
+  const analyticsStallLogMap = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope: 'all',
+    start,
+    end,
+    stallLogByDate: analyticsStallLogMap,
+  })
+
+  const grossProfitByOrderId = new Map<string, number>()
+  for (const item of mobileOrderAnalytics.items) {
+    const unitCost = costMap.get(item.productName) ?? 0
+    grossProfitByOrderId.set(
+      item.orderId,
+      (grossProfitByOrderId.get(item.orderId) ?? 0) + unitCost * item.quantity
+    )
+  }
+
   const weatherMap = new Map<
     string,
     { weather_type: string | null; temperature_min: number | null; temperature_max: number | null }
@@ -214,6 +233,25 @@ export async function getVendorDailyAnalytics(supabase: any, start: string, end:
         stallLog?.eventName ??
         null
     }
+
+    rows.set(date, current)
+  }
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const date = order.businessDate
+    const stallLog = stallLogByDate.get(date)
+    const current = rows.get(date) ?? {
+      date,
+      sales: 0,
+      txnCount: 0,
+      grossProfit: 0,
+      locationId: stallLog?.locationId ?? null,
+      eventName: stallLog?.eventName ?? null,
+    }
+
+    current.sales += order.totalAmount
+    current.txnCount += 1
+    current.grossProfit += order.totalAmount - (grossProfitByOrderId.get(order.id) ?? 0)
 
     rows.set(date, current)
   }

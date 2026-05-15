@@ -7,6 +7,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 function normalizeScope(scope?: string): 'all' | 'normal' | 'event' {
   if (scope === 'normal') return 'normal'
@@ -54,6 +55,12 @@ export async function GET(req: NextRequest) {
   }
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate,
+  })
 
   // 商品ごとに集計
   const productMap = new Map<string, {
@@ -84,6 +91,30 @@ export async function GET(req: NextRequest) {
       }
     }
     productMap.set(s.product_name, entry)
+  }
+
+  const mobileOrderMap = new Map(mobileOrderAnalytics.orders.map((order) => [order.id, order]))
+  for (const item of mobileOrderAnalytics.items) {
+    const order = mobileOrderMap.get(item.orderId)
+    if (!order) continue
+
+    const entry = productMap.get(item.productName) ?? {
+      total_sales: 0, total_qty: 0, total_cost: 0, has_cost: false,
+    }
+    entry.total_sales += item.lineTotalAmount
+    entry.total_qty += item.quantity
+
+    const costInfo = costMap.get(item.productName)
+    if (costInfo) {
+      if (costInfo.cost_amount != null) {
+        entry.total_cost += costInfo.cost_amount * item.quantity
+        entry.has_cost = true
+      } else if (costInfo.cost_rate != null) {
+        entry.total_cost += (item.lineTotalAmount * costInfo.cost_rate) / 100
+        entry.has_cost = true
+      }
+    }
+    productMap.set(item.productName, entry)
   }
 
   // ソート（売上降順）して利益率計算

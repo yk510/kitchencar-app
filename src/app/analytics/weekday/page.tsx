@@ -7,6 +7,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +70,12 @@ async function getWeekdayAnalytics(
   }
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate,
+  })
 
   const weekdayMap = new Map<
     number,
@@ -116,6 +123,30 @@ async function getWeekdayAnalytics(
     const unitCost = costMap.get(s.product_name)
     if (unitCost != null) {
       entry.totalCost += unitCost * (s.quantity ?? 0)
+    }
+  }
+
+  const mobileOrderMap = new Map(mobileOrderAnalytics.orders.map((order) => [order.id, order]))
+
+  for (const order of mobileOrderAnalytics.orders) {
+    const entry = weekdayMap.get(order.dayOfWeek)
+    if (!entry) continue
+
+    entry.totalSales += order.totalAmount
+    entry.days.add(order.businessDate)
+    entry.txnSet.add(order.id)
+  }
+
+  for (const item of mobileOrderAnalytics.items) {
+    const order = mobileOrderMap.get(item.orderId)
+    if (!order) continue
+
+    const entry = weekdayMap.get(order.dayOfWeek)
+    if (!entry) continue
+
+    const unitCost = costMap.get(item.productName)
+    if (unitCost != null) {
+      entry.totalCost += unitCost * item.quantity
     }
   }
 

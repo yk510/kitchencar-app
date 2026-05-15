@@ -7,6 +7,7 @@ import {
   matchesAnalyticsScope,
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
+import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,12 @@ async function getProductAnalytics(
   }
 
   const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
+  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
+    scope,
+    start,
+    end,
+    stallLogByDate,
+  })
 
   const filteredSales = ((sales ?? []) as any[]).filter((sale) =>
     matchesAnalyticsScope(
@@ -104,6 +111,33 @@ async function getProductAnalytics(
     const unitCost = costMap.get(name)
     if (unitCost != null) {
       entry.totalCost += unitCost * (s.quantity ?? 0)
+    }
+
+    productMap.set(name, entry)
+  }
+
+  const mobileOrderMap = new Map(mobileOrderAnalytics.orders.map((order) => [order.id, order]))
+  for (const item of mobileOrderAnalytics.items) {
+    const order = mobileOrderMap.get(item.orderId)
+    if (!order) continue
+
+    const name = item.productName
+    if (!name) continue
+
+    const entry = productMap.get(name) ?? {
+      totalSales: 0,
+      totalQty: 0,
+      txnSet: new Set<string>(),
+      totalCost: 0,
+    }
+
+    entry.totalSales += item.lineTotalAmount
+    entry.totalQty += item.quantity
+    entry.txnSet.add(order.id)
+
+    const unitCost = costMap.get(name)
+    if (unitCost != null) {
+      entry.totalCost += unitCost * item.quantity
     }
 
     productMap.set(name, entry)
