@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { unstable_noStore as noStore } from 'next/cache'
 import {
   getInventoryStatus,
   loadOrderedQuantityByProductForSchedule,
@@ -22,6 +23,10 @@ type StorePosPageProps = {
     token: string
   }
 }
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 function resolveSchedules(schedules: StoreOrderScheduleRow[]) {
   const now = Date.now()
@@ -100,6 +105,7 @@ function buildProducts(args: {
 }
 
 export default async function StorePosPage({ params }: StorePosPageProps) {
+  noStore()
   const supabase = createServerSupabaseClient()
   const token = String(params.token ?? '').trim()
 
