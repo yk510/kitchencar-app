@@ -573,6 +573,9 @@ export default function VendorMobileOrderProductsPage() {
                       <p className="mt-2 text-xs text-gray-500">
                         注文画面に使う画像をアップロードできます。保存前にブラウザ側で圧縮します。
                       </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        推奨画像サイズ: <span className="font-semibold text-gray-700">1200 × 900px 以上（4:3 横長）</span>
+                      </p>
                       {uploadingImage && <p className="mt-2 text-xs font-medium text-[var(--accent-blue)]">画像を処理しています...</p>}
                       {form.image_url && (
                         <button
