@@ -13,6 +13,7 @@ import type {
 
 const NOTIFICATION_STORAGE_KEY = 'mobile-order-dashboard-notifications-enabled'
 const NEW_ORDER_HIGHLIGHT_MS = 15000
+const LAST_SEEN_ORDER_MARKER_KEY = 'mobile-order-dashboard-last-seen'
 
 const STATUS_LABELS: Record<string, string> = {
   placed: '受付済',
@@ -54,6 +55,10 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
 }
 
 type OrderListFilter = 'all' | 'action_required' | 'preparing' | 'ready' | 'picked_up'
+
+type LastSeenOrderMarker = {
+  orderedAt: string
+}
 
 function getStorePosPaymentMethodLabel(order: {
   payment_provider?: string | null
@@ -102,6 +107,41 @@ function maskLineUserId(value: string | null | undefined) {
   if (!userId) return '未保存'
   if (userId.length <= 8) return userId
   return `${userId.slice(0, 4)}...${userId.slice(-4)}`
+}
+
+function getLastSeenMarkerStorageKey(storeId: string, scheduleId: string | null) {
+  return `${LAST_SEEN_ORDER_MARKER_KEY}:${storeId}:${scheduleId ?? 'none'}`
+}
+
+function readLastSeenMarker(storeId: string, scheduleId: string | null): LastSeenOrderMarker | null {
+  if (typeof window === 'undefined') return null
+
+  const raw = window.localStorage.getItem(getLastSeenMarkerStorageKey(storeId, scheduleId))
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<LastSeenOrderMarker>
+    if (typeof parsed.orderedAt !== 'string' || !parsed.orderedAt) return null
+    return { orderedAt: parsed.orderedAt }
+  } catch {
+    return null
+  }
+}
+
+function writeLastSeenMarker(
+  storeId: string,
+  scheduleId: string | null,
+  marker: LastSeenOrderMarker | null
+) {
+  if (typeof window === 'undefined') return
+
+  const key = getLastSeenMarkerStorageKey(storeId, scheduleId)
+  if (!marker) {
+    window.localStorage.removeItem(key)
+    return
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(marker))
 }
 
 export default function VendorMobileOrderOrdersPage() {
@@ -256,17 +296,38 @@ export default function VendorMobileOrderOrdersPage() {
       const responseScheduleId = response.selectedSchedule?.id ?? null
       const nextOrderIds = response.orders.map((order) => order.id)
       const isSameSchedule = knownScheduleIdRef.current === responseScheduleId
+      const lastSeenMarker = readLastSeenMarker(response.store.id, responseScheduleId)
+      const latestOrder = response.orders
+        .slice()
+        .sort((a, b) => new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime())[0]
 
-      if (isSameSchedule && notificationsEnabled && knownOrderIdsRef.current.length > 0) {
-        const newOrders = response.orders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
-        if (newOrders.length > 0) {
-          announceNewOrders(newOrders)
-          highlightNewOrders(newOrders.map((order) => order.id))
+      const ordersSinceLastSeen =
+        notificationsEnabled && lastSeenMarker
+          ? response.orders.filter(
+              (order) => new Date(order.ordered_at).getTime() > new Date(lastSeenMarker.orderedAt).getTime()
+            )
+          : []
+
+      if (notificationsEnabled) {
+        if (ordersSinceLastSeen.length > 0) {
+          announceNewOrders(ordersSinceLastSeen)
+          highlightNewOrders(ordersSinceLastSeen.map((order) => order.id))
+        } else if (isSameSchedule && knownOrderIdsRef.current.length > 0) {
+          const newOrders = response.orders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
+          if (newOrders.length > 0) {
+            announceNewOrders(newOrders)
+            highlightNewOrders(newOrders.map((order) => order.id))
+          }
         }
       }
 
       knownScheduleIdRef.current = responseScheduleId
       knownOrderIdsRef.current = nextOrderIds
+      writeLastSeenMarker(
+        response.store.id,
+        responseScheduleId,
+        latestOrder ? { orderedAt: latestOrder.ordered_at } : null
+      )
       setData(response)
       setSelectedScheduleId(responseScheduleId)
 
@@ -303,6 +364,25 @@ export default function VendorMobileOrderOrdersPage() {
 
     return () => window.clearInterval(intervalId)
   }, [selectedScheduleId])
+
+  useEffect(() => {
+    function reloadOnResume() {
+      if (document.visibilityState !== 'visible') return
+      void load(selectedScheduleId)
+    }
+
+    function reloadOnFocus() {
+      void load(selectedScheduleId)
+    }
+
+    document.addEventListener('visibilitychange', reloadOnResume)
+    window.addEventListener('focus', reloadOnFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', reloadOnResume)
+      window.removeEventListener('focus', reloadOnFocus)
+    }
+  }, [selectedScheduleId, notificationsEnabled])
 
   useEffect(() => {
     return () => {
