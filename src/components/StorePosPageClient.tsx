@@ -158,6 +158,43 @@ function getCategoryLabel(category: ProductFilterKey) {
   }
 }
 
+function getDefaultProductFilter(products: PublicMobileOrderProduct[]): ProductFilterKey {
+  const categorizedProducts = products.map((product, index) => ({
+    category: inferProductCategory(product),
+    recommended: isRecommendedProduct(product, index),
+  }))
+
+  if (categorizedProducts.some((entry) => entry.recommended)) {
+    return 'recommended'
+  }
+
+  if (categorizedProducts.some((entry) => entry.category === 'main')) {
+    return 'main'
+  }
+
+  return 'all'
+}
+
+function getInitialSelectedProduct(
+  products: PublicMobileOrderProduct[],
+  filter: ProductFilterKey
+): PublicMobileOrderProduct | null {
+  const categorizedProducts = products.map((product, index) => ({
+    product,
+    category: inferProductCategory(product),
+    recommended: isRecommendedProduct(product, index),
+  }))
+
+  const filteredProducts =
+    filter === 'all'
+      ? categorizedProducts
+      : filter === 'recommended'
+        ? categorizedProducts.filter((entry) => entry.recommended)
+        : categorizedProducts.filter((entry) => entry.category === filter)
+
+  return filteredProducts[0]?.product ?? products[0] ?? null
+}
+
 function buildDefaultPaymentMethods(
   store: PublicMobileOrderPagePayload['store']
 ): StorePosPaymentMethod[] {
@@ -301,15 +338,21 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedStorePosOrder | null>(null)
   const [confirmingPage, setConfirmingPage] = useState(false)
+  const [resettingToMenu, setResettingToMenu] = useState(false)
   const [countdownSeconds, setCountdownSeconds] = useState(10)
   const [waitingSettlement, setWaitingSettlement] = useState(false)
   const [settlementMessage, setSettlementMessage] = useState<string | null>(null)
-  const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(data.products[0] ?? null)
-  const [selection, setSelection] = useState<ProductSelection | null>(
-    data.products[0] ? buildInitialSelection(data.products[0]) : null
-  )
+  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultProductFilter(data.products))
+  const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(() => {
+    const defaultFilter = getDefaultProductFilter(data.products)
+    return getInitialSelectedProduct(data.products, defaultFilter)
+  })
+  const [selection, setSelection] = useState<ProductSelection | null>(() => {
+    const defaultFilter = getDefaultProductFilter(data.products)
+    const initialProduct = getInitialSelectedProduct(data.products, defaultFilter)
+    return initialProduct ? buildInitialSelection(initialProduct) : null
+  })
   const [selectionError, setSelectionError] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>('recommended')
   const isConfirmStep = searchParams.get('step') === 'confirm'
 
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(data.store), [data.store])
@@ -505,7 +548,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   function handleResetForNextCustomer() {
-    router.replace(pathname, { scroll: true })
+    setResettingToMenu(true)
+    if (typeof window !== 'undefined') {
+      window.location.replace(pathname)
+      return
+    }
+
+    const defaultFilter = getDefaultProductFilter(data.products)
+    const initialProduct = getInitialSelectedProduct(data.products, defaultFilter)
     setSubmittedOrder(null)
     setCartItems([])
     setSubmitError(null)
@@ -514,14 +564,11 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setCountdownSeconds(10)
     setWaitingSettlement(false)
     setSettlementMessage(null)
-    if (data.products[0]) {
-      setSelectedProduct(data.products[0])
-      setSelection(buildInitialSelection(data.products[0]))
-    } else {
-      setSelectedProduct(null)
-      setSelection(null)
-    }
+    setActiveFilter(defaultFilter)
+    setSelectedProduct(initialProduct)
+    setSelection(initialProduct ? buildInitialSelection(initialProduct) : null)
     setSelectionError(null)
+    setResettingToMenu(false)
   }
 
   function handleClearCart() {
@@ -703,6 +750,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               {settlementMessage}
               {isSettled ? ` あと ${countdownSeconds} 秒` : waitingSettlement ? ' 店員側の処理を確認中です。' : ''}
             </div>
+
+            {resettingToMenu ? (
+              <div className="mt-4 rounded-[24px] bg-[var(--accent-blue-soft)] px-4 py-4">
+                <LoadingLine label="次の注文画面へ戻っています..." />
+              </div>
+            ) : null}
 
             <div className="mt-6 flex flex-wrap gap-3">
               <button type="button" onClick={handleResetForNextCustomer} className={primaryButtonClassName}>
