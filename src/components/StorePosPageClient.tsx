@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import LoadingLine from '@/components/LoadingLine'
 import type {
   PublicMobileOrderOptionChoice,
   PublicMobileOrderOptionGroup,
@@ -299,6 +300,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedStorePosOrder | null>(null)
+  const [confirmingPage, setConfirmingPage] = useState(false)
   const [countdownSeconds, setCountdownSeconds] = useState(10)
   const [waitingSettlement, setWaitingSettlement] = useState(false)
   const [settlementMessage, setSettlementMessage] = useState<string | null>(null)
@@ -343,6 +345,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       setSelection(buildInitialSelection(data.products[0]))
     }
   }, [data.products, selectedProduct])
+
+  useEffect(() => {
+    if (isConfirmStep) {
+      setConfirmingPage(false)
+    }
+  }, [isConfirmStep])
 
   useEffect(() => {
     if (!selectedProduct) return
@@ -497,9 +505,11 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   function handleResetForNextCustomer() {
+    router.replace(pathname, { scroll: true })
     setSubmittedOrder(null)
     setCartItems([])
     setSubmitError(null)
+    setConfirmingPage(false)
     setSelectedPaymentMethod(paymentMethods[0] ?? 'cash')
     setCountdownSeconds(10)
     setWaitingSettlement(false)
@@ -538,10 +548,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       return
     }
     setSubmitError(null)
+    setConfirmingPage(true)
     router.push(`${pathname}?step=confirm`, { scroll: true })
   }
 
   function returnToProductSelection() {
+    setConfirmingPage(false)
     router.push(pathname, { scroll: true })
   }
 
@@ -706,6 +718,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   if (isConfirmStep) {
     return (
       <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
+        {submitting ? (
+          <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-4 pt-3 md:px-6">
+            <div className="mx-auto max-w-5xl rounded-full bg-white/95 px-4 py-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)] backdrop-blur">
+              <LoadingLine label="注文を送信しています..." />
+            </div>
+          </div>
+        ) : null}
         <div className="mx-auto max-w-5xl space-y-6 pb-24">
           <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
             <div className="inline-flex rounded-full bg-[var(--accent-blue-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
@@ -795,6 +814,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               </div>
             )}
 
+            {submitting ? (
+              <div className="mt-5 rounded-[24px] bg-[var(--accent-blue-soft)] px-4 py-4">
+                <LoadingLine label="ご注文内容を送信しています。しばらくお待ちください。" />
+              </div>
+            ) : null}
+
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -820,6 +845,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
+      {confirmingPage ? (
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-4 pt-3 md:px-6">
+          <div className="mx-auto max-w-7xl rounded-full bg-white/95 px-4 py-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)] backdrop-blur">
+            <LoadingLine label="確認ページを開いています..." />
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto max-w-7xl space-y-5 pb-36">
         <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1172,6 +1204,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 </div>
               )}
 
+              {confirmingPage ? (
+                <div className="mt-5 rounded-[24px] bg-[var(--accent-blue-soft)] px-4 py-4">
+                  <LoadingLine label="確認ページへ移動しています。少々お待ちください。" />
+                </div>
+              ) : null}
+
               <div className="mt-6 rounded-[28px] bg-[#f8fbff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -1181,10 +1219,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                   <button
                     type="button"
                     onClick={openConfirmPage}
-                    disabled={cartItems.length === 0}
+                    disabled={cartItems.length === 0 || confirmingPage}
                     className={primaryButtonClassName}
                   >
-                    注文を確認する
+                    {confirmingPage ? '確認ページを開いています...' : '注文を確認する'}
                   </button>
                 </div>
               </div>
@@ -1226,7 +1264,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <button
                   type="button"
                   onClick={handleClearCart}
-                  disabled={cartItems.length === 0}
+                  disabled={cartItems.length === 0 || confirmingPage}
                   className="inline-flex items-center justify-center rounded-[24px] bg-white px-5 py-4 text-base font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   カートを空にする
@@ -1234,10 +1272,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <button
                   type="button"
                   onClick={openConfirmPage}
-                  disabled={cartItems.length === 0}
+                  disabled={cartItems.length === 0 || confirmingPage}
                   className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  注文を確認する
+                  {confirmingPage ? '確認ページを開いています...' : '注文を確認する'}
                 </button>
               </div>
             </div>
