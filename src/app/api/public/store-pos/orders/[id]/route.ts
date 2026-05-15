@@ -3,6 +3,11 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import type { PublicStorePosOrderStatusResponse } from '@/types/api-payloads'
 
+function isMissingPaidAtColumnError(error: unknown) {
+  const message = String((error as { message?: string } | null)?.message ?? '')
+  return message.includes('paid_at')
+}
+
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -25,11 +30,21 @@ export async function GET(
   if (orderPageError) return apiError(orderPageError.message)
   if (!orderPage) return apiError('注文ページが見つかりません', 404)
 
-  const { data: order, error: orderError } = await (supabase as any)
+  let orderResult = await (supabase as any)
     .from('mobile_orders')
     .select('id, order_page_id, order_number, total_amount, payment_status, status, paid_at, cancelled_at, payment_provider')
     .eq('id', id)
     .single()
+
+  if (orderResult.error && isMissingPaidAtColumnError(orderResult.error)) {
+    orderResult = await (supabase as any)
+      .from('mobile_orders')
+      .select('id, order_page_id, order_number, total_amount, payment_status, status, cancelled_at, payment_provider')
+      .eq('id', id)
+      .single()
+  }
+
+  const { data: order, error: orderError } = orderResult
 
   if (orderError || !order) {
     return apiError(orderError?.message ?? '注文情報が見つかりません', 404)
@@ -49,10 +64,9 @@ export async function GET(
     total_amount: order.total_amount,
     payment_status: order.payment_status,
     status: order.status,
-    paid_at: order.paid_at ?? null,
+    paid_at: 'paid_at' in order ? order.paid_at ?? null : null,
     cancelled_at: order.cancelled_at ?? null,
   }
 
   return apiOk(payload)
 }
-
