@@ -5,6 +5,12 @@ import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchApi } from '@/lib/api-client'
 import { getHolidayFlagTone, getWeekdayIndex } from '@/lib/calendar'
+import {
+  buildVendorDailyChartRows,
+  buildVendorDailySummary,
+  getVendorDailyColumnValue,
+  type DailyColumnKey,
+} from '@/lib/vendor-analytics-formatters'
 import { usePersistentDraft } from '@/lib/usePersistentDraft'
 import type { VendorDailyMemoMutationPayload } from '@/types/api-payloads'
 import type { VendorDailyMemo, VendorDailySalesRow } from '@/types/operations'
@@ -54,7 +60,7 @@ const COLUMN_OPTIONS = [
 
 const DEFAULT_VISIBLE_COLUMNS = Object.fromEntries(
   COLUMN_OPTIONS.map((column) => [column.key, true])
-) as Record<(typeof COLUMN_OPTIONS)[number]['key'], boolean>
+) as Record<DailyColumnKey, boolean>
 
 type Props = {
   rows: VendorDailySalesRow[]
@@ -98,16 +104,7 @@ export default function DailySalesAnalyticsClient({
   )
 
   const summary = useMemo(() => {
-    const totalSales = rows.reduce((sum, row) => sum + row.sales, 0)
-    const totalTxns = rows.reduce((sum, row) => sum + row.txnCount, 0)
-    const totalItems = rows.reduce((sum, row) => sum + row.itemCount, 0)
-    return {
-      totalSales,
-      totalTxns,
-      totalItems,
-      avgTicket: totalTxns > 0 ? Math.round(totalSales / totalTxns) : 0,
-      avgItemPrice: totalItems > 0 ? Math.round(totalSales / totalItems) : 0,
-    }
+    return buildVendorDailySummary(rows)
   }, [rows])
 
   const activeColumns = useMemo(
@@ -116,12 +113,7 @@ export default function DailySalesAnalyticsClient({
   )
 
   const chartRows = useMemo(
-    () =>
-      rows.map((row) => ({
-        label: row.date.slice(5),
-        売上: row.sales,
-        会計数: row.txnCount,
-      })),
+    () => buildVendorDailyChartRows(rows),
     [rows]
   )
 
@@ -129,46 +121,9 @@ export default function DailySalesAnalyticsClient({
     const headers = ['日付', ...activeColumns.map((column) => column.label)]
     const lines = rows.map((row) => {
       const memoValue = memoDrafts[row.date] ?? memoMap.get(row.date)?.memo_text ?? ''
-      const values = activeColumns.map((column) => {
-        switch (column.key) {
-          case 'weekday':
-            return row.weekday
-          case 'holidayFlag':
-            return row.holidayFlag || '-'
-          case 'locationName':
-            return row.locationName
-          case 'eventName':
-            return row.eventName
-          case 'municipality':
-            return row.municipality
-          case 'weatherType':
-            return row.weatherType
-          case 'avgTemperature':
-            return row.avgTemperature
-          case 'sales':
-            return row.sales
-          case 'txnCount':
-            return row.txnCount
-          case 'avgTicket':
-            return row.avgTicket
-          case 'itemCount':
-            return row.itemCount
-          case 'avgItemPrice':
-            return row.avgItemPrice
-          case 'cashSales':
-            return row.cashSales
-          case 'paypaySales':
-            return row.paypaySales
-          case 'otherSales':
-            return row.otherSales
-          case 'grossProfit':
-            return row.grossProfit
-          case 'memo':
-            return memoValue
-          default:
-            return ''
-        }
-      })
+      const values = activeColumns.map((column) =>
+        getVendorDailyColumnValue(row, column.key as DailyColumnKey, memoValue)
+      )
 
       return [row.date, ...values].map(toCsvValue).join(',')
     })

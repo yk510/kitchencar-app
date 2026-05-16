@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import { formatVendorHourlyAnalyticsPayload } from '@/lib/vendor-analytics-formatters'
 import {
   buildStallLogResolutionMap,
   matchesAnalyticsScope,
@@ -10,9 +11,6 @@ import {
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import { getVendorHourlyAnalytics } from '@/lib/vendor-hourly-analytics'
 import { normalizeAnalyticsScope } from '@/lib/vendor-product-analytics'
-
-const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
-
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
@@ -75,12 +73,5 @@ export async function GET(req: NextRequest) {
   }
 
   const hourlyData = await getVendorHourlyAnalytics(supabase, user.id, scope, start, end)
-
-  const heatmapData = DAY_LABELS.map((dayLabel, dow) => ({
-    day: dow,
-    label: dayLabel,
-    hours: heatmap[dow].map((sales, h) => ({ hour: h, sales })),
-  }))
-
-  return apiOk({ hourly: hourlyData, heatmap: heatmapData })
+  return apiOk(formatVendorHourlyAnalyticsPayload(hourlyData, heatmap))
 }

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import { formatVendorProductAnalyticsPayload } from '@/lib/vendor-analytics-formatters'
 import { getVendorProductAnalytics, normalizeAnalyticsScope } from '@/lib/vendor-product-analytics'
 
 export async function GET(req: NextRequest) {
@@ -13,7 +14,8 @@ export async function GET(req: NextRequest) {
   const end = normalizeAnalyticsDate(req.nextUrl.searchParams.get('end') ?? undefined)
 
   try {
-    return apiOk(await getVendorProductAnalytics(supabase, user.id, scope, start, end))
+    const rows = await getVendorProductAnalytics(supabase, user.id, scope, start, end)
+    return apiOk(formatVendorProductAnalyticsPayload(rows))
   } catch (error) {
     return apiError(error instanceof Error ? error.message : 'サーバーエラー')
   }
