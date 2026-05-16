@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { VendorMobileOrderListCard } from '@/components/VendorMobileOrderListCard'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
@@ -888,50 +889,22 @@ export default function VendorMobileOrderOrdersPage() {
                   </div>
                 ) : (
                   filteredOrders.map((order) => (
-                    <button
+                    <VendorMobileOrderListCard
                       key={order.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedOrderId(order.id)
-                        clearNewOrderHighlight(order.id)
+                      order={order}
+                      selected={selectedOrderId === order.id}
+                      isNew={newOrderIds.includes(order.id)}
+                      statusLabel={STATUS_LABELS[order.status]}
+                      statusTone={STATUS_TONE[order.status]}
+                      paymentStatusLabel={PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
+                      paymentMethodLabel={getStorePosPaymentMethodLabel(order)}
+                      orderedAtLabel={formatDateTime(order.ordered_at)}
+                      totalAmountLabel={formatPrice(order.total_amount)}
+                      onSelect={(orderId) => {
+                        setSelectedOrderId(orderId)
+                        clearNewOrderHighlight(orderId)
                       }}
-                      className={`w-full rounded-3xl border px-4 py-4 text-left transition ${
-                        selectedOrderId === order.id
-                          ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
-                          : newOrderIds.includes(order.id)
-                            ? 'border-amber-300 bg-amber-50 shadow-[0_12px_28px_rgba(245,158,11,0.16)]'
-                            : 'border-[var(--line-soft)] bg-white hover:border-[var(--accent-blue-soft)]'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-lg font-bold text-[var(--accent-blue)]">{order.order_number}</p>
-                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[order.status]}`}>
-                              {STATUS_LABELS[order.status]}
-                            </span>
-                            {isStorePosOrder(order) ? (
-                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                POS / {getStorePosPaymentMethodLabel(order)}
-                              </span>
-                            ) : null}
-                            {newOrderIds.includes(order.id) ? (
-                              <span className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white">
-                                新着
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-2 text-sm font-medium text-gray-800">{order.pickup_nickname}</p>
-                          <p className="mt-1 text-xs text-gray-500">{formatDateTime(order.ordered_at)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-800">{formatPrice(order.total_amount)}</p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {order.item_count} 品目 / {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
+                    />
                   ))
                 )}
               </div>
