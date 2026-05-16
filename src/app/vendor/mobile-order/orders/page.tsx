@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { VendorMobileOrderDashboardAlerts } from '@/components/VendorMobileOrderDashboardAlerts'
 import { VendorMobileOrderDashboardHeader } from '@/components/VendorMobileOrderDashboardHeader'
 import { VendorMobileOrderDetailHeader } from '@/components/VendorMobileOrderDetailHeader'
 import { VendorMobileOrderFilters } from '@/components/VendorMobileOrderFilters'
 import { VendorMobileOrderItemsSection } from '@/components/VendorMobileOrderItemsSection'
 import { VendorMobileOrderListCard } from '@/components/VendorMobileOrderListCard'
 import { VendorMobileOrderListHeader } from '@/components/VendorMobileOrderListHeader'
+import { VendorMobileOrderLoadingPanel } from '@/components/VendorMobileOrderLoadingPanel'
 import { VendorMobileOrderNotificationsSection } from '@/components/VendorMobileOrderNotificationsSection'
+import { VendorMobileOrderPlaceholderPanel } from '@/components/VendorMobileOrderPlaceholderPanel'
 import { VendorMobileOrderScheduleOverview } from '@/components/VendorMobileOrderScheduleOverview'
 import { VendorMobileOrderStatusSection } from '@/components/VendorMobileOrderStatusSection'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
@@ -190,16 +193,14 @@ export default function VendorMobileOrderOrdersPage() {
         onBack={handleBackToPreviousPage}
       />
 
-      {error && <p className="alert-danger px-4 py-3 text-sm text-red-700">{error}</p>}
-      {message && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{message}</p>}
-      {notificationBanner && (
-        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-          {notificationBanner}
-        </p>
-      )}
+      <VendorMobileOrderDashboardAlerts
+        error={error}
+        message={message}
+        notificationBanner={notificationBanner}
+      />
 
       {loading ? (
-        <div className="soft-panel p-6 text-sm text-gray-500">読み込み中...</div>
+        <VendorMobileOrderLoadingPanel />
       ) : dashboard ? (
         <>
           <VendorMobileOrderScheduleOverview
@@ -229,9 +230,10 @@ export default function VendorMobileOrderOrdersPage() {
 
               <div className="mt-4 space-y-3 lg:h-[calc(100%-5.5rem)] lg:overflow-y-auto lg:pr-1">
                 {filteredOrders.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-6 text-sm text-gray-500">
-                    この条件に一致する注文はまだありません。
-                  </div>
+                  <VendorMobileOrderPlaceholderPanel
+                    compact
+                    message="この条件に一致する注文はまだありません。"
+                  />
                 ) : (
                   filteredOrders.map((order) => (
                     <VendorMobileOrderListCard
@@ -303,13 +305,9 @@ export default function VendorMobileOrderOrdersPage() {
                   />
                 </div>
               ) : detailLoading ? (
-                <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
-                  注文詳細を読み込み中...
-                </div>
+                <VendorMobileOrderPlaceholderPanel message="注文詳細を読み込み中..." />
               ) : (
-                <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
-                  左の注文を選ぶと、内容とステータス操作が表示されます。
-                </div>
+                <VendorMobileOrderPlaceholderPanel message="左の注文を選ぶと、内容とステータス操作が表示されます。" />
               )}
             </section>
           </div>
