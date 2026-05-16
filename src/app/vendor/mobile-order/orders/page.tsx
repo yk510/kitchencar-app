@@ -73,6 +73,16 @@ const EMPTY_COUNTS: VendorMobileOrderOrdersSummaryPayload = {
   total: 0,
 }
 
+function buildCountsFromOrders(source: VendorMobileOrderListItem[]): VendorMobileOrderOrdersSummaryPayload {
+  return {
+    placed: source.filter((order) => order.status === 'placed').length,
+    preparing: source.filter((order) => order.status === 'preparing').length,
+    ready: source.filter((order) => order.status === 'ready').length,
+    picked_up: source.filter((order) => order.status === 'picked_up').length,
+    total: source.length,
+  }
+}
+
 function getStorePosPaymentMethodLabel(order: {
   payment_provider?: string | null
   payment_method?: string | null
@@ -180,6 +190,27 @@ export default function VendorMobileOrderOrdersPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const notificationBannerTimeoutRef = useRef<number | null>(null)
   const newOrderTimeoutsRef = useRef<Record<string, number>>({})
+
+  function updateOrderInList(
+    orderId: string,
+    updater: (order: VendorMobileOrderListItem) => VendorMobileOrderListItem
+  ) {
+    setOrders((current) => {
+      const next = current.map((order) => (order.id === orderId ? updater(order) : order))
+      setCounts(buildCountsFromOrders(next))
+      return next
+    })
+  }
+
+  function updateSelectedOrderDetail(
+    orderId: string,
+    updater: (order: VendorMobileOrderDashboardOrder) => VendorMobileOrderDashboardOrder
+  ) {
+    setSelectedOrder((current) => {
+      if (!current || current.id !== orderId) return current
+      return updater(current)
+    })
+  }
 
   function handleBackToPreviousPage() {
     if (typeof window === 'undefined') return
@@ -419,6 +450,20 @@ export default function VendorMobileOrderOrdersPage() {
     syncIncomingOrders(storeId, responseScheduleId, response.orders)
   }
 
+  function shouldRefreshSelectedOrderDetail(nextOrders: VendorMobileOrderListItem[]) {
+    if (!selectedOrderId || !selectedOrder) return false
+
+    const selectedListOrder = nextOrders.find((order) => order.id === selectedOrderId)
+    if (!selectedListOrder) return true
+
+    return (
+      selectedListOrder.status !== selectedOrder.status ||
+      selectedListOrder.payment_status !== selectedOrder.payment_status ||
+      selectedListOrder.updated_at !== selectedOrder.updated_at ||
+      selectedListOrder.total_amount !== selectedOrder.total_amount
+    )
+  }
+
   async function loadDashboard(scheduleId?: string | null) {
     try {
       const search = scheduleId ? `?schedule_id=${encodeURIComponent(scheduleId)}` : ''
@@ -480,11 +525,24 @@ export default function VendorMobileOrderOrdersPage() {
     run: async () => {
       if (!dashboard) return
 
-      await Promise.all([
-        refreshSummary(selectedScheduleId),
-        refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
-        loadSelectedOrder(selectedOrderId),
+      const search = selectedScheduleId ? `?schedule_id=${encodeURIComponent(selectedScheduleId)}` : ''
+      const [summaryResponse, listResponse] = await Promise.all([
+        fetchApi<VendorMobileOrderOrdersSummaryPayload>(
+          `/api/vendor/mobile-order/orders/summary${search}`,
+          { cache: 'no-store' }
+        ),
+        fetchApi<VendorMobileOrderOrdersListPayload>(
+          `/api/vendor/mobile-order/orders/list${search}`,
+          { cache: 'no-store' }
+        ),
       ])
+
+      setCounts(summaryResponse)
+      syncIncomingOrders(dashboard.store.id, selectedScheduleId, listResponse.orders)
+
+      if (shouldRefreshSelectedOrderDetail(listResponse.orders)) {
+        await loadSelectedOrder(selectedOrderId)
+      }
     },
   })
 
@@ -542,6 +600,24 @@ export default function VendorMobileOrderOrdersPage() {
   async function handleChangeStatus(order: VendorMobileOrderDashboardOrder, nextStatus: string) {
     setPendingStatus(nextStatus)
     setMessage(null)
+    const previousOrders = orders
+    const previousCounts = counts
+    const previousSelectedOrder = selectedOrder
+
+    updateOrderInList(order.id, (current) => ({
+      ...current,
+      status: nextStatus as VendorMobileOrderListItem['status'],
+      updated_at: new Date().toISOString(),
+      ...(nextStatus === 'picked_up' ? { picked_up_at: new Date().toISOString() } : {}),
+      ...(nextStatus === 'cancelled' ? { cancelled_at: new Date().toISOString() } : {}),
+    }))
+    updateSelectedOrderDetail(order.id, (current) => ({
+      ...current,
+      status: nextStatus as VendorMobileOrderDashboardOrder['status'],
+      updated_at: new Date().toISOString(),
+      ...(nextStatus === 'picked_up' ? { picked_up_at: new Date().toISOString() } : {}),
+      ...(nextStatus === 'cancelled' ? { cancelled_at: new Date().toISOString() } : {}),
+    }))
 
     try {
       await fetchApi<VendorMobileOrderOrderMutationPayload>(`/api/vendor/mobile-order/orders/${order.id}`, {
@@ -551,13 +627,16 @@ export default function VendorMobileOrderOrdersPage() {
       })
       setMessage(`注文 ${order.order_number} を「${STATUS_LABELS[nextStatus]}」に更新しました`)
       if (dashboard) {
-        await Promise.all([
+        void Promise.all([
           refreshSummary(selectedScheduleId),
           refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
           loadSelectedOrder(order.id),
         ])
       }
     } catch (err) {
+      setOrders(previousOrders)
+      setCounts(previousCounts)
+      setSelectedOrder(previousSelectedOrder)
       setError(err instanceof ApiClientError ? err.message : '注文ステータスの更新に失敗しました')
     } finally {
       setPendingStatus(null)
@@ -592,6 +671,23 @@ export default function VendorMobileOrderOrdersPage() {
   async function handleReceivePayment(order: VendorMobileOrderDashboardOrder) {
     setPendingPaymentReceiptOrderId(order.id)
     setMessage(null)
+    const previousOrders = orders
+    const previousCounts = counts
+    const previousSelectedOrder = selectedOrder
+    const optimisticPaidAt = new Date().toISOString()
+
+    updateOrderInList(order.id, (current) => ({
+      ...current,
+      payment_status: 'paid',
+      paid_at: optimisticPaidAt,
+      updated_at: optimisticPaidAt,
+    }))
+    updateSelectedOrderDetail(order.id, (current) => ({
+      ...current,
+      payment_status: 'paid',
+      paid_at: optimisticPaidAt,
+      updated_at: optimisticPaidAt,
+    }))
 
     try {
       await fetchApi<VendorMobileOrderOrderMutationPayload>(`/api/vendor/mobile-order/orders/${order.id}`, {
@@ -601,13 +697,16 @@ export default function VendorMobileOrderOrdersPage() {
       })
       setMessage(`注文 ${order.order_number} の料金受領を記録しました`)
       if (dashboard) {
-        await Promise.all([
+        void Promise.all([
           refreshSummary(selectedScheduleId),
           refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
           loadSelectedOrder(order.id),
         ])
       }
     } catch (err) {
+      setOrders(previousOrders)
+      setCounts(previousCounts)
+      setSelectedOrder(previousSelectedOrder)
       setError(err instanceof ApiClientError ? err.message : '料金受領の更新に失敗しました')
     } finally {
       setPendingPaymentReceiptOrderId(null)
