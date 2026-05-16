@@ -10,6 +10,19 @@ import { VendorMobileOrderNotificationsSection } from '@/components/VendorMobile
 import { VendorMobileOrderScheduleSwitcher } from '@/components/VendorMobileOrderScheduleSwitcher'
 import { VendorMobileOrderStatusSection } from '@/components/VendorMobileOrderStatusSection'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
+import {
+  buildCountsFromOrders,
+  createFilterDefinitions,
+  EMPTY_COUNTS,
+  filterAndSortOrders,
+  isUnhandledOrder,
+  NEXT_ACTIONS,
+  OrderListFilter,
+  PAYMENT_STATUS_LABELS,
+  STATUS_LABELS,
+  STATUS_TONE,
+} from '@/lib/vendor-mobile-order-order-list'
+import { useOrderDashboardNotifications } from '@/lib/use-order-dashboard-notifications'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   MobileOrderNotificationRow,
@@ -21,73 +34,6 @@ import type {
   VendorMobileOrderOrdersPayload,
   VendorMobileOrderOrdersSummaryPayload,
 } from '@/types/api-payloads'
-
-const NOTIFICATION_STORAGE_KEY = 'mobile-order-dashboard-notifications-enabled'
-const NEW_ORDER_HIGHLIGHT_MS = 15000
-const LAST_SEEN_ORDER_MARKER_KEY = 'mobile-order-dashboard-last-seen'
-
-const STATUS_LABELS: Record<string, string> = {
-  placed: '受付済',
-  preparing: '調理中',
-  ready: '完成',
-  picked_up: '受取済',
-  cancelled: 'キャンセル',
-}
-
-const STATUS_TONE: Record<string, string> = {
-  placed: 'bg-sky-100 text-sky-800',
-  preparing: 'bg-violet-100 text-violet-800',
-  ready: 'bg-emerald-100 text-emerald-800',
-  picked_up: 'bg-slate-100 text-slate-700',
-  cancelled: 'bg-rose-100 text-rose-700',
-}
-
-const NEXT_ACTIONS: Record<string, Array<{ status: string; label: string }>> = {
-  placed: [
-    { status: 'preparing', label: '調理開始' },
-    { status: 'ready', label: '完成にする' },
-    { status: 'cancelled', label: 'キャンセル' },
-  ],
-  preparing: [
-    { status: 'ready', label: '完成にする' },
-    { status: 'cancelled', label: 'キャンセル' },
-  ],
-  ready: [{ status: 'picked_up', label: '受け渡し完了' }],
-  picked_up: [],
-  cancelled: [],
-}
-
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  pending: '未受領',
-  authorized: '支払済み',
-  paid: '受領済み',
-  failed: '失敗',
-  refunded: '返金済み',
-}
-
-type OrderListFilter = 'all' | 'action_required' | 'preparing' | 'ready' | 'picked_up'
-
-type LastSeenOrderMarker = {
-  orderedAt: string
-}
-
-const EMPTY_COUNTS: VendorMobileOrderOrdersSummaryPayload = {
-  placed: 0,
-  preparing: 0,
-  ready: 0,
-  picked_up: 0,
-  total: 0,
-}
-
-function buildCountsFromOrders(source: VendorMobileOrderListItem[]): VendorMobileOrderOrdersSummaryPayload {
-  return {
-    placed: source.filter((order) => order.status === 'placed').length,
-    preparing: source.filter((order) => order.status === 'preparing').length,
-    ready: source.filter((order) => order.status === 'ready').length,
-    picked_up: source.filter((order) => order.status === 'picked_up').length,
-    total: source.length,
-  }
-}
 
 function getStorePosPaymentMethodLabel(order: {
   payment_provider?: string | null
@@ -138,41 +84,6 @@ function maskLineUserId(value: string | null | undefined) {
   return `${userId.slice(0, 4)}...${userId.slice(-4)}`
 }
 
-function getLastSeenMarkerStorageKey(storeId: string, scheduleId: string | null) {
-  return `${LAST_SEEN_ORDER_MARKER_KEY}:${storeId}:${scheduleId ?? 'none'}`
-}
-
-function readLastSeenMarker(storeId: string, scheduleId: string | null): LastSeenOrderMarker | null {
-  if (typeof window === 'undefined') return null
-
-  const raw = window.localStorage.getItem(getLastSeenMarkerStorageKey(storeId, scheduleId))
-  if (!raw) return null
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<LastSeenOrderMarker>
-    if (typeof parsed.orderedAt !== 'string' || !parsed.orderedAt) return null
-    return { orderedAt: parsed.orderedAt }
-  } catch {
-    return null
-  }
-}
-
-function writeLastSeenMarker(
-  storeId: string,
-  scheduleId: string | null,
-  marker: LastSeenOrderMarker | null
-) {
-  if (typeof window === 'undefined') return
-
-  const key = getLastSeenMarkerStorageKey(storeId, scheduleId)
-  if (!marker) {
-    window.localStorage.removeItem(key)
-    return
-  }
-
-  window.localStorage.setItem(key, JSON.stringify(marker))
-}
-
 export default function VendorMobileOrderOrdersPage() {
   const [dashboard, setDashboard] = useState<VendorMobileOrderOrdersPayload | null>(null)
   const [orders, setOrders] = useState<VendorMobileOrderListItem[]>([])
@@ -187,15 +98,16 @@ export default function VendorMobileOrderOrdersPage() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
   const [pendingPaymentReceiptOrderId, setPendingPaymentReceiptOrderId] = useState<string | null>(null)
   const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [notificationBanner, setNotificationBanner] = useState<string | null>(null)
   const [orderListFilter, setOrderListFilter] = useState<OrderListFilter>('action_required')
-  const [newOrderIds, setNewOrderIds] = useState<string[]>([])
-  const knownOrderIdsRef = useRef<string[]>([])
-  const knownScheduleIdRef = useRef<string | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const notificationBannerTimeoutRef = useRef<number | null>(null)
-  const newOrderTimeoutsRef = useRef<Record<string, number>>({})
+  const {
+    notificationsEnabled,
+    notificationBanner,
+    newOrderIds,
+    clearNewOrderHighlight,
+    enableNotifications,
+    processIncomingOrders,
+    resetForScheduleChange,
+  } = useOrderDashboardNotifications()
 
   function updateOrderInList(
     orderId: string,
@@ -227,180 +139,12 @@ export default function VendorMobileOrderOrdersPage() {
     window.location.href = '/vendor/mobile-order'
   }
 
-  function clearNotificationBannerLater() {
-    if (notificationBannerTimeoutRef.current != null) {
-      window.clearTimeout(notificationBannerTimeoutRef.current)
-    }
-
-    notificationBannerTimeoutRef.current = window.setTimeout(() => {
-      setNotificationBanner(null)
-    }, 7000)
-  }
-
-  function isUnhandledOrder(order: { status: string }) {
-    return order.status !== 'picked_up' && order.status !== 'cancelled'
-  }
-
-  function clearNewOrderHighlight(orderId: string) {
-    setNewOrderIds((current) => current.filter((id) => id !== orderId))
-    const timeoutId = newOrderTimeoutsRef.current[orderId]
-    if (timeoutId != null) {
-      window.clearTimeout(timeoutId)
-      delete newOrderTimeoutsRef.current[orderId]
-    }
-  }
-
-  function highlightNewOrders(orderIds: string[]) {
-    if (orderIds.length === 0 || typeof window === 'undefined') return
-
-    setNewOrderIds((current) => Array.from(new Set([...current, ...orderIds])))
-
-    for (const orderId of orderIds) {
-      const existingTimeout = newOrderTimeoutsRef.current[orderId]
-      if (existingTimeout != null) {
-        window.clearTimeout(existingTimeout)
-      }
-
-      newOrderTimeoutsRef.current[orderId] = window.setTimeout(() => {
-        clearNewOrderHighlight(orderId)
-      }, NEW_ORDER_HIGHLIGHT_MS)
-    }
-  }
-
-  function playNotificationSound() {
-    if (typeof window === 'undefined') return
-
-    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!AudioContextCtor) return
-
-    const audioContext = audioContextRef.current ?? new AudioContextCtor()
-    audioContextRef.current = audioContext
-
-    if (audioContext.state === 'suspended') {
-      void audioContext.resume()
-    }
-
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-    const now = audioContext.currentTime
-
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(880, now)
-    oscillator.frequency.setValueAtTime(1174, now + 0.12)
-
-    gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.exponentialRampToValueAtTime(0.14, now + 0.02)
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
-
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    oscillator.start(now)
-    oscillator.stop(now + 0.36)
-  }
-
-  function primeNotificationAudio() {
-    if (typeof window === 'undefined') return
-
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-
-    if (AudioContextCtor) {
-      const audioContext = audioContextRef.current ?? new AudioContextCtor()
-      audioContextRef.current = audioContext
-
-      if (audioContext.state === 'suspended') {
-        void audioContext.resume().catch(() => undefined)
-      }
-    }
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices()
-    }
-  }
-
-  function speakNotification(messageToSpeak: string) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(messageToSpeak)
-    utterance.lang = 'ja-JP'
-    utterance.rate = 1
-    utterance.pitch = 1
-    window.speechSynthesis.speak(utterance)
-  }
-
-  function announceNewOrders(newOrders: Array<Pick<VendorMobileOrderListItem, 'id' | 'ordered_at' | 'order_number'>>) {
-    if (newOrders.length === 0) return
-
-    const newestOrder = [...newOrders].sort(
-      (a, b) => new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime()
-    )[0]
-    const bannerMessage =
-      newOrders.length === 1
-        ? `新しい注文 ${newestOrder.order_number} を受け付けました`
-        : `新しい注文を ${newOrders.length} 件 受け付けました`
-
-    setNotificationBanner(bannerMessage)
-    clearNotificationBannerLater()
-    playNotificationSound()
-    speakNotification('注文を受け付けました')
-  }
-
-  async function enableNotifications() {
-    try {
-      primeNotificationAudio()
-      playNotificationSound()
-      speakNotification('通知を有効にしました')
-      window.localStorage.setItem(NOTIFICATION_STORAGE_KEY, 'true')
-      setNotificationsEnabled(true)
-      setNotificationBanner('新着注文の音声通知を有効にしました')
-      clearNotificationBannerLater()
-    } catch {
-      setError('通知の有効化に失敗しました')
-    }
-  }
-
   function syncIncomingOrders(
     storeId: string,
     responseScheduleId: string | null,
     incomingOrders: VendorMobileOrderListItem[]
   ) {
-    const nextOrderIds = incomingOrders.map((order) => order.id)
-    const isSameSchedule = knownScheduleIdRef.current === responseScheduleId
-    const lastSeenMarker = readLastSeenMarker(storeId, responseScheduleId)
-    const latestOrder = incomingOrders
-      .slice()
-      .sort((a, b) => new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime())[0]
-
-    const ordersSinceLastSeen =
-      notificationsEnabled && lastSeenMarker
-        ? incomingOrders.filter(
-            (order) => new Date(order.ordered_at).getTime() > new Date(lastSeenMarker.orderedAt).getTime()
-          )
-        : []
-
-    if (notificationsEnabled) {
-      if (ordersSinceLastSeen.length > 0) {
-        announceNewOrders(ordersSinceLastSeen)
-        highlightNewOrders(ordersSinceLastSeen.map((order) => order.id))
-      } else if (isSameSchedule && knownOrderIdsRef.current.length > 0) {
-        const newOrders = incomingOrders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
-        if (newOrders.length > 0) {
-          announceNewOrders(newOrders)
-          highlightNewOrders(newOrders.map((order) => order.id))
-        }
-      }
-    }
-
-    knownScheduleIdRef.current = responseScheduleId
-    knownOrderIdsRef.current = nextOrderIds
-    writeLastSeenMarker(
-      storeId,
-      responseScheduleId,
-      latestOrder ? { orderedAt: latestOrder.ordered_at } : null
-    )
+    processIncomingOrders(storeId, responseScheduleId, incomingOrders)
     setOrders(incomingOrders)
     setSelectedOrderId((current) => {
       if (current && incomingOrders.some((order) => order.id === current)) {
@@ -498,33 +242,6 @@ export default function VendorMobileOrderOrdersPage() {
     void loadDashboard()
   }, [])
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)
-    setNotificationsEnabled(saved === 'true')
-  }, [])
-
-  useEffect(() => {
-    if (!notificationsEnabled) return
-
-    primeNotificationAudio()
-
-    const rearmAudio = () => {
-      primeNotificationAudio()
-    }
-
-    window.addEventListener('pointerdown', rearmAudio, { passive: true })
-    window.addEventListener('touchstart', rearmAudio, { passive: true })
-    window.addEventListener('keydown', rearmAudio)
-    window.addEventListener('focus', rearmAudio)
-
-    return () => {
-      window.removeEventListener('pointerdown', rearmAudio)
-      window.removeEventListener('touchstart', rearmAudio)
-      window.removeEventListener('keydown', rearmAudio)
-      window.removeEventListener('focus', rearmAudio)
-    }
-  }, [notificationsEnabled])
-
   useLiveRefresh({
     enabled: !!selectedScheduleId && !!dashboard,
     intervalMs: 5000,
@@ -556,64 +273,14 @@ export default function VendorMobileOrderOrdersPage() {
     void loadSelectedOrder(selectedOrderId)
   }, [selectedOrderId])
 
-  useEffect(() => {
-    return () => {
-      if (notificationBannerTimeoutRef.current != null) {
-        window.clearTimeout(notificationBannerTimeoutRef.current)
-      }
-
-      for (const timeoutId of Object.values(newOrderTimeoutsRef.current)) {
-        window.clearTimeout(timeoutId)
-      }
-    }
-  }, [])
-
-  const filteredOrders = useMemo(() => {
-    const matchesFilter = (order: VendorMobileOrderListItem) => {
-      if (orderListFilter === 'all') return true
-      if (orderListFilter === 'action_required') return isUnhandledOrder(order)
-      return order.status === orderListFilter
-    }
-
-    const priority = (order: VendorMobileOrderListItem) => {
-      if (!isUnhandledOrder(order)) return 1
-      if (order.status === 'placed') return 0
-      if (order.status === 'preparing') return 0
-      if (order.status === 'ready') return 0
-      return 0
-    }
-
-    return orders
-      .filter(matchesFilter)
-      .slice()
-      .sort((a, b) => {
-        const priorityDiff = priority(a) - priority(b)
-        if (priorityDiff !== 0) return priorityDiff
-        return new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime()
-      })
-  }, [orders, orderListFilter])
-
-  const filterDefinitions = useMemo(
-    () =>
-      [
-        { key: 'action_required', label: '未対応', count: orders.filter((order) => isUnhandledOrder(order)).length },
-        { key: 'preparing', label: '調理中', count: counts.preparing },
-        { key: 'ready', label: '完成', count: counts.ready },
-        { key: 'picked_up', label: '受取済', count: counts.picked_up },
-        { key: 'all', label: 'すべて', count: counts.total },
-      ] as Array<{ key: OrderListFilter; label: string; count: number }>,
-    [counts.preparing, counts.ready, counts.picked_up, counts.total, orders]
-  )
+  const filteredOrders = useMemo(() => filterAndSortOrders(orders, orderListFilter), [orders, orderListFilter])
+  const filterDefinitions = useMemo(() => createFilterDefinitions(orders, counts), [orders, counts])
 
   const handleChangeSchedule = useCallback(async (scheduleId: string) => {
     setLoading(true)
-    setNewOrderIds([])
-    for (const timeoutId of Object.values(newOrderTimeoutsRef.current)) {
-      window.clearTimeout(timeoutId)
-    }
-    newOrderTimeoutsRef.current = {}
+    resetForScheduleChange()
     await loadDashboard(scheduleId)
-  }, [])
+  }, [resetForScheduleChange])
 
   const handleChangeStatus = useCallback(async (orderId: string, orderNumber: string, nextStatus: string) => {
     setPendingStatus(nextStatus)
