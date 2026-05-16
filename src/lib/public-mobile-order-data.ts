@@ -1,21 +1,24 @@
 import {
-  getInventoryStatus,
   loadOrderedQuantityByProductForSchedule,
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
 import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
+import {
+  applyInventorySnapshotToPayload,
+  buildPublicMobileOrderBasePayload,
+  buildPublicMobileOrderInventorySnapshot,
+} from '@/lib/public-mobile-order-payload'
 import type {
   MobileOrderOptionChoiceRow,
   MobileOrderOptionGroupRow,
   MobileOrderProductRow,
-  MobileOrderInventoryAdjustmentRow,
   PublicMobileOrderInventorySnapshot,
-  PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
-  PublicMobileOrderProduct,
   StoreOrderScheduleRow,
 } from '@/types/api-payloads'
+
+export { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-payload'
 
 type PublishedOrderResources = {
   store: PublicMobileOrderPagePayload['store']
@@ -38,52 +41,6 @@ export function resolvePublicOrderSchedules(schedules: StoreOrderScheduleRow[]) 
     }) ?? null
 
   return { activeSchedule, nextSchedule }
-}
-
-export function buildPublicMobileOrderBaseProducts(args: {
-  products: MobileOrderProductRow[]
-  optionGroups: MobileOrderOptionGroupRow[]
-  optionChoices: MobileOrderOptionChoiceRow[]
-  links: Array<{ product_id: string; option_group_id: string }>
-}): PublicMobileOrderProduct[] {
-  const choicesByGroup = new Map<string, MobileOrderOptionChoiceRow[]>()
-  for (const choice of args.optionChoices) {
-    const current = choicesByGroup.get(choice.group_id) ?? []
-    current.push(choice)
-    choicesByGroup.set(choice.group_id, current)
-  }
-
-  const groupsById = new Map<string, PublicMobileOrderOptionGroup>(
-    args.optionGroups.map((group) => [
-      group.id,
-      {
-        ...group,
-        choices: (choicesByGroup.get(group.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
-      },
-    ])
-  )
-
-  const groupIdsByProduct = new Map<string, string[]>()
-  for (const link of args.links) {
-    const current = groupIdsByProduct.get(link.product_id) ?? []
-    current.push(link.option_group_id)
-    groupIdsByProduct.set(link.product_id, current)
-  }
-
-  return args.products.map((product) => ({
-    ...product,
-    current_schedule_inventory_id: null,
-    current_initial_quantity: null,
-    current_adjustment_total: 0,
-    current_available_quantity: null,
-    current_ordered_quantity: 0,
-    current_remaining_quantity: null,
-    current_inventory_status: product.tracks_inventory ? 'loading' : 'unmanaged',
-    option_groups: (groupIdsByProduct.get(product.id) ?? [])
-      .map((groupId) => groupsById.get(groupId))
-      .filter(Boolean)
-      .sort((a, b) => (a?.sort_order ?? 0) - (b?.sort_order ?? 0)) as PublicMobileOrderOptionGroup[],
-  }))
 }
 
 export async function loadPublishedOrderResources(
@@ -155,17 +112,7 @@ export async function loadPublishedOrderResources(
 
   return {
     store,
-    orderPage: {
-      id: orderPage.id,
-      store_id: orderPage.store_id,
-      page_title: orderPage.page_title,
-      public_token: orderPage.public_token,
-      status: orderPage.status,
-      is_primary: orderPage.is_primary,
-      notes: orderPage.notes,
-      created_at: orderPage.created_at,
-      updated_at: orderPage.updated_at,
-    },
+    orderPage,
     schedules: (schedules ?? []) as StoreOrderScheduleRow[],
     products: ((products ?? []) as MobileOrderProductRow[]).filter((product) => product.is_published),
     optionGroups: (optionGroups ?? []) as MobileOrderOptionGroupRow[],
@@ -192,19 +139,16 @@ export async function loadPublicMobileOrderBasePayload(
 
   const resolvedSchedules = resolvePublicOrderSchedules(resources.schedules)
 
-  return {
+  return buildPublicMobileOrderBasePayload({
     store: resources.store,
     orderPage: resources.orderPage,
     activeSchedule: resolvedSchedules.activeSchedule,
     nextSchedule: resolvedSchedules.nextSchedule,
-    products: buildPublicMobileOrderBaseProducts({
-      products: resources.products,
-      optionGroups: resources.optionGroups,
-      optionChoices: resources.optionChoices,
-      links: resources.links,
-    }),
-    inventoryHydrated: false,
-  }
+    products: resources.products,
+    optionGroups: resources.optionGroups,
+    optionChoices: resources.optionChoices,
+    links: resources.links,
+  })
 }
 
 export async function loadPublicMobileOrderInventorySnapshot(
@@ -227,56 +171,29 @@ export async function loadPublicMobileOrderInventorySnapshot(
       )
     : { inventoryByProduct: new Map(), adjustmentsByProduct: new Map() }
 
-  return {
+  return buildPublicMobileOrderInventorySnapshot({
     activeSchedule: resolvedSchedules.activeSchedule,
     nextSchedule: resolvedSchedules.nextSchedule,
-    inventoryHydrated: true,
-    products: resources.products.map((product) => {
-      const currentInventory = inventoryByProduct.get(product.id) ?? null
-      const currentAdjustments =
-        (adjustmentsByProduct.get(product.id) ?? []) as MobileOrderInventoryAdjustmentRow[]
-      const adjustmentTotal = currentAdjustments.reduce(
-        (sum: number, adjustment: MobileOrderInventoryAdjustmentRow) =>
-          sum + Number(adjustment.adjustment_quantity ?? 0),
-        0
-      )
-      const inventory = getInventoryStatus({
-        tracks_inventory: product.tracks_inventory,
-        initial_quantity: currentInventory?.initial_quantity ?? null,
-        adjustment_total: adjustmentTotal,
-        low_stock_threshold: product.low_stock_threshold,
-        ordered_quantity: orderedQuantityByProduct.get(product.id) ?? 0,
-        is_sold_out: product.is_sold_out,
-      })
-
-      return {
-        id: product.id,
-        current_schedule_inventory_id: currentInventory?.id ?? null,
-        current_initial_quantity: currentInventory?.initial_quantity ?? null,
-        current_adjustment_total: adjustmentTotal,
-        current_available_quantity: inventory.availableQuantity,
-        current_ordered_quantity: orderedQuantityByProduct.get(product.id) ?? 0,
-        current_remaining_quantity: inventory.remainingQuantity,
-        current_inventory_status: inventory.status,
-      }
-    }),
-  }
+    products: resources.products,
+    orderedQuantityByProduct,
+    inventoryByProduct,
+    adjustmentsByProduct,
+  })
 }
 
-export function applyInventorySnapshotToPayload(
-  payload: PublicMobileOrderPagePayload,
-  snapshot: PublicMobileOrderInventorySnapshot
-): PublicMobileOrderPagePayload {
-  const inventoryByProductId = new Map(snapshot.products.map((product) => [product.id, product]))
+export async function loadPublicMobileOrderHydratedPayload(
+  supabase: any,
+  token: string,
+  options?: { applyStorePosSettings?: boolean }
+): Promise<PublicMobileOrderPagePayload | null> {
+  const [basePayload, inventorySnapshot] = await Promise.all([
+    loadPublicMobileOrderBasePayload(supabase, token, options),
+    loadPublicMobileOrderInventorySnapshot(supabase, token, options),
+  ])
 
-  return {
-    ...payload,
-    activeSchedule: snapshot.activeSchedule,
-    nextSchedule: snapshot.nextSchedule,
-    inventoryHydrated: true,
-    products: payload.products.map((product) => ({
-      ...product,
-      ...(inventoryByProductId.get(product.id) ?? {}),
-    })),
+  if (!basePayload || !inventorySnapshot) {
+    return null
   }
+
+  return applyInventorySnapshotToPayload(basePayload, inventorySnapshot)
 }
