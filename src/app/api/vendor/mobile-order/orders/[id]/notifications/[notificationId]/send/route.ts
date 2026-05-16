@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
-import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
+import { sendVendorOrderNotification } from '@/lib/vendor-mobile-order-dashboard-mutations'
 import type { MobileOrderNotificationRow } from '@/types/api-payloads'
 
 export async function POST(
@@ -19,52 +19,17 @@ export async function POST(
   const { supabase, user } = auth.session
 
   try {
-    const { data: notification, error: notificationError } = await (supabase as any)
-      .from('mobile_order_notifications')
-      .select('*')
-      .eq('id', notificationId)
-      .eq('order_id', id)
-      .single()
-
-    if (notificationError || !notification) {
-      return apiError('対象の通知が見つかりません', 404)
-    }
-
-    const { data: order, error: orderError } = await (supabase as any)
-      .from('mobile_orders')
-      .select('id, store_id')
-      .eq('id', id)
-      .single()
-
-    if (orderError || !order) {
-      return apiError('対象の注文が見つかりません', 404)
-    }
-
-    const { data: store, error: storeError } = await (supabase as any)
-      .from('vendor_stores')
-      .select('id')
-      .eq('id', order.store_id)
-      .eq('vendor_user_id', user.id)
-      .maybeSingle()
-
-    if (storeError) {
-      return apiError(storeError.message)
-    }
-    if (!store) {
-      return apiError('対象の通知にアクセスできません', 403)
-    }
-
-    const updatedNotification = await sendMobileOrderLineNotification({
+    const payload: MobileOrderNotificationRow = await sendVendorOrderNotification(
       supabase,
-      orderId: id,
-      notificationId,
-      actorUserId: user.id,
-    })
-
-    const payload: MobileOrderNotificationRow = updatedNotification
+      user,
+      id,
+      notificationId
+    )
     return apiOk(payload)
   } catch (error) {
     console.error('[vendor/mobile-order/orders/:id/notifications/:notificationId/send POST]', error)
-    return apiError('サーバーエラー')
+    const message = error instanceof Error ? error.message : 'サーバーエラー'
+    const status = message === '対象の注文が見つかりません' || message === '対象の通知が見つかりません' ? 404 : 500
+    return apiError(message, status)
   }
 }

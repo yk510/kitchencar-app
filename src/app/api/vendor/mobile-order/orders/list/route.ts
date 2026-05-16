@@ -1,11 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
-import {
-  fetchVendorOrderList,
-  resolveVendorOrderDashboardContext,
-} from '@/lib/vendor-mobile-order-dashboard'
-import type { VendorMobileOrderOrdersListPayload } from '@/types/api-payloads'
+import { getVendorOrderDashboardListPayload } from '@/lib/vendor-mobile-order-dashboard-api'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -19,15 +15,7 @@ export async function GET(req: NextRequest) {
   const requestedScheduleId = req.nextUrl.searchParams.get('schedule_id')
 
   try {
-    const { store, selectedSchedule } = await resolveVendorOrderDashboardContext(
-      supabase,
-      user,
-      requestedScheduleId
-    )
-
-    const orders = await fetchVendorOrderList(supabase, store.id, selectedSchedule?.id ?? null)
-    const payload: VendorMobileOrderOrdersListPayload = { orders }
-    return apiOk(payload)
+    return apiOk(await getVendorOrderDashboardListPayload(supabase, user, requestedScheduleId))
   } catch (error) {
     console.error('[vendor/mobile-order/orders/list GET]', error)
     return apiError(error instanceof Error ? error.message : 'サーバーエラー')
