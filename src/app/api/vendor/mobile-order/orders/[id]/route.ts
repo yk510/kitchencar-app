@@ -3,7 +3,12 @@ import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
-import type { VendorMobileOrderOrderMutationPayload } from '@/types/api-payloads'
+import { ensureVendorStoreResources } from '@/lib/mobile-order'
+import { fetchVendorOrderDetail } from '@/lib/vendor-mobile-order-dashboard'
+import type {
+  VendorMobileOrderOrderDetailPayload,
+  VendorMobileOrderOrderMutationPayload,
+} from '@/types/api-payloads'
 
 const ALLOWED_STATUSES = ['placed', 'preparing', 'ready', 'picked_up', 'cancelled'] as const
 
@@ -46,6 +51,40 @@ async function updateOrderPaymentReceipt(supabase: any, orderId: string, actorUs
   }
 
   return result
+}
+
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireRouteSession(req)
+  if (auth.response) return auth.response
+
+  if (auth.session.role !== 'vendor') {
+    return apiError('ベンダー権限が必要です', 403)
+  }
+
+  const { id } = await context.params
+  const { supabase, user } = auth.session
+
+  try {
+    const { data: vendorProfile } = await (supabase as any)
+      .from('vendor_profiles')
+      .select('business_name')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const { store } = await ensureVendorStoreResources(supabase, user, {
+      businessName: vendorProfile?.business_name ?? null,
+    })
+
+    const order = await fetchVendorOrderDetail(supabase, store.id, id)
+    const payload: VendorMobileOrderOrderDetailPayload = { order }
+    return apiOk(payload)
+  } catch (error) {
+    console.error('[vendor/mobile-order/orders/:id GET]', error)
+    return apiError(error instanceof Error ? error.message : 'サーバーエラー')
+  }
 }
 
 export async function PATCH(

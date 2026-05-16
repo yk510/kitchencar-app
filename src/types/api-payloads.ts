@@ -373,6 +373,10 @@ export type VendorMobileOrderDashboardOrder = MobileOrderRow & {
   mobile_order_notifications: MobileOrderNotificationRow[]
 }
 
+export type VendorMobileOrderListItem = MobileOrderRow & {
+  item_count: number
+}
+
 export type StorePosPaymentReceiptPayload = {
   order_id: string
   payment_status: Extract<MobileOrderPaymentStatus, 'paid'>
@@ -383,7 +387,24 @@ export type VendorMobileOrderOrdersPayload = {
   store: VendorStoreRow
   schedules: StoreOrderScheduleRow[]
   selectedSchedule: StoreOrderScheduleRow | null
-  orders: VendorMobileOrderDashboardOrder[]
+  counts: {
+    placed: number
+    preparing: number
+    ready: number
+    picked_up: number
+    total: number
+  }
+  orders: VendorMobileOrderListItem[]
+}
+
+export type VendorMobileOrderOrdersSummaryPayload = VendorMobileOrderOrdersPayload['counts']
+
+export type VendorMobileOrderOrdersListPayload = {
+  orders: VendorMobileOrderListItem[]
+}
+
+export type VendorMobileOrderOrderDetailPayload = {
+  order: VendorMobileOrderDashboardOrder | null
 }
 
 export type VendorMobileOrderOrderMutationPayload = MobileOrderRow

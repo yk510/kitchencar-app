@@ -3,12 +3,9 @@ import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import {
   fetchVendorOrderCounts,
-  fetchVendorOrderList,
   resolveVendorOrderDashboardContext,
 } from '@/lib/vendor-mobile-order-dashboard'
-import type {
-  VendorMobileOrderOrdersPayload,
-} from '@/types/api-payloads'
+import type { VendorMobileOrderOrdersSummaryPayload } from '@/types/api-payloads'
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
@@ -22,27 +19,17 @@ export async function GET(req: NextRequest) {
   const requestedScheduleId = req.nextUrl.searchParams.get('schedule_id')
 
   try {
-    const { store, schedules, selectedSchedule } = await resolveVendorOrderDashboardContext(
+    const { store, selectedSchedule } = await resolveVendorOrderDashboardContext(
       supabase,
       user,
       requestedScheduleId
     )
-    const [counts, orders] = await Promise.all([
-      fetchVendorOrderCounts(supabase, store.id, selectedSchedule?.id ?? null),
-      fetchVendorOrderList(supabase, store.id, selectedSchedule?.id ?? null),
-    ])
 
-    const payload: VendorMobileOrderOrdersPayload = {
-      store,
-      schedules,
-      selectedSchedule,
-      counts,
-      orders,
-    }
-
+    const counts = await fetchVendorOrderCounts(supabase, store.id, selectedSchedule?.id ?? null)
+    const payload: VendorMobileOrderOrdersSummaryPayload = counts
     return apiOk(payload)
   } catch (error) {
-    console.error('[vendor/mobile-order/orders GET]', error)
+    console.error('[vendor/mobile-order/orders/summary GET]', error)
     return apiError(error instanceof Error ? error.message : 'サーバーエラー')
   }
 }

@@ -8,8 +8,12 @@ import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   MobileOrderNotificationRow,
   VendorMobileOrderDashboardOrder,
+  VendorMobileOrderListItem,
+  VendorMobileOrderOrderDetailPayload,
   VendorMobileOrderOrderMutationPayload,
+  VendorMobileOrderOrdersListPayload,
   VendorMobileOrderOrdersPayload,
+  VendorMobileOrderOrdersSummaryPayload,
 } from '@/types/api-payloads'
 
 const NOTIFICATION_STORAGE_KEY = 'mobile-order-dashboard-notifications-enabled'
@@ -59,6 +63,14 @@ type OrderListFilter = 'all' | 'action_required' | 'preparing' | 'ready' | 'pick
 
 type LastSeenOrderMarker = {
   orderedAt: string
+}
+
+const EMPTY_COUNTS: VendorMobileOrderOrdersSummaryPayload = {
+  placed: 0,
+  preparing: 0,
+  ready: 0,
+  picked_up: 0,
+  total: 0,
 }
 
 function getStorePosPaymentMethodLabel(order: {
@@ -146,10 +158,14 @@ function writeLastSeenMarker(
 }
 
 export default function VendorMobileOrderOrdersPage() {
-  const [data, setData] = useState<VendorMobileOrderOrdersPayload | null>(null)
+  const [dashboard, setDashboard] = useState<VendorMobileOrderOrdersPayload | null>(null)
+  const [orders, setOrders] = useState<VendorMobileOrderListItem[]>([])
+  const [counts, setCounts] = useState<VendorMobileOrderOrdersSummaryPayload>(EMPTY_COUNTS)
+  const [selectedOrder, setSelectedOrder] = useState<VendorMobileOrderDashboardOrder | null>(null)
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
@@ -184,7 +200,7 @@ export default function VendorMobileOrderOrdersPage() {
     }, 7000)
   }
 
-  function isUnhandledOrder(order: VendorMobileOrderDashboardOrder) {
+  function isUnhandledOrder(order: { status: string }) {
     return order.status !== 'picked_up' && order.status !== 'cancelled'
   }
 
@@ -278,7 +294,7 @@ export default function VendorMobileOrderOrdersPage() {
     window.speechSynthesis.speak(utterance)
   }
 
-  function announceNewOrders(newOrders: VendorMobileOrderDashboardOrder[]) {
+  function announceNewOrders(newOrders: Array<Pick<VendorMobileOrderListItem, 'id' | 'ordered_at' | 'order_number'>>) {
     if (newOrders.length === 0) return
 
     const newestOrder = [...newOrders].sort(
@@ -309,7 +325,101 @@ export default function VendorMobileOrderOrdersPage() {
     }
   }
 
-  async function load(scheduleId?: string | null) {
+  function syncIncomingOrders(
+    storeId: string,
+    responseScheduleId: string | null,
+    incomingOrders: VendorMobileOrderListItem[]
+  ) {
+    const nextOrderIds = incomingOrders.map((order) => order.id)
+    const isSameSchedule = knownScheduleIdRef.current === responseScheduleId
+    const lastSeenMarker = readLastSeenMarker(storeId, responseScheduleId)
+    const latestOrder = incomingOrders
+      .slice()
+      .sort((a, b) => new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime())[0]
+
+    const ordersSinceLastSeen =
+      notificationsEnabled && lastSeenMarker
+        ? incomingOrders.filter(
+            (order) => new Date(order.ordered_at).getTime() > new Date(lastSeenMarker.orderedAt).getTime()
+          )
+        : []
+
+    if (notificationsEnabled) {
+      if (ordersSinceLastSeen.length > 0) {
+        announceNewOrders(ordersSinceLastSeen)
+        highlightNewOrders(ordersSinceLastSeen.map((order) => order.id))
+      } else if (isSameSchedule && knownOrderIdsRef.current.length > 0) {
+        const newOrders = incomingOrders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
+        if (newOrders.length > 0) {
+          announceNewOrders(newOrders)
+          highlightNewOrders(newOrders.map((order) => order.id))
+        }
+      }
+    }
+
+    knownScheduleIdRef.current = responseScheduleId
+    knownOrderIdsRef.current = nextOrderIds
+    writeLastSeenMarker(
+      storeId,
+      responseScheduleId,
+      latestOrder ? { orderedAt: latestOrder.ordered_at } : null
+    )
+    setOrders(incomingOrders)
+    setSelectedOrderId((current) => {
+      if (current && incomingOrders.some((order) => order.id === current)) {
+        return current
+      }
+      return incomingOrders[0]?.id ?? null
+    })
+  }
+
+  async function loadSelectedOrder(orderId: string | null) {
+    if (!orderId) {
+      setSelectedOrder(null)
+      return
+    }
+
+    setDetailLoading(true)
+    try {
+      const response = await fetchApi<VendorMobileOrderOrderDetailPayload>(
+        `/api/vendor/mobile-order/orders/${orderId}`,
+        {
+          cache: 'no-store',
+        }
+      )
+      setSelectedOrder(response.order)
+      setError(null)
+    } catch (err) {
+      setSelectedOrder(null)
+      setError(err instanceof ApiClientError ? err.message : '注文詳細の取得に失敗しました')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  async function refreshSummary(scheduleId: string | null) {
+    const search = scheduleId ? `?schedule_id=${encodeURIComponent(scheduleId)}` : ''
+    const response = await fetchApi<VendorMobileOrderOrdersSummaryPayload>(
+      `/api/vendor/mobile-order/orders/summary${search}`,
+      {
+        cache: 'no-store',
+      }
+    )
+    setCounts(response)
+  }
+
+  async function refreshList(scheduleId: string | null, storeId: string, responseScheduleId: string | null) {
+    const search = scheduleId ? `?schedule_id=${encodeURIComponent(scheduleId)}` : ''
+    const response = await fetchApi<VendorMobileOrderOrdersListPayload>(
+      `/api/vendor/mobile-order/orders/list${search}`,
+      {
+        cache: 'no-store',
+      }
+    )
+    syncIncomingOrders(storeId, responseScheduleId, response.orders)
+  }
+
+  async function loadDashboard(scheduleId?: string | null) {
     try {
       const search = scheduleId ? `?schedule_id=${encodeURIComponent(scheduleId)}` : ''
       const response = await fetchApi<VendorMobileOrderOrdersPayload>(`/api/vendor/mobile-order/orders${search}`, {
@@ -317,60 +427,24 @@ export default function VendorMobileOrderOrdersPage() {
       })
 
       const responseScheduleId = response.selectedSchedule?.id ?? null
-      const nextOrderIds = response.orders.map((order) => order.id)
-      const isSameSchedule = knownScheduleIdRef.current === responseScheduleId
-      const lastSeenMarker = readLastSeenMarker(response.store.id, responseScheduleId)
-      const latestOrder = response.orders
-        .slice()
-        .sort((a, b) => new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime())[0]
-
-      const ordersSinceLastSeen =
-        notificationsEnabled && lastSeenMarker
-          ? response.orders.filter(
-              (order) => new Date(order.ordered_at).getTime() > new Date(lastSeenMarker.orderedAt).getTime()
-            )
-          : []
-
-      if (notificationsEnabled) {
-        if (ordersSinceLastSeen.length > 0) {
-          announceNewOrders(ordersSinceLastSeen)
-          highlightNewOrders(ordersSinceLastSeen.map((order) => order.id))
-        } else if (isSameSchedule && knownOrderIdsRef.current.length > 0) {
-          const newOrders = response.orders.filter((order) => !knownOrderIdsRef.current.includes(order.id))
-          if (newOrders.length > 0) {
-            announceNewOrders(newOrders)
-            highlightNewOrders(newOrders.map((order) => order.id))
-          }
-        }
-      }
-
-      knownScheduleIdRef.current = responseScheduleId
-      knownOrderIdsRef.current = nextOrderIds
-      writeLastSeenMarker(
-        response.store.id,
-        responseScheduleId,
-        latestOrder ? { orderedAt: latestOrder.ordered_at } : null
-      )
-      setData(response)
+      setDashboard(response)
+      setCounts(response.counts)
       setSelectedScheduleId(responseScheduleId)
-
-      setSelectedOrderId((current) => {
-        if (current && response.orders.some((order) => order.id === current)) {
-          return current
-        }
-        return response.orders[0]?.id ?? null
-      })
+      syncIncomingOrders(response.store.id, responseScheduleId, response.orders)
       setError(null)
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '注文一覧の取得に失敗しました')
-      setData(null)
+      setDashboard(null)
+      setOrders([])
+      setCounts(EMPTY_COUNTS)
+      setSelectedOrder(null)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    void load()
+    void loadDashboard()
   }, [])
 
   useEffect(() => {
@@ -401,12 +475,22 @@ export default function VendorMobileOrderOrdersPage() {
   }, [notificationsEnabled])
 
   useLiveRefresh({
-    enabled: !!selectedScheduleId,
+    enabled: !!selectedScheduleId && !!dashboard,
     intervalMs: 5000,
     run: async () => {
-      await load(selectedScheduleId)
+      if (!dashboard) return
+
+      await Promise.all([
+        refreshSummary(selectedScheduleId),
+        refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
+        loadSelectedOrder(selectedOrderId),
+      ])
     },
   })
+
+  useEffect(() => {
+    void loadSelectedOrder(selectedOrderId)
+  }, [selectedOrderId])
 
   useEffect(() => {
     return () => {
@@ -420,31 +504,14 @@ export default function VendorMobileOrderOrdersPage() {
     }
   }, [])
 
-  const selectedOrder = useMemo(
-    () => data?.orders.find((order) => order.id === selectedOrderId) ?? null,
-    [data, selectedOrderId]
-  )
-
-  const counts = useMemo(() => {
-    const source = data?.orders ?? []
-    return {
-      placed: source.filter((order) => order.status === 'placed').length,
-      preparing: source.filter((order) => order.status === 'preparing').length,
-      ready: source.filter((order) => order.status === 'ready').length,
-      picked_up: source.filter((order) => order.status === 'picked_up').length,
-    }
-  }, [data?.orders])
-
   const filteredOrders = useMemo(() => {
-    const orders = data?.orders ?? []
-
-    const matchesFilter = (order: VendorMobileOrderDashboardOrder) => {
+    const matchesFilter = (order: VendorMobileOrderListItem) => {
       if (orderListFilter === 'all') return true
       if (orderListFilter === 'action_required') return isUnhandledOrder(order)
       return order.status === orderListFilter
     }
 
-    const priority = (order: VendorMobileOrderDashboardOrder) => {
+    const priority = (order: VendorMobileOrderListItem) => {
       if (!isUnhandledOrder(order)) return 1
       if (order.status === 'placed') return 0
       if (order.status === 'preparing') return 0
@@ -460,7 +527,7 @@ export default function VendorMobileOrderOrdersPage() {
         if (priorityDiff !== 0) return priorityDiff
         return new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime()
       })
-  }, [data?.orders, orderListFilter])
+  }, [orders, orderListFilter])
 
   async function handleChangeSchedule(scheduleId: string) {
     setLoading(true)
@@ -469,7 +536,7 @@ export default function VendorMobileOrderOrdersPage() {
       window.clearTimeout(timeoutId)
     }
     newOrderTimeoutsRef.current = {}
-    await load(scheduleId)
+    await loadDashboard(scheduleId)
   }
 
   async function handleChangeStatus(order: VendorMobileOrderDashboardOrder, nextStatus: string) {
@@ -483,7 +550,13 @@ export default function VendorMobileOrderOrdersPage() {
         body: JSON.stringify({ status: nextStatus }),
       })
       setMessage(`注文 ${order.order_number} を「${STATUS_LABELS[nextStatus]}」に更新しました`)
-      await load(selectedScheduleId)
+      if (dashboard) {
+        await Promise.all([
+          refreshSummary(selectedScheduleId),
+          refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
+          loadSelectedOrder(order.id),
+        ])
+      }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '注文ステータスの更新に失敗しました')
     } finally {
@@ -508,7 +581,7 @@ export default function VendorMobileOrderOrdersPage() {
       setMessage(
         `${getNotificationTypeLabel(notification.notification_type)}を処理しました（結果: ${updatedNotification.delivery_status}）`
       )
-      await load(selectedScheduleId)
+      await loadSelectedOrder(orderId)
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '通知送信に失敗しました')
     } finally {
@@ -527,7 +600,13 @@ export default function VendorMobileOrderOrdersPage() {
         body: JSON.stringify({ action: 'receive_payment' }),
       })
       setMessage(`注文 ${order.order_number} の料金受領を記録しました`)
-      await load(selectedScheduleId)
+      if (dashboard) {
+        await Promise.all([
+          refreshSummary(selectedScheduleId),
+          refreshList(selectedScheduleId, dashboard.store.id, selectedScheduleId),
+          loadSelectedOrder(order.id),
+        ])
+      }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '料金受領の更新に失敗しました')
     } finally {
@@ -599,7 +678,7 @@ export default function VendorMobileOrderOrdersPage() {
 
       {loading ? (
         <div className="soft-panel p-6 text-sm text-gray-500">読み込み中...</div>
-      ) : data ? (
+      ) : dashboard ? (
         <>
           <div className="grid gap-3 lg:grid-cols-[minmax(280px,1.5fr)_repeat(4,minmax(0,1fr))]">
             <section className="soft-panel p-4">
@@ -607,18 +686,18 @@ export default function VendorMobileOrderOrdersPage() {
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">対象営業枠</p>
                   <h2 className="mt-1 text-base font-semibold text-gray-800">
-                    {data.selectedSchedule
-                      ? `${formatDateTime(data.selectedSchedule.opens_at)} - ${formatDateTime(data.selectedSchedule.closes_at)}`
+                    {dashboard.selectedSchedule
+                      ? `${formatDateTime(dashboard.selectedSchedule.opens_at)} - ${formatDateTime(dashboard.selectedSchedule.closes_at)}`
                       : '営業枠未選択'}
                   </h2>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  {data.orders.length}件
+                  {counts.total}件
                 </span>
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                {data.selectedSchedule
-                  ? `営業日 ${data.selectedSchedule.business_date} / ${data.store.store_name}`
+                {dashboard.selectedSchedule
+                  ? `営業日 ${dashboard.selectedSchedule.business_date} / ${dashboard.store.store_name}`
                   : 'まず営業スケジュールを追加してください'}
               </p>
             </section>
@@ -648,16 +727,16 @@ export default function VendorMobileOrderOrdersPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1">
-              {data.schedules.length === 0 ? (
+              {dashboard.schedules.length === 0 ? (
                 <p className="text-sm text-gray-500">営業枠がまだありません。</p>
               ) : (
-                data.schedules.map((schedule) => (
+                dashboard.schedules.map((schedule) => (
                   <button
                     key={schedule.id}
                     type="button"
                     onClick={() => void handleChangeSchedule(schedule.id)}
                     className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${
-                      schedule.id === data.selectedSchedule?.id
+                      schedule.id === dashboard.selectedSchedule?.id
                         ? 'bg-[var(--accent-blue)] text-white'
                         : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
                     }`}
@@ -675,18 +754,18 @@ export default function VendorMobileOrderOrdersPage() {
                 <div>
                   <h2 className="text-base font-semibold text-gray-800">注文一覧</h2>
                   <p className="mt-1 text-xs text-gray-500">
-                    {data.selectedSchedule ? `${filteredOrders.length} / ${data.orders.length} 件を表示中` : '営業枠を選択してください'}
+                    {dashboard.selectedSchedule ? `${filteredOrders.length} / ${counts.total} 件を表示中` : '営業枠を選択してください'}
                   </p>
                 </div>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {([
-                  { key: 'action_required', label: '未対応', count: data.orders.filter((order) => isUnhandledOrder(order)).length },
+                  { key: 'action_required', label: '未対応', count: orders.filter((order) => isUnhandledOrder(order)).length },
                   { key: 'preparing', label: '調理中', count: counts.preparing },
                   { key: 'ready', label: '完成', count: counts.ready },
                   { key: 'picked_up', label: '受取済', count: counts.picked_up },
-                  { key: 'all', label: 'すべて', count: data.orders.length },
+                  { key: 'all', label: 'すべて', count: counts.total },
                 ] as Array<{ key: OrderListFilter; label: string; count: number }>).map((filter) => (
                   <button
                     key={filter.key}
@@ -749,7 +828,7 @@ export default function VendorMobileOrderOrdersPage() {
                         <div className="text-right">
                           <p className="text-sm font-semibold text-gray-800">{formatPrice(order.total_amount)}</p>
                           <p className="mt-1 text-xs text-gray-500">
-                            {order.mobile_order_items.length} 品目 / {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
+                            {order.item_count} 品目 / {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
                           </p>
                         </div>
                       </div>
@@ -935,6 +1014,10 @@ export default function VendorMobileOrderOrdersPage() {
                       )}
                     </div>
                   </div>
+                </div>
+              ) : detailLoading ? (
+                <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
+                  注文詳細を読み込み中...
                 </div>
               ) : (
                 <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
