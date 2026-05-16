@@ -5,13 +5,23 @@ import { useEffect, useMemo, useState } from 'react'
 import LoadingLine from '@/components/LoadingLine'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
+import {
+  buildInitialProductSelection,
+  buildPublicOrderCartItemCore,
+  getPublicOrderCartLineTotal,
+  getPublicOrderChoicePriceLabel,
+  getPublicOrderInventoryBadge,
+  getPublicOrderProductUnavailableState,
+  isPublicOrderProductUnavailable,
+  type PublicOrderProductSelection,
+  type PublicOrderSelectedOptionGroup,
+  validatePublicOrderSelection,
+} from '@/lib/public-order-cart'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderCheckoutResponse,
   PublicMobileOrderCheckoutStatusResponse,
   PublicMobileOrderInventorySnapshot,
-  PublicMobileOrderOptionChoice,
-  PublicMobileOrderOptionGroup,
   PublicMobileOrderPagePayload,
   PublicMobileOrderProduct,
 } from '@/types/api-payloads'
@@ -22,26 +32,13 @@ const primaryCtaClassName =
 const secondaryCtaClassName =
   'rounded-full bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(148,163,184,0.14)] transition active:translate-y-[1px] active:scale-[0.99] active:bg-slate-200'
 
-type ProductSelection = {
-  selectedChoiceIdsByGroup: Record<string, string[]>
-  quantity: number
-}
-
 type CartItem = {
   id: string
   product_id: string
   product_name: string
   product_price: number
   quantity: number
-  selected_options: Array<{
-    group_id: string
-    group_name: string
-    choices: Array<{
-      choice_id: string
-      choice_name: string
-      price_delta: number
-    }>
-  }>
+  selected_options: PublicOrderSelectedOptionGroup[]
   line_total: number
 }
 
@@ -58,128 +55,15 @@ function formatPrice(value: number) {
   return `${value.toLocaleString()} 円`
 }
 
-function buildInitialSelection(product: PublicMobileOrderProduct): ProductSelection {
-  const selectedChoiceIdsByGroup: Record<string, string[]> = {}
-
-  for (const group of product.option_groups) {
-    const activeChoices = group.choices.filter((choice) => choice.is_active)
-    if (group.selection_type === 'single' && group.is_required && activeChoices[0]) {
-      selectedChoiceIdsByGroup[group.id] = [activeChoices[0].id]
-    } else {
-      selectedChoiceIdsByGroup[group.id] = []
-    }
-  }
-
-  return {
-    selectedChoiceIdsByGroup,
-    quantity: 1,
-  }
-}
-
-function getCartLineTotal(product: PublicMobileOrderProduct, selection: ProductSelection) {
-  const optionTotal = product.option_groups.reduce((sum, group) => {
-    const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
-    const selectedChoices = group.choices.filter((choice) => selectedIds.includes(choice.id))
-    return sum + selectedChoices.reduce((choiceSum, choice) => choiceSum + choice.price_delta, 0)
-  }, 0)
-
-  return (product.price + optionTotal) * selection.quantity
-}
-
-function validateSelection(product: PublicMobileOrderProduct, selection: ProductSelection) {
-  for (const group of product.option_groups) {
-    const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
-
-    if (group.is_required && selectedIds.length === 0) {
-      return `${group.name} を選択してください`
-    }
-
-    if (group.selection_type === 'single' && selectedIds.length > 1) {
-      return `${group.name} は1つだけ選択できます`
-    }
-
-    if (group.min_select != null && selectedIds.length < group.min_select) {
-      return `${group.name} は ${group.min_select} 件以上選択してください`
-    }
-
-    if (group.max_select != null && selectedIds.length > group.max_select) {
-      return `${group.name} は ${group.max_select} 件まで選択できます`
-    }
-  }
-
-  if (selection.quantity < 1) {
-    return '数量は1以上にしてください'
-  }
-
-  return null
-}
-
-function buildCartItem(product: PublicMobileOrderProduct, selection: ProductSelection): CartItem {
-  const selectedOptions = product.option_groups
-    .map((group) => {
-      const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
-      const selectedChoices = group.choices
-        .filter((choice) => selectedIds.includes(choice.id))
-        .map((choice) => ({
-          choice_id: choice.id,
-          choice_name: choice.name,
-          price_delta: choice.price_delta,
-        }))
-
-      return {
-        group_id: group.id,
-        group_name: group.name,
-        choices: selectedChoices,
-      }
-    })
-    .filter((group) => group.choices.length > 0)
-
-  return {
-    id: `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    product_id: product.id,
-    product_name: product.name,
-    product_price: product.price,
-    quantity: selection.quantity,
-    selected_options: selectedOptions,
-    line_total: getCartLineTotal(product, selection),
-  }
-}
-
-function getChoicePriceLabel(choice: PublicMobileOrderOptionChoice) {
-  return choice.price_delta > 0 ? `+${choice.price_delta.toLocaleString()}円` : '+0円'
-}
-
-function isProductUnavailable(product: PublicMobileOrderProduct) {
-  return ['loading', 'sold_out', 'not_set'].includes(product.current_inventory_status) || product.is_sold_out
-}
-
 function getUnavailableMessage(product: PublicMobileOrderProduct) {
-  if (product.current_inventory_status === 'loading') {
+  const unavailableState = getPublicOrderProductUnavailableState(product)
+  if (unavailableState === 'loading') {
     return 'この商品の在庫を確認しています'
   }
-  if (product.current_inventory_status === 'not_set') {
+  if (unavailableState === 'not_set') {
     return 'この商品は本日分の在庫準備中です'
   }
   return 'この商品は現在売り切れです'
-}
-
-function getInventoryBadge(product: PublicMobileOrderProduct) {
-  if (product.current_inventory_status === 'loading') {
-    return { label: '在庫確認中', className: 'bg-sky-100 text-sky-700' }
-  }
-  if (product.current_inventory_status === 'not_set') {
-    return { label: '在庫準備中', className: 'bg-slate-100 text-slate-700' }
-  }
-  if (product.current_inventory_status === 'sold_out') {
-    return { label: '売り切れ', className: 'bg-amber-100 text-amber-800' }
-  }
-  if (product.current_inventory_status === 'low_stock') {
-    return { label: '残りわずか', className: 'bg-orange-100 text-orange-800' }
-  }
-  if (product.tracks_inventory && product.current_remaining_quantity != null) {
-    return { label: `残り ${product.current_remaining_quantity}`, className: 'bg-emerald-50 text-emerald-700' }
-  }
-  return null
 }
 
 function getStoredLiffOrderContext() {
@@ -222,7 +106,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const searchParams = useSearchParams()
   const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(null)
-  const [selection, setSelection] = useState<ProductSelection | null>(null)
+  const [selection, setSelection] = useState<PublicOrderProductSelection | null>(null)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [pickupNickname, setPickupNickname] = useState('')
   const [selectionError, setSelectionError] = useState<string | null>(null)
@@ -238,7 +122,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   const currentStep = stepParam === 'review' ? 'review' : stepParam === 'cart' ? 'cart' : 'menu'
 
   const availableProducts = useMemo(
-    () => pageData.products.filter((product) => product.is_published && !isProductUnavailable(product)),
+    () => pageData.products.filter((product) => product.is_published && !isPublicOrderProductUnavailable(product)),
     [pageData.products]
   )
 
@@ -291,7 +175,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   useEffect(() => {
     if (!selectedProduct && availableProducts[0]) {
       setSelectedProduct(availableProducts[0])
-      setSelection(buildInitialSelection(availableProducts[0]))
+      setSelection(buildInitialProductSelection(availableProducts[0]))
     }
   }, [availableProducts, selectedProduct])
 
@@ -412,17 +296,17 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   }, [completedOrder, pageData.orderPage.public_token, searchParams])
 
   function handleSelectProduct(product: PublicMobileOrderProduct) {
-    if (isProductUnavailable(product)) {
+    if (isPublicOrderProductUnavailable(product)) {
       setCheckoutError(getUnavailableMessage(product))
       return
     }
     setSelectedProduct(product)
-    setSelection(buildInitialSelection(product))
+    setSelection(buildInitialProductSelection(product))
     setSelectionError(null)
     setCheckoutError(null)
   }
 
-  function toggleChoice(group: PublicMobileOrderOptionGroup, choiceId: string) {
+  function toggleChoice(group: PublicMobileOrderProduct['option_groups'][number], choiceId: string) {
     if (!selection) return
 
     setSelection((current) => {
@@ -455,19 +339,25 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   function handleAddToCart() {
     if (!selectedProduct || !selection) return
-    if (isProductUnavailable(selectedProduct)) {
+    if (isPublicOrderProductUnavailable(selectedProduct)) {
       setCheckoutError(getUnavailableMessage(selectedProduct))
       return
     }
 
-    const error = validateSelection(selectedProduct, selection)
+    const error = validatePublicOrderSelection(selectedProduct, selection)
     if (error) {
       setSelectionError(error)
       return
     }
 
-    setCartItems((current) => [...current, buildCartItem(selectedProduct, selection)])
-    setSelection(buildInitialSelection(selectedProduct))
+    setCartItems((current) => [
+      ...current,
+      {
+        id: `${selectedProduct.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ...buildPublicOrderCartItemCore(selectedProduct, selection),
+      },
+    ])
+    setSelection(buildInitialProductSelection(selectedProduct))
     setSelectionError(null)
     setCheckoutError(null)
   }
@@ -983,8 +873,8 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
             ) : (
               pageData.products.map((product) => (
                 (() => {
-                  const inventoryBadge = getInventoryBadge(product)
-                  const unavailable = isProductUnavailable(product)
+                  const inventoryBadge = getPublicOrderInventoryBadge(product)
+                  const unavailable = isPublicOrderProductUnavailable(product)
                   const selected = selectedProduct?.id === product.id
 
                   return (
@@ -1073,9 +963,9 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-xl font-bold text-[var(--text-main)]">{selectedProduct.name}</h2>
-                      {getInventoryBadge(selectedProduct) && (
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${getInventoryBadge(selectedProduct)?.className}`}>
-                          {getInventoryBadge(selectedProduct)?.label}
+                      {getPublicOrderInventoryBadge(selectedProduct) && (
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${getPublicOrderInventoryBadge(selectedProduct)?.className}`}>
+                          {getPublicOrderInventoryBadge(selectedProduct)?.label}
                         </span>
                       )}
                     </div>
@@ -1085,7 +975,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     <p className="mt-4 text-lg font-bold text-[var(--accent-blue)]">{formatPrice(selectedProduct.price)}</p>
                   </div>
 
-                  {isProductUnavailable(selectedProduct) && (
+                  {isPublicOrderProductUnavailable(selectedProduct) && (
                     <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-800">
                       {getUnavailableMessage(selectedProduct)}ため、カートに追加できません。
                     </div>
@@ -1131,7 +1021,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                                     } disabled:cursor-not-allowed disabled:opacity-50`}
                                   >
                                     <span className={choice.is_active ? '' : 'line-through'}>{choice.name}</span>
-                                    <span className="font-medium">{getChoicePriceLabel(choice)}</span>
+                                    <span className="font-medium">{getPublicOrderChoicePriceLabel(choice)}</span>
                                   </button>
                                 )
                               })}
@@ -1173,7 +1063,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">この商品の合計</span>
                       <span className="text-base font-bold text-[var(--accent-blue)]">
-                        {formatPrice(getCartLineTotal(selectedProduct, selection))}
+                        {formatPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
                       </span>
                     </div>
                   </div>
@@ -1181,10 +1071,10 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                   <button
                     type="button"
                     onClick={handleAddToCart}
-                    disabled={isProductUnavailable(selectedProduct)}
+                    disabled={isPublicOrderProductUnavailable(selectedProduct)}
                     className={`w-full ${primaryCtaClassName}`}
                   >
-                    {isProductUnavailable(selectedProduct) ? '売り切れ中です' : 'カートに追加'}
+                    {isPublicOrderProductUnavailable(selectedProduct) ? '売り切れ中です' : 'カートに追加'}
                   </button>
                 </div>
               ) : (
