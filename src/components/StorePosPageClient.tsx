@@ -310,12 +310,12 @@ function isProductUnavailable(product: PublicMobileOrderProduct) {
 
 function getUnavailableMessage(product: PublicMobileOrderProduct) {
   if (product.current_inventory_status === 'loading') {
-    return 'この商品の在庫を確認しています'
+    return 'この商品の在庫を確認しているため、カートに追加できません。'
   }
   if (product.current_inventory_status === 'not_set') {
-    return 'この商品は本日分の在庫準備中です'
+    return 'この商品は現在在庫準備中のため、カートに追加できません。'
   }
-  return 'この商品は現在売り切れです'
+  return 'この商品は現在売り切れのため、カートに追加できません。'
 }
 
 function getInventoryBadge(product: PublicMobileOrderProduct) {
@@ -1121,7 +1121,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
                     {isProductUnavailable(selectedProduct) && (
                       <div className="rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                        {getUnavailableMessage(selectedProduct)}ため、カートに追加できません。
+                        {getUnavailableMessage(selectedProduct)}
                       </div>
                     )}
 
