@@ -17,6 +17,11 @@ import {
   type PublicOrderSelectedOptionGroup,
   validatePublicOrderSelection,
 } from '@/lib/public-order-cart'
+import {
+  buildPublicOrderStepUrl,
+  buildResolvedSelectionState,
+  resolveSelectedProduct,
+} from '@/lib/public-order-flow'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderCheckoutResponse,
@@ -162,7 +167,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
   useEffect(() => {
     if (!selectedProduct) return
 
-    const nextSelected = pageData.products.find((product) => product.id === selectedProduct.id) ?? null
+    const nextSelected = resolveSelectedProduct(pageData.products, selectedProduct.id)
     if (!nextSelected) {
       setSelectedProduct(null)
       setSelection(null)
@@ -174,26 +179,14 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   useEffect(() => {
     if (!selectedProduct && availableProducts[0]) {
-      setSelectedProduct(availableProducts[0])
-      setSelection(buildInitialProductSelection(availableProducts[0]))
+      const nextState = buildResolvedSelectionState(pageData.products, null, availableProducts)
+      setSelectedProduct(nextState.product)
+      setSelection(nextState.selection)
     }
-  }, [availableProducts, selectedProduct])
+  }, [availableProducts, pageData.products, selectedProduct])
 
   function replaceStep(step: 'menu' | 'cart' | 'review') {
-    const params = new URLSearchParams(searchParams.toString())
-    if (step === 'review') {
-      params.set('step', 'review')
-    } else if (step === 'cart') {
-      params.set('step', 'cart')
-    } else {
-      params.delete('step')
-      params.delete('checkout_session_id')
-      params.delete('order_id')
-      params.delete('checkout_cancelled')
-    }
-
-    const query = params.toString()
-    const nextUrl = query ? `${pathname}?${query}` : pathname
+    const nextUrl = buildPublicOrderStepUrl(pathname, searchParams.toString(), step)
     if (typeof window !== 'undefined') {
       window.history.replaceState(null, '', nextUrl)
     }

@@ -18,6 +18,11 @@ import {
   type PublicOrderSelectedOptionGroup,
   validatePublicOrderSelection,
 } from '@/lib/public-order-cart'
+import {
+  buildPublicOrderStepUrl,
+  buildResolvedSelectionState,
+  resolveSelectedProduct,
+} from '@/lib/public-order-flow'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderInventorySnapshot,
@@ -280,8 +285,9 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
   useEffect(() => {
     if (!selectedProduct && pageData.products[0]) {
-      setSelectedProduct(pageData.products[0])
-      setSelection(buildInitialProductSelection(pageData.products[0]))
+      const nextState = buildResolvedSelectionState(pageData.products, null)
+      setSelectedProduct(nextState.product)
+      setSelection(nextState.selection)
     }
   }, [pageData.products, selectedProduct])
 
@@ -294,9 +300,9 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   useEffect(() => {
     if (!selectedProduct) return
     if (filteredProducts.some((product) => product.id === selectedProduct.id)) return
-    const nextProduct = filteredProducts[0] ?? pageData.products[0] ?? null
-    setSelectedProduct(nextProduct)
-    setSelection(nextProduct ? buildInitialProductSelection(nextProduct) : null)
+    const nextState = buildResolvedSelectionState(pageData.products, selectedProduct.id, filteredProducts)
+    setSelectedProduct(nextState.product)
+    setSelection(nextState.selection)
   }, [pageData.products, filteredProducts, selectedProduct])
 
   async function refreshInventory() {
@@ -487,7 +493,17 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     }
 
     const defaultFilter = getDefaultProductFilter(pageData.products)
-    const initialProduct = getInitialSelectedProduct(pageData.products, defaultFilter)
+    const nextState = buildResolvedSelectionState(
+      pageData.products,
+      null,
+      pageData.products.filter((product, index) => {
+        if (defaultFilter === 'all') return true
+        if (defaultFilter === 'recommended') {
+          return isRecommendedProduct(product, index)
+        }
+        return inferProductCategory(product) === defaultFilter
+      })
+    )
     setSubmittedOrder(null)
     setCartItems([])
     setSubmitError(null)
@@ -497,8 +513,8 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setWaitingSettlement(false)
     setSettlementMessage(null)
     setActiveFilter(defaultFilter)
-    setSelectedProduct(initialProduct)
-    setSelection(initialProduct ? buildInitialProductSelection(initialProduct) : null)
+    setSelectedProduct(nextState.product)
+    setSelection(nextState.selection)
     setSelectionError(null)
     setResettingToMenu(false)
   }
@@ -528,12 +544,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     }
     setSubmitError(null)
     setConfirmingPage(true)
-    router.push(`${pathname}?step=confirm`, { scroll: true })
+    router.push(buildPublicOrderStepUrl(pathname, searchParams.toString(), 'confirm'), { scroll: true })
   }
 
   function returnToProductSelection() {
     setConfirmingPage(false)
-    router.push(pathname, { scroll: true })
+    router.push(buildPublicOrderStepUrl(pathname, searchParams.toString(), 'menu'), { scroll: true })
   }
 
   async function handleSubmitOrder() {
