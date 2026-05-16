@@ -1,6 +1,4 @@
-import { getDefaultHolidayFlag, getWeekdayLabel } from '@/lib/calendar'
 import { buildStallLogResolutionMap } from '@/lib/analytics-resolution'
-import { resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
 import {
   calculateCostFromProductMaster,
@@ -8,25 +6,13 @@ import {
   resolveCostForMobileOrderOptionChoice,
   resolveCostForMobileOrderProduct,
 } from '@/lib/product-master-links'
+import { buildVendorDailyAnalyticsRows } from '@/lib/vendor-daily-analytics-aggregate'
 import type {
   VendorDailyMemo,
   VendorDailySalesRow,
   VendorWeekRange,
   VendorWeeklyReport,
 } from '@/types/operations'
-
-function formatAverageTemperature(min: number | null, max: number | null) {
-  if (min == null || max == null) return '-'
-  return `${((min + max) / 2).toFixed(1)}℃`
-}
-
-function normalizePaymentBucket(value: string | null | undefined): 'cash' | 'paypay' | 'other' {
-  const normalized = String(value ?? '').normalize('NFKC').toLowerCase()
-  if (!normalized) return 'other'
-  if (normalized.includes('現金') || normalized === 'cash') return 'cash'
-  if (normalized.includes('paypay')) return 'paypay'
-  return 'other'
-}
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10)
@@ -149,14 +135,6 @@ export async function getVendorDailyAnalytics(
   if (stallLogError) throw new Error(stallLogError.message)
   if (eventError) throw new Error(eventError.message)
 
-  const locationMap = new Map<string, { name: string; address: string }>()
-  for (const location of (locations ?? []) as any[]) {
-    locationMap.set(location.id, {
-      name: location.name,
-      address: location.address,
-    })
-  }
-
   const costMap = new Map<string, number>()
   for (const item of (costs ?? []) as any[]) {
     if (item.cost_amount != null) {
@@ -220,158 +198,18 @@ export async function getVendorDailyAnalytics(
     )
   }
 
-  const weatherMap = new Map<
-    string,
-    { weather_type: string | null; temperature_min: number | null; temperature_max: number | null }
-  >()
-  for (const row of (weatherLogs ?? []) as any[]) {
-    weatherMap.set(`${row.log_date}__${row.location_id ?? 'none'}`, {
-      weather_type: row.weather_type,
-      temperature_min: row.temperature_min,
-      temperature_max: row.temperature_max,
-    })
-  }
-
-  const rows = new Map<
-    string,
-    {
-      date: string
-      sales: number
-      txnCount: number
-      itemCount: number
-      grossProfit: number
-      cashSales: number
-      paypaySales: number
-      otherSales: number
-      locationId: string | null
-      eventName: string | null
-    }
-  >()
-
-  for (const txn of (txns ?? []) as any[]) {
-    const date = txn.txn_date
-    const stallLog = stallLogByDate.get(date)
-    const current = rows.get(date) ?? {
-      date,
-      sales: 0,
-      txnCount: 0,
-      itemCount: 0,
-      grossProfit: 0,
-      cashSales: 0,
-      paypaySales: 0,
-      otherSales: 0,
-      locationId: stallLog?.locationId ?? txn.location_id ?? null,
-      eventName:
-        (txn.event_id ? eventNameMap.get(txn.event_id) ?? null : null) ??
-        stallLog?.eventName ??
-        null,
-    }
-
-    current.sales += txn.total_amount ?? 0
-    current.txnCount += 1
-    current.grossProfit += (txn.total_amount ?? 0) - (grossProfitByTxnNo.get(txn.txn_no) ?? 0)
-    const paymentBucket = normalizePaymentBucket(txn.payment_method)
-    if (paymentBucket === 'cash') current.cashSales += txn.total_amount ?? 0
-    else if (paymentBucket === 'paypay') current.paypaySales += txn.total_amount ?? 0
-    else current.otherSales += txn.total_amount ?? 0
-
-    if (!current.locationId) {
-      current.locationId = txn.location_id ?? stallLog?.locationId ?? null
-    }
-
-    if (!current.eventName) {
-      current.eventName =
-        (txn.event_id ? eventNameMap.get(txn.event_id) ?? null : null) ??
-        stallLog?.eventName ??
-        null
-    }
-
-    rows.set(date, current)
-  }
-
-  for (const order of mobileOrderAnalytics.orders) {
-    const date = order.businessDate
-    const stallLog = stallLogByDate.get(date)
-    const current = rows.get(date) ?? {
-      date,
-      sales: 0,
-      txnCount: 0,
-      itemCount: 0,
-      grossProfit: 0,
-      cashSales: 0,
-      paypaySales: 0,
-      otherSales: 0,
-      locationId: order.locationId ?? stallLog?.locationId ?? null,
-      eventName: order.eventName ?? stallLog?.eventName ?? null,
-    }
-
-    if (!current.locationId) {
-      current.locationId = order.locationId ?? stallLog?.locationId ?? null
-    }
-    if (!current.eventName) {
-      current.eventName = order.eventName ?? stallLog?.eventName ?? null
-    }
-
-    current.sales += order.totalAmount
-    current.txnCount += 1
-    current.grossProfit += order.totalAmount - (grossProfitByOrderId.get(order.id) ?? 0)
-    const paymentBucket = normalizePaymentBucket(resolveMobileOrderPaymentMethod(order))
-    if (paymentBucket === 'cash') current.cashSales += order.totalAmount
-    else if (paymentBucket === 'paypay') current.paypaySales += order.totalAmount
-    else current.otherSales += order.totalAmount
-
-    rows.set(date, current)
-  }
-
-  const mobileOrderById = new Map(mobileOrderAnalytics.orders.map((order) => [order.id, order]))
-
-  for (const row of (sales ?? []) as any[]) {
-    const current = rows.get(row.txn_date)
-    if (!current) continue
-    current.itemCount += row.quantity ?? 0
-  }
-
-  for (const item of mobileOrderAnalytics.items) {
-    const order = mobileOrderById.get(item.orderId)
-    if (!order) continue
-    const current = rows.get(order.businessDate)
-    if (!current) continue
-    current.itemCount += item.quantity
-  }
-
-  return Array.from(rows.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((row) => {
-      const locationId = row.locationId
-      const location = locationId ? locationMap.get(locationId) : null
-      const weather =
-        weatherMap.get(`${row.date}__${locationId ?? 'none'}`) ??
-        weatherMap.get(`${row.date}__none`) ??
-        null
-
-      return {
-        date: row.date,
-        weekday: getWeekdayLabel(row.date),
-        holidayFlag: getDefaultHolidayFlag(row.date),
-        locationName: location?.name ?? '-',
-        eventName: row.eventName ?? '-',
-        municipality: location?.address ?? '-',
-        weatherType: weather?.weather_type ?? '-',
-        avgTemperature: formatAverageTemperature(
-          weather?.temperature_min ?? null,
-          weather?.temperature_max ?? null
-        ),
-        sales: row.sales,
-        txnCount: row.txnCount,
-        avgTicket: row.txnCount > 0 ? Math.round(row.sales / row.txnCount) : 0,
-        itemCount: row.itemCount,
-        avgItemPrice: row.itemCount > 0 ? Math.round(row.sales / row.itemCount) : 0,
-        cashSales: row.cashSales,
-        paypaySales: row.paypaySales,
-        otherSales: row.otherSales,
-        grossProfit: row.grossProfit,
-      }
-    })
+  return buildVendorDailyAnalyticsRows({
+    txns: (txns ?? []) as any[],
+    sales: (sales ?? []) as any[],
+    weatherLogs: (weatherLogs ?? []) as any[],
+    locations: (locations ?? []) as any[],
+    stallLogByDate,
+    mobileOrderOrders: mobileOrderAnalytics.orders,
+    mobileOrderItems: mobileOrderAnalytics.items,
+    grossProfitByTxnNo,
+    grossProfitByOrderId,
+    eventNameMap,
+  })
 }
 
 export async function getVendorDailyMemos(supabase: any, start: string, end: string): Promise<VendorDailyMemo[]> {
