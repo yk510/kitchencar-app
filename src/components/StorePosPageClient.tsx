@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import LoadingLine from '@/components/LoadingLine'
+import PublicOrderItemsPanel from '@/components/PublicOrderItemsPanel'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import {
   buildInitialProductSelection,
@@ -23,6 +24,11 @@ import {
   buildResolvedSelectionState,
   resolveSelectedProduct,
 } from '@/lib/public-order-flow'
+import {
+  formatPublicOrderCartSummary,
+  formatPublicOrderPrice,
+  formatStorePosPaymentMethodLabel,
+} from '@/lib/public-order-display'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderInventorySnapshot,
@@ -65,18 +71,6 @@ const primaryButtonClassName =
   'inline-flex items-center justify-center rounded-[28px] bg-[var(--accent-blue)] px-6 py-4 text-base font-semibold text-white shadow-[0_14px_32px_rgba(37,99,235,0.28)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButtonClassName =
   'inline-flex items-center justify-center rounded-[28px] bg-white px-6 py-4 text-base font-semibold text-slate-700 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50'
-
-function formatPrice(value: number) {
-  return `${value.toLocaleString()} 円`
-}
-
-function formatCartSummary(cartItems: CartItem[]) {
-  if (cartItems.length === 0) return 'まだ商品が入っていません'
-
-  return cartItems
-    .map((item) => `${item.product_name} × ${item.quantity}`)
-    .join(' / ')
-}
 
 function normalizeText(value: string | null | undefined) {
   return String(value ?? '').toLowerCase()
@@ -254,7 +248,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const paymentMethods = useMemo(() => buildDefaultPaymentMethods(pageData.store), [pageData.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
-  const cartSummary = useMemo(() => formatCartSummary(cartItems), [cartItems])
+  const cartSummary = useMemo(() => formatPublicOrderCartSummary(cartItems), [cartItems])
   const categorizedProducts = useMemo(
     () =>
       pageData.products.map((product, index) => ({
@@ -636,55 +630,23 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
                 <p className="text-sm font-semibold text-gray-500">支払方法</p>
                 <p className="mt-3 text-2xl font-black text-[var(--text-main)]">
-                  {submittedOrder.payment_method === 'cash'
-                    ? '現金'
-                    : submittedOrder.payment_method === 'paypay'
-                      ? 'PayPay'
-                      : 'その他'}
+                  {formatStorePosPaymentMethodLabel(submittedOrder.payment_method)}
                 </p>
               </div>
               <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
                 <p className="text-sm font-semibold text-gray-500">合計金額</p>
-                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">{formatPrice(submittedOrder.total_amount)}</p>
+                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">{formatPublicOrderPrice(submittedOrder.total_amount)}</p>
               </div>
             </div>
 
-            <div className="mt-8 rounded-[32px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-black text-[var(--text-main)]">ご注文内容</h2>
-                  <p className="mt-1 text-sm text-[var(--text-sub)]">店員と一緒に、商品と金額をご確認ください。</p>
-                </div>
-                <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[var(--line-soft)]">
-                  {totalItems} 点
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {cartItems.map((item) => (
-                  <div key={`submitted-${item.id}`} className="rounded-[24px] bg-white px-5 py-4 ring-1 ring-[var(--line-soft)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
-                        <p className="mt-1 text-sm text-[var(--text-sub)]">
-                          {formatPrice(item.unit_price)} / 1点 ・ 数量 {item.quantity}
-                        </p>
-                        {item.selected_options.length > 0 && (
-                          <div className="mt-2 space-y-1 text-sm text-[var(--text-sub)]">
-                            {item.selected_options.map((group) => (
-                              <p key={`submitted-${item.id}-${group.group_id}`}>
-                                {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <p className="whitespace-nowrap text-xl font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <PublicOrderItemsPanel
+              title="ご注文内容"
+              description="店員と一緒に、商品と金額をご確認ください。"
+              items={cartItems}
+              itemKeyPrefix="submitted"
+              totalItems={totalItems}
+              panelClassName="mt-8 rounded-[32px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]"
+            />
 
             <div
               className={`mt-8 rounded-[28px] border border-dashed px-5 py-4 text-sm ${
@@ -737,40 +699,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             </p>
           </section>
 
-          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-black text-[var(--text-main)]">ご注文内容</h2>
-                <p className="mt-1 text-sm text-[var(--text-sub)]">商品名、数量、トッピング、金額に間違いがないかご確認ください。</p>
-              </div>
-              <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">{totalItems} 点</div>
-            </div>
-
-            <div className="mt-5 space-y-4">
-              {cartItems.map((item) => (
-                <div key={`confirm-page-${item.id}`} className="rounded-[24px] bg-[#f8fbff] px-5 py-4 ring-1 ring-[var(--line-soft)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
-                      <p className="mt-1 text-sm text-[var(--text-sub)]">
-                        {formatPrice(item.unit_price)} / 1点 ・ 数量 {item.quantity}
-                      </p>
-                      {item.selected_options.length > 0 && (
-                        <div className="mt-3 space-y-1 text-sm text-[var(--text-sub)]">
-                          {item.selected_options.map((group) => (
-                            <p key={`confirm-page-${item.id}-${group.group_id}`}>
-                              {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <p className="whitespace-nowrap text-xl font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PublicOrderItemsPanel
+            title="ご注文内容"
+            description="商品名、数量、トッピング、金額に間違いがないかご確認ください。"
+            items={cartItems}
+            itemKeyPrefix="confirm-page"
+            totalItems={totalItems}
+            panelClassName="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8"
+          />
 
           <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
             <h2 className="text-2xl font-black text-[var(--text-main)]">お支払い方法</h2>
@@ -800,12 +736,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">お支払い方法</p>
                 <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
-                  {selectedPaymentMethod === 'cash' ? '現金' : selectedPaymentMethod === 'paypay' ? 'PayPay' : 'その他'}
+                  {formatStorePosPaymentMethodLabel(selectedPaymentMethod)}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">合計金額</p>
-                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
+                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{formatPublicOrderPrice(cartTotal)}</p>
               </div>
             </div>
 
@@ -954,7 +890,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                         )}
                       </div>
                       <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
-                        {formatPrice(product.price)}
+                        {formatPublicOrderPrice(product.price)}
                       </div>
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3 text-sm">
@@ -1016,7 +952,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                           <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">{selectedProduct.description || '商品の説明は準備中です。'}</p>
                         </div>
                         <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
-                          {formatPrice(selectedProduct.price)}
+                          {formatPublicOrderPrice(selectedProduct.price)}
                         </div>
                       </div>
                     </div>
@@ -1110,7 +1046,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                         <div>
                           <p className="text-sm font-semibold text-gray-500">この商品の合計</p>
                           <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
-                            {formatPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
+                            {formatPublicOrderPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
                           </p>
                         </div>
                         <button
@@ -1155,7 +1091,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-lg font-bold text-[var(--text-main)]">{item.product_name}</p>
-                          <p className="mt-1 text-sm text-[var(--text-sub)]">{formatPrice(item.unit_price)} / 1点</p>
+                          <p className="mt-1 text-sm text-[var(--text-sub)]">{formatPublicOrderPrice(item.unit_price)} / 1点</p>
                           {item.selected_options.length > 0 && (
                             <div className="mt-2 space-y-1 text-xs text-[var(--text-sub)]">
                               {item.selected_options.map((group) => (
@@ -1166,7 +1102,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                             </div>
                           )}
                         </div>
-                        <p className="text-lg font-black text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                        <p className="text-lg font-black text-[var(--accent-blue)]">{formatPublicOrderPrice(item.line_total)}</p>
                       </div>
                       <div className="mt-4 flex items-center gap-3">
                         <button
@@ -1215,7 +1151,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-500">お支払い合計</p>
-                    <p className="mt-2 text-4xl font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
+                    <p className="mt-2 text-4xl font-black text-[var(--text-main)]">{formatPublicOrderPrice(cartTotal)}</p>
                   </div>
                   <button
                     type="button"
@@ -1256,7 +1192,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">注文内容の確認</p>
                 <p className="mt-1 truncate text-sm font-medium text-slate-500">{cartSummary}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-4">
-                  <p className="text-lg font-black text-[var(--text-main)]">{formatPrice(cartTotal)}</p>
+                  <p className="text-lg font-black text-[var(--text-main)]">{formatPublicOrderPrice(cartTotal)}</p>
                   <p className="text-sm font-semibold text-slate-500">{totalItems} 点</p>
                   <p className="text-sm font-semibold text-slate-500">お支払い方法は次の確認ページで選択します</p>
                 </div>

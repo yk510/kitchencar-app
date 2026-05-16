@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import LoadingLine from '@/components/LoadingLine'
+import PublicOrderItemsPanel from '@/components/PublicOrderItemsPanel'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import {
@@ -22,6 +23,7 @@ import {
   buildResolvedSelectionState,
   resolveSelectedProduct,
 } from '@/lib/public-order-flow'
+import { formatPublicOrderPrice } from '@/lib/public-order-display'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   PublicMobileOrderCheckoutResponse,
@@ -54,10 +56,6 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
-}
-
-function formatPrice(value: number) {
-  return `${value.toLocaleString()} 円`
 }
 
 function getUnavailableMessage(product: PublicMobileOrderProduct) {
@@ -479,7 +477,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               {completedOrder.order_number}
             </p>
             <p className="mt-4 text-sm text-gray-600">ニックネーム: {completedOrder.pickup_nickname}</p>
-            <p className="mt-2 text-sm text-gray-600">合計: {formatPrice(completedOrder.total_amount)}</p>
+            <p className="mt-2 text-sm text-gray-600">合計: {formatPublicOrderPrice(completedOrder.total_amount)}</p>
           </div>
 
           <button
@@ -539,28 +537,17 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
         ) : null}
 
         <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="soft-panel rounded-[32px] p-6">
-            <h2 className="text-lg font-semibold text-[var(--text-main)]">ご注文内容</h2>
-            <div className="mt-4 space-y-3 text-sm text-gray-600">
-              {cartItems.map((item) => (
-                <div key={`review-page-${item.id}`} className="rounded-2xl bg-white px-4 py-4 ring-1 ring-[var(--line-soft)]">
-                  <p className="font-semibold text-gray-800">
-                    {item.product_name} x{item.quantity}
-                  </p>
-                  {item.selected_options.length > 0 && (
-                    <div className="mt-2 space-y-1 text-xs text-gray-500">
-                      {item.selected_options.map((group) => (
-                        <p key={`review-page-${item.id}-${group.group_id}`}>
-                          {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  <p className="mt-2 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <PublicOrderItemsPanel
+            title="ご注文内容"
+            items={cartItems}
+            itemKeyPrefix="review-page"
+            panelClassName="soft-panel rounded-[32px] p-6"
+            itemClassName="rounded-2xl bg-white px-4 py-4 ring-1 ring-[var(--line-soft)]"
+            titleClassName="text-lg font-semibold text-[var(--text-main)]"
+            amountClassName="mt-2 text-sm font-bold text-[var(--accent-blue)]"
+            metaClassName="mt-1 text-sm text-[var(--text-sub)]"
+            optionsClassName="mt-2 space-y-1 text-xs text-gray-500"
+          />
 
           <div className="space-y-6">
             <section className="soft-panel rounded-[32px] p-6">
@@ -572,7 +559,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                 </p>
                 <p className="mt-2">
                   合計金額:
-                  <span className="ml-2 font-semibold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                  <span className="ml-2 font-semibold text-[var(--accent-blue)]">{formatPublicOrderPrice(cartTotal)}</span>
                 </p>
               </div>
             </section>
@@ -629,35 +616,22 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <p className="mt-2">注文点数: {cartItems.length} 件</p>
               <p className="mt-1">
                 お支払い金額:
-                <span className="ml-2 font-bold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                <span className="ml-2 font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(cartTotal)}</span>
               </p>
               <p className="mt-1">受け取り名: {pickupNickname.trim()}</p>
             </div>
 
-            <div className="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-              <p className="text-sm font-semibold text-gray-800">注文内容</p>
-              <div className="mt-3 space-y-3">
-                {cartItems.map((item) => (
-                  <div key={`payment-confirm-${item.id}`} className="rounded-2xl bg-[#f8fafc] px-3 py-3 text-sm text-gray-600">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-semibold text-gray-800">
-                        {item.product_name} x{item.quantity}
-                      </p>
-                      <p className="shrink-0 font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
-                    </div>
-                    {item.selected_options.length > 0 && (
-                      <div className="mt-2 space-y-1 text-xs leading-6 text-gray-500">
-                        {item.selected_options.map((group) => (
-                          <p key={`payment-confirm-${item.id}-${group.group_id}`}>
-                            {group.group_name}: {group.choices.map((choice) => choice.choice_name).join(' / ')}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <PublicOrderItemsPanel
+              title="注文内容"
+              items={cartItems}
+              itemKeyPrefix="payment-confirm"
+              panelClassName="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4"
+              itemClassName="rounded-2xl bg-[#f8fafc] px-3 py-3 text-sm text-gray-600"
+              titleClassName="text-sm font-semibold text-gray-800"
+              amountClassName="shrink-0 font-bold text-[var(--accent-blue)]"
+              metaClassName="mt-1 text-sm text-[var(--text-sub)]"
+              optionsClassName="mt-2 space-y-1 text-xs leading-6 text-gray-500"
+            />
 
             <div className="mt-6 flex gap-3">
               <button
@@ -748,7 +722,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                       削除
                     </button>
                   </div>
-                  <p className="mt-3 text-sm font-bold text-[var(--accent-blue)]">{formatPrice(item.line_total)}</p>
+                  <p className="mt-3 text-sm font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(item.line_total)}</p>
                 </div>
               ))}
             </div>
@@ -773,7 +747,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">カート合計</span>
-                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(cartTotal)}</span>
                 </div>
               </div>
 
@@ -920,7 +894,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                         </p>
                       )}
                       <div className="mt-4 flex items-center justify-between gap-4">
-                        <p className="text-base font-bold text-[var(--accent-blue)]">{formatPrice(product.price)}</p>
+                        <p className="text-base font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(product.price)}</p>
                         <div className="flex flex-wrap items-center gap-2">
                           {unavailable && (
                             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
@@ -965,7 +939,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
                       {selectedProduct.description || '商品の説明は準備中です。'}
                     </p>
-                    <p className="mt-4 text-lg font-bold text-[var(--accent-blue)]">{formatPrice(selectedProduct.price)}</p>
+                      <p className="mt-4 text-lg font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(selectedProduct.price)}</p>
                   </div>
 
                   {isPublicOrderProductUnavailable(selectedProduct) && (
@@ -1056,7 +1030,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">この商品の合計</span>
                       <span className="text-base font-bold text-[var(--accent-blue)]">
-                        {formatPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
+                        {formatPublicOrderPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
                       </span>
                     </div>
                   </div>
@@ -1102,7 +1076,7 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
               <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">カート合計</span>
-                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPrice(cartTotal)}</span>
+                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(cartTotal)}</span>
                 </div>
               </div>
 
