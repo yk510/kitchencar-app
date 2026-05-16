@@ -8,20 +8,16 @@ import {
   resolveAnalyticsEventId,
 } from '@/lib/analytics-resolution'
 import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
+import { getVendorHourlyAnalytics } from '@/lib/vendor-hourly-analytics'
+import { normalizeAnalyticsScope } from '@/lib/vendor-product-analytics'
 
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
-
-function normalizeScope(scope?: string): 'all' | 'normal' | 'event' {
-  if (scope === 'normal') return 'normal'
-  if (scope === 'event') return 'event'
-  return 'all'
-}
 
 export async function GET(req: NextRequest) {
   const auth = await requireRouteSession(req)
   if (auth.response) return auth.response
-  const { supabase } = auth.session
-  const scope = normalizeScope(req.nextUrl.searchParams.get('scope') ?? undefined)
+  const { supabase, user } = auth.session
+  const scope = normalizeAnalyticsScope(req.nextUrl.searchParams.get('scope') ?? undefined)
   const start = normalizeAnalyticsDate(req.nextUrl.searchParams.get('start') ?? undefined)
   const end = normalizeAnalyticsDate(req.nextUrl.searchParams.get('end') ?? undefined)
 
@@ -78,14 +74,7 @@ export async function GET(req: NextRequest) {
     heatmap[dow][h] += order.totalAmount
   }
 
-  const hourlyData = hourTotals
-    .map((e, h) => ({
-      hour: h,
-      label: `${String(h).padStart(2, '0')}:00`,
-      total_sales: e.total,
-      txn_count: e.count,
-    }))
-    .filter(e => e.txn_count > 0)
+  const hourlyData = await getVendorHourlyAnalytics(supabase, user.id, scope, start, end)
 
   const heatmapData = DAY_LABELS.map((dayLabel, dow) => ({
     day: dow,
