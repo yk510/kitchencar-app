@@ -974,7 +974,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-6 md:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)] xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
             <div className="flex items-center justify-between gap-4">
               <div>

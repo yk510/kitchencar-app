@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { VendorMobileOrderFilters } from '@/components/VendorMobileOrderFilters'
 import { VendorMobileOrderItemsSection } from '@/components/VendorMobileOrderItemsSection'
 import { VendorMobileOrderListCard } from '@/components/VendorMobileOrderListCard'
 import { VendorMobileOrderNotificationsSection } from '@/components/VendorMobileOrderNotificationsSection'
+import { VendorMobileOrderScheduleSwitcher } from '@/components/VendorMobileOrderScheduleSwitcher'
 import { VendorMobileOrderStatusSection } from '@/components/VendorMobileOrderStatusSection'
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
@@ -591,7 +593,19 @@ export default function VendorMobileOrderOrdersPage() {
       })
   }, [orders, orderListFilter])
 
-  async function handleChangeSchedule(scheduleId: string) {
+  const filterDefinitions = useMemo(
+    () =>
+      [
+        { key: 'action_required', label: '未対応', count: orders.filter((order) => isUnhandledOrder(order)).length },
+        { key: 'preparing', label: '調理中', count: counts.preparing },
+        { key: 'ready', label: '完成', count: counts.ready },
+        { key: 'picked_up', label: '受取済', count: counts.picked_up },
+        { key: 'all', label: 'すべて', count: counts.total },
+      ] as Array<{ key: OrderListFilter; label: string; count: number }>,
+    [counts.preparing, counts.ready, counts.picked_up, counts.total, orders]
+  )
+
+  const handleChangeSchedule = useCallback(async (scheduleId: string) => {
     setLoading(true)
     setNewOrderIds([])
     for (const timeoutId of Object.values(newOrderTimeoutsRef.current)) {
@@ -599,7 +613,7 @@ export default function VendorMobileOrderOrdersPage() {
     }
     newOrderTimeoutsRef.current = {}
     await loadDashboard(scheduleId)
-  }
+  }, [])
 
   const handleChangeStatus = useCallback(async (orderId: string, orderNumber: string, nextStatus: string) => {
     setPendingStatus(nextStatus)
@@ -829,26 +843,14 @@ export default function VendorMobileOrderOrdersPage() {
                 <p className="mt-1 text-xs text-gray-500">当日や過去の営業枠をすばやく切り替えられます。</p>
               </div>
             </div>
-            <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1">
-              {dashboard.schedules.length === 0 ? (
-                <p className="text-sm text-gray-500">営業枠がまだありません。</p>
-              ) : (
-                dashboard.schedules.map((schedule) => (
-                  <button
-                    key={schedule.id}
-                    type="button"
-                    onClick={() => void handleChangeSchedule(schedule.id)}
-                    className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${
-                      schedule.id === dashboard.selectedSchedule?.id
-                        ? 'bg-[var(--accent-blue)] text-white'
-                        : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
-                    }`}
-                  >
-                    {formatDateTime(schedule.opens_at)}
-                  </button>
-                ))
-              )}
-            </div>
+            <VendorMobileOrderScheduleSwitcher
+              schedules={dashboard.schedules}
+              selectedScheduleId={dashboard.selectedSchedule?.id ?? null}
+              labelForSchedule={(schedule) => formatDateTime(schedule.opens_at)}
+              onSelect={(scheduleId) => {
+                void handleChangeSchedule(scheduleId)
+              }}
+            />
           </section>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
@@ -862,28 +864,11 @@ export default function VendorMobileOrderOrdersPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {([
-                  { key: 'action_required', label: '未対応', count: orders.filter((order) => isUnhandledOrder(order)).length },
-                  { key: 'preparing', label: '調理中', count: counts.preparing },
-                  { key: 'ready', label: '完成', count: counts.ready },
-                  { key: 'picked_up', label: '受取済', count: counts.picked_up },
-                  { key: 'all', label: 'すべて', count: counts.total },
-                ] as Array<{ key: OrderListFilter; label: string; count: number }>).map((filter) => (
-                  <button
-                    key={filter.key}
-                    type="button"
-                    onClick={() => setOrderListFilter(filter.key)}
-                    className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                      orderListFilter === filter.key
-                        ? 'bg-[var(--accent-blue)] text-white'
-                        : 'bg-white text-slate-700 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
-                    }`}
-                  >
-                    {filter.label} {filter.count}
-                  </button>
-                ))}
-              </div>
+              <VendorMobileOrderFilters
+                filters={filterDefinitions}
+                activeFilter={orderListFilter}
+                onChange={setOrderListFilter}
+              />
 
               <div className="mt-4 space-y-3 lg:h-[calc(100%-5.5rem)] lg:overflow-y-auto lg:pr-1">
                 {filteredOrders.length === 0 ? (
