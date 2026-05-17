@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
-import { apiError, apiOk } from '@/lib/api-response'
+import { apiOk } from '@/lib/api-response'
+import {
+  requireVendorMobileOrderRouteContext,
+  toVendorMobileOrderRouteError,
+} from '@/lib/vendor-mobile-order-route'
 import {
   loadVendorOwnedOptionGroup,
   parseOptionGroupInput,
@@ -11,15 +14,10 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
   const { id } = await context.params
-  const { supabase, user } = auth.session
+  const { supabase, user } = resolved.context
 
   try {
     const currentGroup = await loadVendorOwnedOptionGroup(supabase, user.id, id)
@@ -38,19 +36,14 @@ export async function PATCH(
     )
     return apiOk(await updateVendorOptionGroup(supabase, id, input))
   } catch (error) {
-    console.error('[vendor/mobile-order/options/:id PATCH]', error)
-    const message = error instanceof Error ? error.message : 'サーバーエラー'
-    if (message === '対象のオプショングループが見つかりません') {
-      return apiError(message, 404)
-    }
-    if (
-      message === 'オプショングループ名は必須です' ||
-      message === '選択方式が不正です' ||
-      message === '選択肢を1件以上入力してください' ||
-      message === '選択肢名は必須です'
-    ) {
-      return apiError(message, 400)
-    }
-    return apiError(message)
+    return toVendorMobileOrderRouteError('[vendor/mobile-order/options/:id PATCH]', error, {
+      notFound: ['対象のオプショングループが見つかりません'],
+      badRequest: [
+        'オプショングループ名は必須です',
+        '選択方式が不正です',
+        '選択肢を1件以上入力してください',
+        '選択肢名は必須です',
+      ],
+    })
   }
 }

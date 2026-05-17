@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { ensureVendorStoreResources } from '@/lib/mobile-order'
 import {
@@ -7,6 +6,10 @@ import {
   normalizeStorePosPaymentMethods,
   upsertStorePosSettingsInNotes,
 } from '@/lib/store-pos-settings'
+import {
+  requireVendorMobileOrderRouteContext,
+  toVendorMobileOrderRouteError,
+} from '@/lib/vendor-mobile-order-route'
 import type {
   VendorStorePosSettingsPayload,
   VendorStorePosSettingsUpdatePayload,
@@ -30,14 +33,9 @@ function isMissingStorePosColumnError(error: unknown) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
-  const { supabase, user } = auth.session
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
+  const { supabase, user } = resolved.context
 
   try {
     const body = (await req.json()) as Partial<VendorStorePosSettingsUpdatePayload>
@@ -109,8 +107,8 @@ export async function PATCH(req: NextRequest) {
 
     return apiOk(payload)
   } catch (error) {
-    console.error('[vendor/mobile-order/settings PATCH]', error)
-    return apiError(error instanceof Error ? error.message : 'サーバーエラー')
+    return toVendorMobileOrderRouteError('[vendor/mobile-order/settings PATCH]', error, {
+      badRequest: ['支払方法を1つ以上選択してください'],
+    })
   }
 }
-

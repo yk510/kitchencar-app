@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { ensureVendorStoreResources } from '@/lib/mobile-order'
 import {
@@ -7,6 +6,10 @@ import {
   upsertStoreOrderScheduleMetadataInNotes,
 } from '@/lib/store-order-schedule-metadata'
 import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
+import {
+  requireVendorMobileOrderRouteContext,
+  toVendorMobileOrderRouteError,
+} from '@/lib/vendor-mobile-order-route'
 import type {
   VendorMobileOrderScheduleMutationPayload,
   VendorMobileOrderSchedulesPayload,
@@ -20,14 +23,9 @@ function parseIsoDatetime(value: unknown) {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
-  const { supabase, user } = auth.session
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
+  const { supabase, user } = resolved.context
 
   const { data: vendorProfile } = await (supabase as any)
     .from('vendor_profiles')
@@ -69,20 +67,14 @@ export async function GET(req: NextRequest) {
 
     return apiOk(payload)
   } catch (error) {
-    console.error('[vendor/mobile-order/schedules GET]', error)
-    return apiError(error instanceof Error ? error.message : 'サーバーエラー')
+    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules GET]', error)
   }
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
-  const { supabase, user } = auth.session
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
+  const { supabase, user } = resolved.context
 
   try {
     const body = await req.json()
@@ -156,7 +148,13 @@ export async function POST(req: NextRequest) {
     const payload: VendorMobileOrderScheduleMutationPayload = data
     return apiOk(payload)
   } catch (error) {
-    console.error('[vendor/mobile-order/schedules POST]', error)
-    return apiError('サーバーエラー')
+    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules POST]', error, {
+      badRequest: [
+        '営業日と受付開始・終了日時は必須です',
+        '出店場所は必須です',
+        '終了日時は開始日時より後にしてください',
+        '出店場所が見つかりません',
+      ],
+    })
   }
 }

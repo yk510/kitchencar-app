@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import {
   extractStoreOrderScheduleMetadata,
   upsertStoreOrderScheduleMetadataInNotes,
 } from '@/lib/store-order-schedule-metadata'
+import {
+  requireVendorMobileOrderRouteContext,
+  toVendorMobileOrderRouteError,
+} from '@/lib/vendor-mobile-order-route'
 import type { VendorMobileOrderScheduleMutationPayload } from '@/types/api-payloads'
 
 function parseOptionalIsoDatetime(value: unknown) {
@@ -17,15 +20,10 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
   const { id } = await context.params
-  const { supabase, user } = auth.session
+  const { supabase, user } = resolved.context
 
   try {
     const body = await req.json()
@@ -119,7 +117,14 @@ export async function PATCH(
     const payload: VendorMobileOrderScheduleMutationPayload = data
     return apiOk(payload)
   } catch (error) {
-    console.error('[vendor/mobile-order/schedules/:id PATCH]', error)
-    return apiError('サーバーエラー')
+    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules/:id PATCH]', error, {
+      badRequest: [
+        '不正なステータスです',
+        '出店場所は必須です',
+        '終了日時は開始日時より後にしてください',
+        '出店場所が見つかりません',
+      ],
+      notFound: ['対象の営業枠が見つかりません'],
+    })
   }
 }
