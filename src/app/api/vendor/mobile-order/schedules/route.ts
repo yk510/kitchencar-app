@@ -7,8 +7,8 @@ import {
 } from '@/lib/store-order-schedule-metadata'
 import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import {
-  requireVendorMobileOrderRouteContext,
-  toVendorMobileOrderRouteError,
+  executeVendorMobileOrderJsonRoute,
+  executeVendorMobileOrderRoute,
 } from '@/lib/vendor-mobile-order-route'
 import type {
   VendorMobileOrderScheduleMutationPayload,
@@ -23,17 +23,16 @@ function parseIsoDatetime(value: unknown) {
 }
 
 export async function GET(req: NextRequest) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
-  const { supabase, user } = resolved.context
+  return executeVendorMobileOrderRoute(
+    req,
+    '[vendor/mobile-order/schedules GET]',
+    async ({ supabase, user }) => {
+      const { data: vendorProfile } = await (supabase as any)
+        .from('vendor_profiles')
+        .select('business_name')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-  const { data: vendorProfile } = await (supabase as any)
-    .from('vendor_profiles')
-    .select('business_name')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  try {
     const { store, orderPage } = await ensureVendorStoreResources(supabase, user, {
       businessName: vendorProfile?.business_name ?? null,
     })
@@ -65,19 +64,16 @@ export async function GET(req: NextRequest) {
       locations: (locations ?? []) as any[],
     }
 
-    return apiOk(payload)
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules GET]', error)
-  }
+      return payload
+    }
+  )
 }
 
 export async function POST(req: NextRequest) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
-  const { supabase, user } = resolved.context
-
-  try {
-    const body = await req.json()
+  return executeVendorMobileOrderJsonRoute<Record<string, unknown>, VendorMobileOrderScheduleMutationPayload>(
+    req,
+    '[vendor/mobile-order/schedules POST]',
+    async ({ supabase, user }, body) => {
     const businessDate = String(body.business_date ?? '').trim()
     const opensAt = parseIsoDatetime(body.opens_at)
     const closesAt = parseIsoDatetime(body.closes_at)
@@ -145,16 +141,16 @@ export async function POST(req: NextRequest) {
       return apiError(error.message)
     }
 
-    const payload: VendorMobileOrderScheduleMutationPayload = data
-    return apiOk(payload)
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules POST]', error, {
+      const payload: VendorMobileOrderScheduleMutationPayload = data
+      return payload
+    },
+    {
       badRequest: [
         '営業日と受付開始・終了日時は必須です',
         '出店場所は必須です',
         '終了日時は開始日時より後にしてください',
         '出店場所が見つかりません',
       ],
-    })
-  }
+    }
+  )
 }

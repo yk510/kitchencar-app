@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
-import { apiError } from '@/lib/api-response'
+import { apiError, apiOk } from '@/lib/api-response'
 
 type VendorMobileOrderRouteContext = {
   supabase: any
@@ -16,6 +16,17 @@ type VendorMobileOrderErrorMap = {
   notFound?: string[]
   conflict?: string[]
 }
+
+type VendorMobileOrderRouteHandlerResult<T> = T | Response
+
+type VendorMobileOrderRouteHandler<T> = (
+  context: VendorMobileOrderRouteContext
+) => Promise<VendorMobileOrderRouteHandlerResult<T>>
+
+type VendorMobileOrderJsonRouteHandler<TBody, TResponse> = (
+  context: VendorMobileOrderRouteContext,
+  body: TBody
+) => Promise<VendorMobileOrderRouteHandlerResult<TResponse>>
 
 export async function requireVendorMobileOrderRouteContext(
   req: NextRequest
@@ -54,4 +65,33 @@ export function toVendorMobileOrderRouteError(
   }
 
   return apiError(message)
+}
+
+export async function executeVendorMobileOrderRoute<T>(
+  req: NextRequest,
+  scope: string,
+  handler: VendorMobileOrderRouteHandler<T>,
+  map?: VendorMobileOrderErrorMap
+) {
+  const resolved = await requireVendorMobileOrderRouteContext(req)
+  if (resolved.response) return resolved.response
+
+  try {
+    const result = await handler(resolved.context)
+    return result instanceof Response ? result : apiOk(result)
+  } catch (error) {
+    return toVendorMobileOrderRouteError(scope, error, map)
+  }
+}
+
+export async function executeVendorMobileOrderJsonRoute<TBody, TResponse>(
+  req: NextRequest,
+  scope: string,
+  handler: VendorMobileOrderJsonRouteHandler<TBody, TResponse>,
+  map?: VendorMobileOrderErrorMap
+) {
+  return executeVendorMobileOrderRoute(req, scope, async (context) => {
+    const body = (await req.json()) as TBody
+    return handler(context, body)
+  }, map)
 }

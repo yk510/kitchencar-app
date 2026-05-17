@@ -1,8 +1,6 @@
 import { NextRequest } from 'next/server'
-import { apiOk } from '@/lib/api-response'
 import {
-  requireVendorMobileOrderRouteContext,
-  toVendorMobileOrderRouteError,
+  executeVendorMobileOrderJsonRoute,
 } from '@/lib/vendor-mobile-order-route'
 import {
   loadVendorOwnedOptionGroup,
@@ -14,29 +12,27 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
   const { id } = await context.params
-  const { supabase, user } = resolved.context
-
-  try {
-    const currentGroup = await loadVendorOwnedOptionGroup(supabase, user.id, id)
-    const rawBody = await req.json()
-    const input = parseOptionGroupInput(
-      {
-        ...rawBody,
-        name: typeof rawBody.name === 'string' ? rawBody.name : currentGroup.name,
-        selection_type: typeof rawBody.selection_type === 'string' ? rawBody.selection_type : currentGroup.selection_type,
-        is_required: typeof rawBody.is_required === 'boolean' ? rawBody.is_required : currentGroup.is_required,
-        min_select: rawBody.min_select != null ? rawBody.min_select : currentGroup.min_select,
-        max_select: rawBody.max_select != null ? rawBody.max_select : currentGroup.max_select,
-        sort_order: rawBody.sort_order != null ? rawBody.sort_order : currentGroup.sort_order,
-      },
-      'update'
-    )
-    return apiOk(await updateVendorOptionGroup(supabase, id, input))
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/options/:id PATCH]', error, {
+  return executeVendorMobileOrderJsonRoute<Record<string, unknown>, unknown>(
+    req,
+    '[vendor/mobile-order/options/:id PATCH]',
+    async ({ supabase, user }, rawBody) => {
+      const currentGroup = await loadVendorOwnedOptionGroup(supabase, user.id, id)
+      const input = parseOptionGroupInput(
+        {
+          ...rawBody,
+          name: typeof rawBody.name === 'string' ? rawBody.name : currentGroup.name,
+          selection_type: typeof rawBody.selection_type === 'string' ? rawBody.selection_type : currentGroup.selection_type,
+          is_required: typeof rawBody.is_required === 'boolean' ? rawBody.is_required : currentGroup.is_required,
+          min_select: rawBody.min_select != null ? rawBody.min_select : currentGroup.min_select,
+          max_select: rawBody.max_select != null ? rawBody.max_select : currentGroup.max_select,
+          sort_order: rawBody.sort_order != null ? rawBody.sort_order : currentGroup.sort_order,
+        },
+        'update'
+      )
+      return updateVendorOptionGroup(supabase, id, input)
+    },
+    {
       notFound: ['対象のオプショングループが見つかりません'],
       badRequest: [
         'オプショングループ名は必須です',
@@ -44,6 +40,6 @@ export async function PATCH(
         '選択肢を1件以上入力してください',
         '選択肢名は必須です',
       ],
-    })
-  }
+    }
+  )
 }

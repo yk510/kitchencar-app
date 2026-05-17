@@ -7,8 +7,7 @@ import {
   upsertStorePosSettingsInNotes,
 } from '@/lib/store-pos-settings'
 import {
-  requireVendorMobileOrderRouteContext,
-  toVendorMobileOrderRouteError,
+  executeVendorMobileOrderJsonRoute,
 } from '@/lib/vendor-mobile-order-route'
 import type {
   VendorStorePosSettingsPayload,
@@ -33,12 +32,10 @@ function isMissingStorePosColumnError(error: unknown) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
-  const { supabase, user } = resolved.context
-
-  try {
-    const body = (await req.json()) as Partial<VendorStorePosSettingsUpdatePayload>
+  return executeVendorMobileOrderJsonRoute<Partial<VendorStorePosSettingsUpdatePayload>, VendorStorePosSettingsPayload>(
+    req,
+    '[vendor/mobile-order/settings PATCH]',
+    async ({ supabase, user }, body) => {
     const isStorePosEnabled = body.is_store_pos_enabled !== false
     const storePosTerminalName = normalizeNullableText(body.store_pos_terminal_name) ?? 'front-tablet'
     const enabledPaymentMethods = normalizeStorePosPaymentMethods(body.store_pos_enabled_payment_methods)
@@ -105,10 +102,10 @@ export async function PATCH(req: NextRequest) {
       persistence,
     }
 
-    return apiOk(payload)
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/settings PATCH]', error, {
+      return payload
+    },
+    {
       badRequest: ['支払方法を1つ以上選択してください'],
-    })
-  }
+    }
+  )
 }

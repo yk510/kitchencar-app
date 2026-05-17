@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server'
-import { apiError, apiOk } from '@/lib/api-response'
 import {
-  requireVendorMobileOrderRouteContext,
-  toVendorMobileOrderRouteError,
+  executeVendorMobileOrderJsonRoute,
+  executeVendorMobileOrderRoute,
 } from '@/lib/vendor-mobile-order-route'
 import {
   createVendorMobileOrderProduct,
@@ -11,28 +10,21 @@ import {
 } from '@/lib/vendor-mobile-order-products-admin'
 
 export async function GET(req: NextRequest) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
-  const { supabase, user } = resolved.context
-
-  try {
-    return apiOk(await getVendorManagedProductsPayload(supabase, user))
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/products GET]', error)
-  }
+  return executeVendorMobileOrderRoute(req, '[vendor/mobile-order/products GET]', async ({ supabase, user }) =>
+    getVendorManagedProductsPayload(supabase, user)
+  )
 }
 
 export async function POST(req: NextRequest) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
-  const { supabase, user } = resolved.context
-
-  try {
-    const input = parseCreateProductInput(await req.json())
-    return apiOk(await createVendorMobileOrderProduct(supabase, user, input))
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/products POST]', error, {
+  return executeVendorMobileOrderJsonRoute<Record<string, unknown>, unknown>(
+    req,
+    '[vendor/mobile-order/products POST]',
+    async ({ supabase, user }, body) => {
+      const input = parseCreateProductInput(body)
+      return createVendorMobileOrderProduct(supabase, user, input)
+    },
+    {
       badRequest: ['商品名は必須です', '価格は0円以上の整数で入力してください', '残りわずか閾値は0以上の整数で入力してください'],
-    })
-  }
+    }
+  )
 }

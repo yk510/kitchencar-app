@@ -1,6 +1,4 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
-import { apiError, apiOk } from '@/lib/api-response'
 import type {
   VendorMobileOrderOrderMutationPayload,
 } from '@/types/api-payloads'
@@ -10,74 +8,46 @@ import {
   receiveVendorOrderPayment,
   validateOrderMutationInput,
 } from '@/lib/vendor-mobile-order-dashboard-mutations'
+import {
+  executeVendorMobileOrderJsonRoute,
+  executeVendorMobileOrderRoute,
+} from '@/lib/vendor-mobile-order-route'
 
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
   const { id } = await context.params
-  const { supabase, user } = auth.session
-
-  try {
-    return apiOk(await getVendorOrderDetailPayload(supabase, user, id))
-  } catch (error) {
-    console.error('[vendor/mobile-order/orders/:id GET]', error)
-    return apiError(error instanceof Error ? error.message : 'サーバーエラー')
-  }
+  return executeVendorMobileOrderRoute(req, '[vendor/mobile-order/orders/:id GET]', async ({ supabase, user }) =>
+    getVendorOrderDetailPayload(supabase, user, id)
+  )
 }
 
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-
-  if (auth.session.role !== 'vendor') {
-    return apiError('ベンダー権限が必要です', 403)
-  }
-
   const { id } = await context.params
-  const { supabase, user } = auth.session
+  return executeVendorMobileOrderJsonRoute<Record<string, unknown>, VendorMobileOrderOrderMutationPayload>(
+    req,
+    '[vendor/mobile-order/orders/:id PATCH]',
+    async ({ supabase, user }, body) => {
+      const { action, nextStatus } = validateOrderMutationInput(body)
 
-  try {
-    const body = await req.json()
-    const { action, nextStatus } = validateOrderMutationInput(body)
+      if (action === 'receive_payment') {
+        return receiveVendorOrderPayment(supabase, user, id)
+      }
 
-    if (action === 'receive_payment') {
-      const payload: VendorMobileOrderOrderMutationPayload = await receiveVendorOrderPayment(
-        supabase,
-        user,
-        id
-      )
-      return apiOk(payload)
+      return changeVendorOrderStatus(supabase, user, id, nextStatus)
+    },
+    {
+      badRequest: ['不正な注文ステータスです'],
+      notFound: ['対象の注文が見つかりません'],
+      conflict: [
+        'POS注文以外では料金受領できません',
+        'この注文はすでに受領済みです',
+        'この注文ステータスには変更できません',
+      ],
     }
-
-    const payload: VendorMobileOrderOrderMutationPayload = await changeVendorOrderStatus(
-      supabase,
-      user,
-      id,
-      nextStatus
-    )
-    return apiOk(payload)
-  } catch (error) {
-    console.error('[vendor/mobile-order/orders/:id PATCH]', error)
-    const message = error instanceof Error ? error.message : 'サーバーエラー'
-    const status =
-      message === '不正な注文ステータスです'
-        ? 400
-        : message === '対象の注文が見つかりません'
-          ? 404
-          : message.includes('できません') || message.includes('失敗しました') || message.includes('受領済み')
-            ? 409
-            : 500
-    return apiError(message, status)
-  }
+  )
 }

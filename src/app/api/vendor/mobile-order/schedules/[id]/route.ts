@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server'
-import { apiError, apiOk } from '@/lib/api-response'
+import { apiError } from '@/lib/api-response'
 import {
   extractStoreOrderScheduleMetadata,
   upsertStoreOrderScheduleMetadataInNotes,
 } from '@/lib/store-order-schedule-metadata'
 import {
-  requireVendorMobileOrderRouteContext,
-  toVendorMobileOrderRouteError,
+  executeVendorMobileOrderJsonRoute,
 } from '@/lib/vendor-mobile-order-route'
 import type { VendorMobileOrderScheduleMutationPayload } from '@/types/api-payloads'
 
@@ -20,13 +19,11 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const resolved = await requireVendorMobileOrderRouteContext(req)
-  if (resolved.response) return resolved.response
   const { id } = await context.params
-  const { supabase, user } = resolved.context
-
-  try {
-    const body = await req.json()
+  return executeVendorMobileOrderJsonRoute<Record<string, unknown>, VendorMobileOrderScheduleMutationPayload>(
+    req,
+    '[vendor/mobile-order/schedules/:id PATCH]',
+    async ({ supabase, user }, body) => {
 
     const { data: current, error: fetchError } = await (supabase as any)
       .from('store_order_schedules')
@@ -114,10 +111,10 @@ export async function PATCH(
       return apiError(error.message)
     }
 
-    const payload: VendorMobileOrderScheduleMutationPayload = data
-    return apiOk(payload)
-  } catch (error) {
-    return toVendorMobileOrderRouteError('[vendor/mobile-order/schedules/:id PATCH]', error, {
+      const payload: VendorMobileOrderScheduleMutationPayload = data
+      return payload
+    },
+    {
       badRequest: [
         '不正なステータスです',
         '出店場所は必須です',
@@ -125,6 +122,6 @@ export async function PATCH(
         '出店場所が見つかりません',
       ],
       notFound: ['対象の営業枠が見つかりません'],
-    })
-  }
+    }
+  )
 }
