@@ -8,6 +8,7 @@ import { VendorMobileOrderProductListSection } from '@/components/VendorMobileOr
 import { compressImageFile } from '@/lib/client-image'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import { useVendorMobileOrderAdminResource } from '@/lib/use-vendor-mobile-order-admin-resource'
 import {
   buildFormFromProduct,
   EMPTY_FORM,
@@ -24,10 +25,13 @@ import type {
 } from '@/types/api-payloads'
 
 export default function VendorMobileOrderProductsPage() {
-  const [data, setData] = useState<VendorMobileOrderProductsPayload | null>(null)
+  const { data, loading, error: loadError, setError: setLoadError, load } =
+    useVendorMobileOrderAdminResource<VendorMobileOrderProductsPayload>({
+      endpoint: '/api/vendor/mobile-order/products',
+      errorMessage: '商品一覧の取得に失敗しました',
+    })
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM)
-  const [loading, setLoading] = useState(true)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [inventoryPending, setInventoryPending] = useState(false)
   const [initialInventoryQuantity, setInitialInventoryQuantity] = useState('')
@@ -35,35 +39,20 @@ export default function VendorMobileOrderProductsPage() {
   const [adjustmentReason, setAdjustmentReason] = useState('')
   const { pending, error, message, setError, start, succeed, stop } = useSubmissionFeedback()
 
-  async function load() {
-    try {
-      const response = await fetchApi<VendorMobileOrderProductsPayload>('/api/vendor/mobile-order/products', {
-        cache: 'no-store',
-      })
-      setData(response)
-
-      if (selectedProductId) {
-        const nextSelected = response.products.find((product) => product.id === selectedProductId)
-        if (nextSelected) {
-          setForm(buildFormFromProduct(nextSelected))
-        } else {
-          setSelectedProductId(null)
-          setForm(EMPTY_FORM)
-        }
-      }
-
-      setError(null)
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : '商品一覧の取得に失敗しました')
-      setData(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     void load()
   }, [])
+
+  useEffect(() => {
+    if (!data || !selectedProductId) return
+    const nextSelected = data.products.find((product) => product.id === selectedProductId)
+    if (nextSelected) {
+      setForm(buildFormFromProduct(nextSelected))
+    } else {
+      setSelectedProductId(null)
+      setForm(EMPTY_FORM)
+    }
+  }, [data, selectedProductId])
 
   const selectedProduct = useMemo(
     () => data?.products.find((product) => product.id === selectedProductId) ?? null,
@@ -82,13 +71,13 @@ export default function VendorMobileOrderProductsPage() {
     setInitialInventoryQuantity('')
     setAdjustmentQuantity('')
     setAdjustmentReason('')
-    setError(null)
+    setLoadError(null)
   }
 
   function selectProduct(product: MobileOrderProductRow) {
     setSelectedProductId(product.id)
     setForm(buildFormFromProduct(product))
-    setError(null)
+    setLoadError(null)
   }
 
   async function handleImageChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -175,7 +164,7 @@ export default function VendorMobileOrderProductsPage() {
       })
       await load()
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : '商品の更新に失敗しました')
+      setLoadError(err instanceof ApiClientError ? err.message : '商品の更新に失敗しました')
     }
   }
 
@@ -319,7 +308,7 @@ export default function VendorMobileOrderProductsPage() {
         </div>
       )}
 
-      {error && <p className="alert-danger px-4 py-3 text-sm text-red-700">{error}</p>}
+      {loadError && <p className="alert-danger px-4 py-3 text-sm text-red-700">{loadError}</p>}
       {message && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{message}</p>}
 
       {loading ? (

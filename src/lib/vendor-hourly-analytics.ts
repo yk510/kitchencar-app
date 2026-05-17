@@ -23,6 +23,11 @@ export type HourlyAnalyticsRow = {
   performance: 'high' | 'mid' | 'low'
 }
 
+export type VendorHourlyAnalyticsResult = {
+  rows: HourlyAnalyticsRow[]
+  heatmap: number[][]
+}
+
 function hourLabel(hour: number) {
   return `${String(hour).padStart(2, '0')}:00`
 }
@@ -33,7 +38,7 @@ export async function getVendorHourlyAnalytics(
   scope: AnalyticsScopeFilter,
   start?: string,
   end?: string
-): Promise<HourlyAnalyticsRow[]> {
+): Promise<VendorHourlyAnalyticsResult> {
   let txnQuery = (supabase as any)
     .from('transactions')
     .select('hour_of_day, total_amount, txn_no, event_id, txn_date')
@@ -72,6 +77,7 @@ export async function getVendorHourlyAnalytics(
   const costContext = await loadProductMasterCostContext(supabase, userId)
 
   const txnHourMap = new Map<string, number>()
+  const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0))
   for (const t of (txns ?? []) as any[]) {
     const resolvedEventId = resolveAnalyticsEventId(t.txn_date, t.event_id, stallLogByDate)
     if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
@@ -88,10 +94,12 @@ export async function getVendorHourlyAnalytics(
     if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
     const hour = t.hour_of_day
     if (hour == null) continue
+    const weekday = t.day_of_week
     const entry = hourMap.get(hour)
     if (!entry) continue
     entry.totalSales += t.total_amount ?? 0
     if (t.txn_no) entry.txnSet.add(t.txn_no)
+    if (weekday != null) heatmap[weekday][hour] += t.total_amount ?? 0
   }
 
   for (const s of (sales ?? []) as any[]) {
@@ -112,6 +120,7 @@ export async function getVendorHourlyAnalytics(
     if (!entry) continue
     entry.totalSales += order.totalAmount
     entry.txnSet.add(order.id)
+    heatmap[order.dayOfWeek][order.hourOfDay] += order.totalAmount
   }
   for (const item of mobileOrderAnalytics.items) {
     const order = mobileOrderMap.get(item.orderId)
@@ -158,7 +167,10 @@ export async function getVendorHourlyAnalytics(
     perfMap.set(row.hour, performance)
   })
 
-  return rows
-    .map((row) => ({ ...row, performance: perfMap.get(row.hour) ?? 'mid' }))
-    .sort((a, b) => a.hour - b.hour)
+  return {
+    rows: rows
+      .map((row) => ({ ...row, performance: perfMap.get(row.hour) ?? 'mid' }))
+      .sort((a, b) => a.hour - b.hour),
+    heatmap,
+  }
 }

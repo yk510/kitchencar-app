@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { stripStoreOrderScheduleMetadata } from '@/lib/store-order-schedule-metadata'
+import { useVendorMobileOrderAdminResource } from '@/lib/use-vendor-mobile-order-admin-resource'
 import type {
   StoreOrderScheduleRow,
   VendorLocationOption,
@@ -50,26 +51,15 @@ export default function VendorMobileOrderSchedulesPageClient({
 }: {
   initialData: VendorMobileOrderSchedulesPayload
 }) {
-  const [data, setData] = useState<VendorMobileOrderSchedulesPayload | null>(initialData)
-  const [loading, setLoading] = useState(false)
+  const { data, loading, error, setError, load } =
+    useVendorMobileOrderAdminResource<VendorMobileOrderSchedulesPayload>({
+      endpoint: '/api/vendor/mobile-order/schedules',
+      initialData,
+      errorMessage: '営業スケジュールの取得に失敗しました',
+    })
   const [saving, setSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState(getDefaultFormValues())
-
-  async function load() {
-    setLoading(true)
-    try {
-      const response = await fetchApi<VendorMobileOrderSchedulesPayload>('/api/vendor/mobile-order/schedules')
-      setData(response)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : '営業スケジュールの取得に失敗しました')
-      setData(null)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const groupedSchedules = useMemo(() => {
     if (!data) return []

@@ -19,9 +19,9 @@ async function HourlyAnalyticsContent({
   end?: string
 }) {
   const { supabase, user } = await requireServerSession({ includeProfile: false })
-  const data = await getVendorHourlyAnalytics(supabase, user.id, scope, start, end)
+  const { rows } = await getVendorHourlyAnalytics(supabase, user.id, scope, start, end)
 
-  if (data.length === 0) {
+  if (rows.length === 0) {
     return (
       <div className="soft-panel text-center py-20">
         <p className="section-subtitle">この条件に一致するデータがありません。</p>
@@ -31,7 +31,7 @@ async function HourlyAnalyticsContent({
 
   return (
     <div className="space-y-4">
-      {data.map((row) => {
+      {rows.map((row) => {
         const style =
           row.performance === 'high'
             ? { card: 'bg-green-50 border-green-200', badge: 'badge-soft badge-green', icon: '⏰' }

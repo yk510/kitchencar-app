@@ -8,6 +8,7 @@ import type {
   VendorMobileOrderSchedulesPayload,
   VendorStorePosSettingsPayload,
 } from '@/types/api-payloads'
+import { useVendorMobileOrderAdminResource } from '@/lib/use-vendor-mobile-order-admin-resource'
 
 const STORE_POS_PAYMENT_METHOD_OPTIONS: Array<{
   value: StorePosPaymentMethod
@@ -51,9 +52,12 @@ export default function VendorMobileOrderPageClient({
 }: {
   initialData: VendorMobileOrderSchedulesPayload
 }) {
-  const [data, setData] = useState<VendorMobileOrderSchedulesPayload | null>(initialData)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { data, setData, loading, error, setError, load } =
+    useVendorMobileOrderAdminResource<VendorMobileOrderSchedulesPayload>({
+      endpoint: '/api/vendor/mobile-order/schedules',
+      initialData,
+      errorMessage: 'モバイルオーダー設定の取得に失敗しました',
+    })
   const [origin, setOrigin] = useState<string | null>(null)
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
   const [storePosEnabled, setStorePosEnabled] = useState(true)
@@ -71,24 +75,13 @@ export default function VendorMobileOrderPageClient({
     setStorePosPaymentMethods(methods.length > 0 ? methods : (['cash', 'paypay', 'other'] as StorePosPaymentMethod[]))
   }
 
-  async function load() {
-    setLoading(true)
-    try {
-      const response = await fetchApi<VendorMobileOrderSchedulesPayload>('/api/vendor/mobile-order/schedules')
-      setData(response)
-      hydrateStorePosSettings(response)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'モバイルオーダー設定の取得に失敗しました')
-      setData(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     hydrateStorePosSettings(initialData)
   }, [initialData])
+
+  useEffect(() => {
+    if (data) hydrateStorePosSettings(data)
+  }, [data])
 
   useEffect(() => {
     setOrigin(window.location.origin)

@@ -1,77 +1,15 @@
 import { NextRequest } from 'next/server'
-import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
-import { normalizeAnalyticsDate } from '@/lib/analytics-date'
-import { formatVendorHourlyAnalyticsPayload } from '@/lib/vendor-analytics-formatters'
-import {
-  buildStallLogResolutionMap,
-  matchesAnalyticsScope,
-  resolveAnalyticsEventId,
-} from '@/lib/analytics-resolution'
-import { fetchMobileOrderAnalyticsData } from '@/lib/mobile-order-analytics'
-import { getVendorHourlyAnalytics } from '@/lib/vendor-hourly-analytics'
-import { normalizeAnalyticsScope } from '@/lib/vendor-product-analytics'
+import { requireVendorAnalyticsRouteContext } from '@/lib/vendor-analytics-api'
+import { loadVendorHourlyAnalyticsPayload } from '@/lib/vendor-analytics-loaders'
 export async function GET(req: NextRequest) {
-  const auth = await requireRouteSession(req)
-  if (auth.response) return auth.response
-  const { supabase, user } = auth.session
-  const scope = normalizeAnalyticsScope(req.nextUrl.searchParams.get('scope') ?? undefined)
-  const start = normalizeAnalyticsDate(req.nextUrl.searchParams.get('start') ?? undefined)
-  const end = normalizeAnalyticsDate(req.nextUrl.searchParams.get('end') ?? undefined)
+  const resolved = await requireVendorAnalyticsRouteContext(req)
+  if (resolved.response) return resolved.response
+  const { supabase, userId, scope, start, end } = resolved.context
 
-  let txnsQuery = (supabase as any)
-    .from('transactions')
-    .select('hour_of_day, day_of_week, total_amount, txn_date, event_id')
-    .eq('is_return', false)
-
-  if (start) txnsQuery = txnsQuery.gte('txn_date', start)
-  if (end) txnsQuery = txnsQuery.lte('txn_date', end)
-
-  const { data: txns, error } = await txnsQuery
-  if (error) return apiError(error.message)
-
-  let stallLogsQuery = (supabase as any)
-    .from('stall_logs')
-    .select('log_date, event_id')
-
-  if (start) stallLogsQuery = stallLogsQuery.gte('log_date', start)
-  if (end) stallLogsQuery = stallLogsQuery.lte('log_date', end)
-
-  const { data: stallLogs, error: stallLogsErr } = await stallLogsQuery
-  if (stallLogsErr) return apiError(stallLogsErr.message)
-
-  const stallLogByDate = buildStallLogResolutionMap((stallLogs ?? []) as any[])
-  const mobileOrderAnalytics = await fetchMobileOrderAnalyticsData(supabase, {
-    scope,
-    start,
-    end,
-    stallLogByDate,
-  })
-
-  const hourTotals = Array.from({ length: 24 }, () => ({ total: 0, count: 0 }))
-  const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0))
-
-  for (const t of ((txns ?? []) as any[])) {
-    const resolvedEventId = resolveAnalyticsEventId(t.txn_date, t.event_id, stallLogByDate)
-    if (!matchesAnalyticsScope(scope, resolvedEventId)) continue
-
-    const h = t.hour_of_day
-    const dow = t.day_of_week
-    if (h == null || dow == null) continue
-    hourTotals[h].total += t.total_amount
-    hourTotals[h].count += 1
-    heatmap[dow][h] += t.total_amount
+  try {
+    return apiOk(await loadVendorHourlyAnalyticsPayload(supabase, userId, scope, start, end))
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : 'サーバーエラー')
   }
-
-  for (const order of mobileOrderAnalytics.orders) {
-    const h = order.hourOfDay
-    const dow = order.dayOfWeek
-    if (h == null || dow == null) continue
-    hourTotals[h].total += order.totalAmount
-    hourTotals[h].count += 1
-    heatmap[dow][h] += order.totalAmount
-  }
-
-  const hourlyData = await getVendorHourlyAnalytics(supabase, user.id, scope, start, end)
-  return apiOk(formatVendorHourlyAnalyticsPayload(hourlyData, heatmap))
 }

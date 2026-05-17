@@ -6,6 +6,7 @@ import VendorMobileOrderOptionGroupFormSection from '@/components/VendorMobileOr
 import VendorMobileOrderOptionGroupListSection from '@/components/VendorMobileOrderOptionGroupListSection'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { useSubmissionFeedback } from '@/lib/use-submission-feedback'
+import { useVendorMobileOrderAdminResource } from '@/lib/use-vendor-mobile-order-admin-resource'
 import {
   buildFormFromOptionGroup,
   EMPTY_CHOICE,
@@ -20,41 +21,29 @@ import type {
 } from '@/types/api-payloads'
 
 export default function VendorMobileOrderOptionsPage() {
-  const [data, setData] = useState<VendorMobileOrderOptionsPayload | null>(null)
+  const { data, loading, error, setError, load } =
+    useVendorMobileOrderAdminResource<VendorMobileOrderOptionsPayload>({
+      endpoint: '/api/vendor/mobile-order/options',
+      errorMessage: 'オプション管理データの取得に失敗しました',
+    })
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [form, setForm] = useState<OptionGroupForm>(EMPTY_FORM)
-  const [loading, setLoading] = useState(true)
-  const { pending, error, message, setError, start, succeed, stop } = useSubmissionFeedback()
-
-  async function load() {
-    try {
-      const response = await fetchApi<VendorMobileOrderOptionsPayload>('/api/vendor/mobile-order/options', {
-        cache: 'no-store',
-      })
-      setData(response)
-
-      if (selectedGroupId) {
-        const nextSelected = response.optionGroups.find((group) => group.id === selectedGroupId)
-        if (nextSelected) {
-          setForm(buildFormFromOptionGroup(nextSelected))
-        } else {
-          setSelectedGroupId(null)
-          setForm(EMPTY_FORM)
-        }
-      }
-
-      setError(null)
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'オプション管理データの取得に失敗しました')
-      setData(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { pending, message, start, succeed, stop } = useSubmissionFeedback()
 
   useEffect(() => {
     void load()
   }, [])
+
+  useEffect(() => {
+    if (!data || !selectedGroupId) return
+    const nextSelected = data.optionGroups.find((group) => group.id === selectedGroupId)
+    if (nextSelected) {
+      setForm(buildFormFromOptionGroup(nextSelected))
+    } else {
+      setSelectedGroupId(null)
+      setForm(EMPTY_FORM)
+    }
+  }, [data, selectedGroupId])
 
   const selectedGroup = useMemo(
     () => data?.optionGroups.find((group) => group.id === selectedGroupId) ?? null,
