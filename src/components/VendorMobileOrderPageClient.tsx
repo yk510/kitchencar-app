@@ -4,6 +4,11 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { buildReceiptPrintPreviewPayload } from '@/lib/receipt-printing-payload'
+import {
+  getWebBluetoothEnvironmentSummary,
+  runMpB20WebBluetoothProbe,
+  type WebBluetoothProbeResult,
+} from '@/lib/receipt-printing/web-bluetooth-mvp'
 import type {
   ReceiptPrintMode,
   ReceiptPrinterProvider,
@@ -101,6 +106,8 @@ export default function VendorMobileOrderPageClient({
   const [savingReceiptSettings, setSavingReceiptSettings] = useState(false)
   const [receiptSettingsMessage, setReceiptSettingsMessage] = useState<string | null>(null)
   const [testingReceiptPrinter, setTestingReceiptPrinter] = useState(false)
+  const [probingWebBluetooth, setProbingWebBluetooth] = useState(false)
+  const [webBluetoothProbeResult, setWebBluetoothProbeResult] = useState<WebBluetoothProbeResult | null>(null)
 
   function hydrateStorePosSettings(source: VendorMobileOrderSchedulesPayload | null) {
     setStorePosEnabled(source?.store.is_store_pos_enabled !== false)
@@ -132,6 +139,8 @@ export default function VendorMobileOrderPageClient({
   useEffect(() => {
     setOrigin(window.location.origin)
   }, [])
+
+  const webBluetoothEnvironment = useMemo(() => getWebBluetoothEnvironmentSummary(), [])
 
   function toggleStorePosPaymentMethod(method: StorePosPaymentMethod) {
     setStorePosPaymentMethods((current) =>
@@ -268,6 +277,16 @@ export default function VendorMobileOrderPageClient({
       }
     } finally {
       setTestingReceiptPrinter(false)
+    }
+  }
+
+  async function handleRunWebBluetoothProbe() {
+    setProbingWebBluetooth(true)
+    try {
+      const result = await runMpB20WebBluetoothProbe()
+      setWebBluetoothProbeResult(result)
+    } finally {
+      setProbingWebBluetooth(false)
     }
   }
 
@@ -552,6 +571,60 @@ export default function VendorMobileOrderPageClient({
                     <div className="pt-4 text-center text-xs text-slate-500">
                       <p>{receiptPreview.footer.store_name}</p>
                       <p className="mt-1">{receiptPreview.footer.ordered_at_label}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 rounded-[28px] border border-[var(--line-soft)] bg-white p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Android + Bluetooth 検証</p>
+                    <p className="mt-1 text-xs text-gray-500">Ticket 2 として、Redmi Pad SE と MP-B20 の組み合わせで Web Bluetooth が使えるかを先に確認します。</p>
+                  </div>
+                  <div className={`rounded-full px-3 py-1 text-xs font-semibold ${webBluetoothEnvironment.supported ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {webBluetoothEnvironment.browser_label}
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                  <div className="rounded-[24px] border border-dashed border-[var(--line-soft)] bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                    <p className="font-semibold text-slate-800">確認ポイント</p>
+                    <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                      <li>1. Android Chrome から MP-B20 を選択できるか</li>
+                      <li>2. 選択後に GATT 接続まで進めるか</li>
+                      <li>3. 失敗した場合、補助アプリ方式へ切り替える根拠になるか</li>
+                    </ul>
+                  </div>
+                  <div className="rounded-[24px] border border-[var(--line-soft)] bg-[#fbfdff] px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Web Bluetooth 接続チェック</p>
+                        <p className="mt-1 text-xs text-gray-500">MP-B20 が見えるか、GATT 接続まで進めるかをこの端末で確認します。</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRunWebBluetoothProbe()}
+                        disabled={probingWebBluetooth}
+                        className="rounded-full border border-emerald-200 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        {probingWebBluetooth ? '確認中...' : 'Web Bluetooth を試す'}
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-2 text-xs text-gray-600">
+                      <p>対応判定: <span className="font-semibold text-gray-800">{webBluetoothEnvironment.supported ? '利用可能' : '未対応'}</span></p>
+                      <p>推奨ブラウザ: <span className="font-semibold text-gray-800">Android Chrome</span></p>
+                      {webBluetoothProbeResult ? (
+                        <div className="rounded-2xl border border-[var(--line-soft)] bg-white px-4 py-4">
+                          <p>選択プリンター: <span className="font-semibold text-gray-800">{webBluetoothProbeResult.device_name ?? '未選択'}</span></p>
+                          <p className="mt-1">GATT 接続可否: <span className="font-semibold text-gray-800">{webBluetoothProbeResult.gatt_available ? (webBluetoothProbeResult.connected ? '接続成功' : 'GATT あり・接続失敗') : 'GATT なし'}</span></p>
+                          {webBluetoothProbeResult.error_message ? (
+                            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-amber-700">{webBluetoothProbeResult.error_message}</p>
+                          ) : (
+                            <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700">端末から MP-B20 を選択し、Web Bluetooth での確認が通りました。</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="rounded-xl bg-slate-100 px-3 py-2 text-slate-600">まだ確認していません。Android Chrome でボタンを押して確認してください。</p>
+                      )}
                     </div>
                   </div>
                 </div>

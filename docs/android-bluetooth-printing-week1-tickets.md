@@ -33,6 +33,11 @@
 成果物:
 - 技術方針メモ
 
+方針:
+- 先に `Android Chrome + Web Bluetooth` を試す
+- `MP-B20` が見えるか、GATT 接続まで進めるかを確認する
+- ここで不安定なら、同じ端末・同じプリンターのまま補助アプリ方式へ進む
+
 ## Ticket 3
 
 **既存 ReceiptPrintPayload の Bluetooth 再利用案を整理する**
