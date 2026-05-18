@@ -248,6 +248,13 @@ export type VendorMobileOrderSettingsPayload = {
   persistence: 'hybrid' | 'notes_fallback'
 }
 
+export type VendorReceiptPrintProbePayload = {
+  printer_provider: ReceiptPrinterProvider
+  printer_endpoint: string
+  printer_label: string | null
+  result: VendorMobileOrderPrintResultPayload['result']
+}
+
 export type MobileOrderProductRow = Database['public']['Tables']['mobile_order_products']['Row']
 
 export type VendorMobileOrderProductsPayload = {

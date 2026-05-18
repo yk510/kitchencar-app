@@ -8,6 +8,7 @@ import type {
   ReceiptPrintMode,
   ReceiptPrinterProvider,
   StorePosPaymentMethod,
+  VendorReceiptPrintProbePayload,
   VendorMobileOrderSchedulesPayload,
   VendorMobileOrderSettingsPayload,
 } from '@/types/api-payloads'
@@ -99,6 +100,7 @@ export default function VendorMobileOrderPageClient({
   const [receiptPrintMode, setReceiptPrintMode] = useState<ReceiptPrintMode>('manual_dashboard')
   const [savingReceiptSettings, setSavingReceiptSettings] = useState(false)
   const [receiptSettingsMessage, setReceiptSettingsMessage] = useState<string | null>(null)
+  const [testingReceiptPrinter, setTestingReceiptPrinter] = useState(false)
 
   function hydrateStorePosSettings(source: VendorMobileOrderSchedulesPayload | null) {
     setStorePosEnabled(source?.store.is_store_pos_enabled !== false)
@@ -230,6 +232,42 @@ export default function VendorMobileOrderPageClient({
       setReceiptSettingsMessage(err instanceof ApiClientError ? err.message : '印刷設定の保存に失敗しました')
     } finally {
       setSavingReceiptSettings(false)
+    }
+  }
+
+  async function handleTestReceiptPrinter() {
+    setTestingReceiptPrinter(true)
+    setReceiptSettingsMessage(null)
+
+    try {
+      await fetchApi<VendorReceiptPrintProbePayload>('/api/vendor/mobile-order/settings/print-probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      setReceiptSettingsMessage('テスト印刷を送信しました。プリンターで疎通確認してください。')
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'テスト印刷に失敗しました'
+
+      if (
+        message.includes('プリンター接続先') ||
+        message.includes('URL 形式') ||
+        message.includes('http または https')
+      ) {
+        setReceiptSettingsMessage(`テスト印刷に失敗しました。接続先設定を確認してください。詳細: ${message}`)
+      } else if (
+        message.includes('接続できませんでした') ||
+        message.includes('タイムアウト') ||
+        message.includes('送信に失敗しました')
+      ) {
+        setReceiptSettingsMessage(
+          `テスト印刷に失敗しました。プリンターの電源、同じネットワークへの接続、接続先URLを確認してから再試行してください。詳細: ${message}`
+        )
+      } else {
+        setReceiptSettingsMessage(`テスト印刷に失敗しました。${message}`)
+      }
+    } finally {
+      setTestingReceiptPrinter(false)
     }
   }
 
@@ -370,6 +408,14 @@ export default function VendorMobileOrderPageClient({
                 </div>
                 <div className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">店舗名・注文番号・注文日時を印字</div>
               </div>
+              <div className="mt-4 rounded-[24px] border border-dashed border-sky-200 bg-sky-50/70 px-4 py-4 text-sm text-sky-900">
+                <p className="font-semibold">現場で止まりにくくするための確認ポイント</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-sky-800">
+                  <li>1. 印刷設定を保存したあと、先に「接続テスト」で疎通確認してください。</li>
+                  <li>2. 自動印刷に失敗しても、会計記録は残ります。注文管理の「レシートを再印刷」から再試行できます。</li>
+                  <li>3. 接続失敗時は、プリンター電源・同一ネットワーク・接続先URLの順で確認すると切り分けやすいです。</li>
+                </ul>
+              </div>
               <div className="mt-5 grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
                 <div className="rounded-[28px] border border-[var(--line-soft)] bg-white px-5 py-5">
                   <label className="flex items-start justify-between gap-4">
@@ -445,15 +491,25 @@ export default function VendorMobileOrderPageClient({
                     </div>
                   </div>
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-gray-500">まずは注文管理画面からの手動印刷だけを対象にします。</p>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveReceiptSettings()}
-                      disabled={savingReceiptSettings}
-                      className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:opacity-50"
-                    >
-                      {savingReceiptSettings ? '保存中...' : '印刷設定を保存'}
-                    </button>
+                    <p className="text-xs text-gray-500">注文管理で料金受領したタイミングで自動印刷し、必要時は再印刷します。</p>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleTestReceiptPrinter()}
+                        disabled={testingReceiptPrinter || !receiptPrinterEndpoint.trim()}
+                        className="rounded-full border border-sky-200 bg-white px-5 py-2.5 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50 disabled:opacity-50"
+                      >
+                        {testingReceiptPrinter ? 'テスト送信中...' : '接続テスト'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveReceiptSettings()}
+                        disabled={savingReceiptSettings}
+                        className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        {savingReceiptSettings ? '保存中...' : '印刷設定を保存'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

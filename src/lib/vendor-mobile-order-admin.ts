@@ -15,14 +15,22 @@ import type {
   VendorMobileOrderSchedulesPayload,
 } from '@/types/api-payloads'
 
+export async function loadVendorMobileOrderAdminStoreContext(
+  supabase: any,
+  user: { id: string },
+  businessName?: string | null
+) {
+  return ensureVendorStoreResources(supabase, user, {
+    businessName: businessName ?? null,
+  })
+}
+
 export async function loadVendorMobileOrderSchedulesPayload(
   supabase: any,
   user: { id: string },
   businessName?: string | null
 ): Promise<VendorMobileOrderSchedulesPayload> {
-  const { store, orderPage } = await ensureVendorStoreResources(supabase, user, {
-    businessName: businessName ?? null,
-  })
+  const { store, orderPage } = await loadVendorMobileOrderAdminStoreContext(supabase, user, businessName)
 
   const { data: schedules, error } = await (supabase as any)
     .from('store_order_schedules')
@@ -53,9 +61,7 @@ export async function loadVendorMobileOrderProductsPayload(
   user: { id: string },
   businessName?: string | null
 ): Promise<VendorMobileOrderProductsPayload> {
-  const { store } = await ensureVendorStoreResources(supabase, user, {
-    businessName: businessName ?? null,
-  })
+  const { store } = await loadVendorMobileOrderAdminStoreContext(supabase, user, businessName)
 
   const [{ data: products, error }, { data: schedules, error: schedulesError }] = await Promise.all([
     (supabase as any)

@@ -12,6 +12,22 @@ import type {
   VendorMobileOrderOrderMutationPayload,
 } from '@/types/api-payloads'
 
+function buildReceiptPrintFollowupMessage(errorMessage: string, isReprint: boolean) {
+  if (errorMessage.includes('プリンター接続先')) {
+    return `${isReprint ? '再印刷' : '自動印刷'}に失敗しました。モバイルオーダー設定でプリンター接続先を確認してください。`
+  }
+
+  if (
+    errorMessage.includes('接続できませんでした') ||
+    errorMessage.includes('タイムアウト') ||
+    errorMessage.includes('送信に失敗しました')
+  ) {
+    return `${isReprint ? '再印刷' : '自動印刷'}に失敗しました。プリンターの電源、同じネットワークへの接続、接続先URLを確認してから再試行してください。`
+  }
+
+  return `${isReprint ? '再印刷' : '自動印刷'}に失敗しました。設定確認後にもう一度お試しください。`
+}
+
 type UseVendorMobileOrderDashboardActionsArgs = {
   orders: VendorMobileOrderListItem[]
   counts: {
@@ -207,7 +223,7 @@ export function useVendorMobileOrderDashboardActions({
             setMessage(`注文 ${orderNumber} の料金受領を記録し、レシートを印刷しました`)
           } else {
             setMessage(
-              `注文 ${orderNumber} の料金受領を記録しました。レシート印刷に失敗しました: ${response.receipt_print.error_message ?? '不明なエラー'}`
+              `注文 ${orderNumber} の料金受領を記録しました。${buildReceiptPrintFollowupMessage(response.receipt_print.error_message ?? '不明なエラー', false)}`
             )
           }
         } else {
@@ -252,7 +268,8 @@ export function useVendorMobileOrderDashboardActions({
         })
         setMessage(`注文 ${orderNumber} のレシートを再印刷しました`)
       } catch (err) {
-        setError(err instanceof ApiClientError ? err.message : 'レシートの再印刷に失敗しました')
+        const errorMessage = err instanceof ApiClientError ? err.message : 'レシートの再印刷に失敗しました'
+        setError(buildReceiptPrintFollowupMessage(errorMessage, true))
       } finally {
         setPendingReprintOrderId(null)
       }
