@@ -111,9 +111,11 @@ export default function VendorMobileOrderOrdersPage() {
     pendingStatus,
     pendingPaymentReceiptOrderId,
     pendingNotificationId,
+    pendingReprintOrderId,
     handleChangeStatus,
     handleSendNotification,
     handleReceivePayment,
+    handleReprintReceipt,
   } = useVendorMobileOrderDashboardActions({
     orders,
     counts,
@@ -283,11 +285,14 @@ export default function VendorMobileOrderOrdersPage() {
                     status={selectedOrder.status}
                     paymentStatus={selectedOrder.payment_status}
                     isStorePos={isStorePosOrder(selectedOrder)}
+                    receiptPrintEnabled={dashboard.store.is_receipt_print_enabled === true}
                     pendingStatus={pendingStatus}
                     pendingPaymentReceiptOrderId={pendingPaymentReceiptOrderId}
+                    pendingReprintOrderId={pendingReprintOrderId}
                     nextActions={NEXT_ACTIONS[selectedOrder.status] ?? []}
                     onReceivePayment={handleReceivePayment}
                     onChangeStatus={handleChangeStatus}
+                    onReprintReceipt={handleReprintReceipt}
                   />
 
                   <VendorMobileOrderNotificationsSection

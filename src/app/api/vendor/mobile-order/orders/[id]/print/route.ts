@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { apiError } from '@/lib/api-response'
-import { sendEpsonReceiptPrint, EpsonEposPrintError } from '@/lib/receipt-printing/epson-epos'
-import { buildReceiptPrintPayload } from '@/lib/receipt-printing-payload'
+import { EpsonEposPrintError } from '@/lib/receipt-printing/epson-epos'
+import { sendVendorOrderReceipt } from '@/lib/receipt-printing/send-vendor-order-receipt'
 import { getVendorOrderReceiptPrintContext } from '@/lib/vendor-mobile-order-dashboard-api'
 import { executeVendorMobileOrderRoute } from '@/lib/vendor-mobile-order-route'
 import type { VendorMobileOrderPrintResultPayload } from '@/types/api-payloads'
@@ -19,6 +19,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params
+  const body = await req.json().catch(() => ({})) as { is_reprint?: boolean }
 
   return executeVendorMobileOrderRoute<VendorMobileOrderPrintResultPayload>(
     req,
@@ -34,26 +35,13 @@ export async function POST(
         return apiError('未対応のプリンター方式です', 409)
       }
 
-      const payload = buildReceiptPrintPayload({
-        storeName: store.store_name,
-        order,
-      })
-
       try {
-        const result = await sendEpsonReceiptPrint({
-          endpoint: receiptSettings.receipt_printer_endpoint ?? '',
-          payload,
+        return sendVendorOrderReceipt({
+          storeName: store.store_name,
+          order,
+          receiptSettings,
+          isReprint: body.is_reprint === true,
         })
-
-        return {
-          order_id: order.id,
-          order_number: order.order_number,
-          printer_provider: receiptSettings.receipt_printer_provider,
-          printer_endpoint: receiptSettings.receipt_printer_endpoint ?? '',
-          printer_label: receiptSettings.receipt_printer_label,
-          print_mode: receiptSettings.receipt_print_mode,
-          result,
-        }
       } catch (error) {
         if (error instanceof EpsonEposPrintError) {
           return toReceiptPrintErrorResponse(error)

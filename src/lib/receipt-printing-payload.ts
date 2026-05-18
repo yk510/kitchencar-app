@@ -45,6 +45,7 @@ export function buildReceiptPrintLinePayload(
 export function buildReceiptPrintPayload(args: {
   storeName: string
   order: VendorMobileOrderDashboardOrder
+  isReprint?: boolean
 }): ReceiptPrintPayload {
   const items = args.order.mobile_order_items.map(buildReceiptPrintLinePayload)
 
@@ -54,6 +55,7 @@ export function buildReceiptPrintPayload(args: {
     header: {
       label: '注文番号',
       value: args.order.order_number,
+      badge_label: args.isReprint ? '再印刷' : null,
     },
     body: {
       label: '注文内容',
@@ -78,6 +80,7 @@ export function buildReceiptPrintPreviewPayload(storeName: string): ReceiptPrint
     header: {
       label: '注文番号',
       value: '1842-0012',
+      badge_label: null,
     },
     body: {
       label: '注文内容',

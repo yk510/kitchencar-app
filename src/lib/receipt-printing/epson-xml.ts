@@ -31,10 +31,17 @@ function buildReceiptBodyLines(payload: ReceiptPrintPayload) {
 export function buildEpsonReceiptPrintXml(payload: ReceiptPrintPayload) {
   const bodyLines = buildReceiptBodyLines(payload)
   const footerLines = [payload.footer.store_name, payload.footer.ordered_at_label]
+  const headerBadgeLines = payload.header.badge_label ? [`【${payload.header.badge_label}】`] : []
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">`,
+    ...(headerBadgeLines.length > 0
+      ? [
+          `<text align="center">${joinTextLines(headerBadgeLines)}</text>`,
+          `<feed line="1"/>`,
+        ]
+      : []),
     `<text align="center">${joinTextLines([payload.header.label])}</text>`,
     `<feed line="1"/>`,
     `<text align="center" width="2" height="2" em="true">${joinTextLines([payload.header.value])}</text>`,

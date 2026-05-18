@@ -1,6 +1,8 @@
 import { isStorePosOrder, resolveMobileOrderPaymentMethod } from '@/lib/mobile-order-fields'
+import { tryAutoPrintVendorOrderReceipt } from '@/lib/receipt-printing/send-vendor-order-receipt'
 import { sendMobileOrderLineNotification } from '@/lib/mobile-order-notifications'
 import {
+  getVendorOrderReceiptPrintContext,
   loadVendorOwnedNotification,
   loadVendorOwnedOrder,
 } from '@/lib/vendor-mobile-order-dashboard-api'
@@ -107,7 +109,17 @@ export async function receiveVendorOrderPayment(
     },
   ])
 
-  return paidOrder as VendorMobileOrderOrderMutationPayload
+  const printContext = await getVendorOrderReceiptPrintContext(supabase, user, currentOrder.id)
+  const receiptPrint = await tryAutoPrintVendorOrderReceipt({
+    storeName: printContext.store.store_name,
+    order: printContext.order,
+    receiptSettings: printContext.receiptSettings,
+  })
+
+  return {
+    ...(paidOrder as VendorMobileOrderOrderMutationPayload),
+    receipt_print: receiptPrint,
+  }
 }
 
 export async function changeVendorOrderStatus(

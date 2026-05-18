@@ -6,6 +6,7 @@ import { getNotificationTypeLabel } from '@/lib/vendor-mobile-order-notification
 import { STATUS_LABELS } from '@/lib/vendor-mobile-order-order-list'
 import type {
   MobileOrderNotificationRow,
+  VendorMobileOrderPrintResultPayload,
   VendorMobileOrderDashboardOrder,
   VendorMobileOrderListItem,
   VendorMobileOrderOrderMutationPayload,
@@ -71,6 +72,7 @@ export function useVendorMobileOrderDashboardActions({
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
   const [pendingPaymentReceiptOrderId, setPendingPaymentReceiptOrderId] = useState<string | null>(null)
   const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null)
+  const [pendingReprintOrderId, setPendingReprintOrderId] = useState<string | null>(null)
 
   const refreshOrderSurface = useCallback(
     async (orderId: string) => {
@@ -194,12 +196,24 @@ export function useVendorMobileOrderDashboardActions({
       }))
 
       try {
-        await fetchApi<VendorMobileOrderOrderMutationPayload>(`/api/vendor/mobile-order/orders/${orderId}`, {
+        const response = await fetchApi<VendorMobileOrderOrderMutationPayload>(`/api/vendor/mobile-order/orders/${orderId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'receive_payment' }),
         })
-        setMessage(`注文 ${orderNumber} の料金受領を記録しました`)
+
+        if (response.receipt_print?.attempted) {
+          if (response.receipt_print.printed) {
+            setMessage(`注文 ${orderNumber} の料金受領を記録し、レシートを印刷しました`)
+          } else {
+            setMessage(
+              `注文 ${orderNumber} の料金受領を記録しました。レシート印刷に失敗しました: ${response.receipt_print.error_message ?? '不明なエラー'}`
+            )
+          }
+        } else {
+          setMessage(`注文 ${orderNumber} の料金受領を記録しました`)
+        }
+
         void refreshOrderSurface(orderId)
       } catch (err) {
         setOrders(previousOrders)
@@ -225,12 +239,35 @@ export function useVendorMobileOrderDashboardActions({
     ]
   )
 
+  const handleReprintReceipt = useCallback(
+    async (orderId: string, orderNumber: string) => {
+      setPendingReprintOrderId(orderId)
+      setMessage(null)
+
+      try {
+        await fetchApi<VendorMobileOrderPrintResultPayload>(`/api/vendor/mobile-order/orders/${orderId}/print`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_reprint: true }),
+        })
+        setMessage(`注文 ${orderNumber} のレシートを再印刷しました`)
+      } catch (err) {
+        setError(err instanceof ApiClientError ? err.message : 'レシートの再印刷に失敗しました')
+      } finally {
+        setPendingReprintOrderId(null)
+      }
+    },
+    [setError, setMessage]
+  )
+
   return {
     pendingStatus,
     pendingPaymentReceiptOrderId,
     pendingNotificationId,
+    pendingReprintOrderId,
     handleChangeStatus,
     handleSendNotification,
     handleReceivePayment,
+    handleReprintReceipt,
   }
 }

@@ -424,8 +424,6 @@ export type VendorMobileOrderOrderDetailPayload = {
   order: VendorMobileOrderDashboardOrder | null
 }
 
-export type VendorMobileOrderOrderMutationPayload = MobileOrderRow
-
 export type ReceiptPrintLinePayload = {
   order_item_id: string
   product_name: string
@@ -445,6 +443,7 @@ export type ReceiptPrintPayload = {
   header: {
     label: '注文番号'
     value: string
+    badge_label: string | null
   }
   body: {
     label: '注文内容'
@@ -459,9 +458,18 @@ export type ReceiptPrintPayload = {
   }
 }
 
+export type VendorMobileOrderReceiptPrintStatusPayload = {
+  attempted: boolean
+  printed: boolean
+  is_reprint: boolean
+  error_message: string | null
+  result: VendorMobileOrderPrintResultPayload['result'] | null
+}
+
 export type VendorMobileOrderPrintResultPayload = {
   order_id: string
   order_number: string
+  is_reprint: boolean
   printer_provider: ReceiptPrinterProvider
   printer_endpoint: string
   printer_label: string | null
@@ -473,4 +481,8 @@ export type VendorMobileOrderPrintResultPayload = {
     printer_code: string | null
     response_text: string
   }
+}
+
+export type VendorMobileOrderOrderMutationPayload = MobileOrderRow & {
+  receipt_print?: VendorMobileOrderReceiptPrintStatusPayload
 }
