@@ -861,12 +861,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <div className="mb-4 flex h-44 items-end justify-center overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-[#f8fbff] p-3">
+                        <div className="mb-4 flex h-44 items-center justify-center overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-[#f8fbff] p-3">
                           {product.image_url ? (
                             <img
                               src={product.image_url}
                               alt={product.name}
-                              className="h-full w-full object-contain object-bottom"
+                              className="h-full w-full object-contain object-center"
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">
@@ -938,12 +938,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                     <div className="rounded-[28px] bg-[#fbfdff] px-5 py-5 ring-1 ring-[var(--line-soft)]">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <div className="mb-4 flex h-52 items-end justify-center overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-white p-4">
+                          <div className="mb-4 flex h-52 items-center justify-center overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-white p-4">
                             {selectedProduct.image_url ? (
                               <img
                                 src={selectedProduct.image_url}
                                 alt={selectedProduct.name}
-                                className="h-full w-full object-contain object-bottom"
+                                className="h-full w-full object-contain object-center"
                               />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">
