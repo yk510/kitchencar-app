@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { buildReceiptPrintPreviewPayload } from '@/lib/receipt-printing-payload'
 import type {
   ReceiptPrintMode,
   ReceiptPrinterProvider,
@@ -241,6 +242,10 @@ export default function VendorMobileOrderPageClient({
   const liffOrderUrl = data && liffId
     ? `https://liff.line.me/${liffId}?token=${encodeURIComponent(data.orderPage.public_token)}`
     : null
+  const receiptPreview = useMemo(
+    () => buildReceiptPrintPreviewPayload(data?.store.store_name ?? '店舗名サンプル'),
+    [data?.store.store_name]
+  )
   const qrTargetUrl = liffOrderUrl ?? publicOrderUrl
   const qrImageUrl = qrTargetUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(qrTargetUrl)}`
@@ -449,6 +454,49 @@ export default function VendorMobileOrderPageClient({
                     >
                       {savingReceiptSettings ? '保存中...' : '印刷設定を保存'}
                     </button>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 rounded-[28px] border border-[var(--line-soft)] bg-white p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">印字イメージ</p>
+                    <p className="mt-1 text-xs text-gray-500">注文番号を主表示にして、注文内容を補足、店舗名と注文日時をフッターに置く想定です。</p>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">プレビュー</div>
+                </div>
+                <div className="mt-4 flex justify-center">
+                  <div className="w-full max-w-[420px] rounded-[28px] border border-dashed border-slate-300 bg-[#fffdf8] px-6 py-6 shadow-inner">
+                    <div className="border-b border-dashed border-slate-300 pb-4 text-center">
+                      <p className="text-[11px] font-semibold tracking-[0.2em] text-slate-500">{receiptPreview.header.label}</p>
+                      <p className="mt-2 text-4xl font-black tracking-[0.08em] text-slate-900">{receiptPreview.header.value}</p>
+                    </div>
+                    <div className="border-b border-dashed border-slate-300 py-4">
+                      <p className="text-xs font-semibold tracking-[0.14em] text-slate-500">{receiptPreview.body.label}</p>
+                      <div className="mt-3 space-y-3">
+                        {receiptPreview.body.items.map((item) => (
+                          <div key={item.order_item_id} className="space-y-1">
+                            <div className="flex items-start justify-between gap-4 text-sm font-semibold text-slate-800">
+                              <span>{item.product_name}</span>
+                              <span>×{item.quantity}</span>
+                            </div>
+                            {item.options.length > 0 && (
+                              <div className="space-y-1 pl-3 text-xs text-slate-500">
+                                {item.options.map((option, index) => (
+                                  <p key={`${item.order_item_id}-${index}`}>
+                                    {option.option_group_name}: {option.option_choice_name}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pt-4 text-center text-xs text-slate-500">
+                      <p>{receiptPreview.footer.store_name}</p>
+                      <p className="mt-1">{receiptPreview.footer.ordered_at_label}</p>
+                    </div>
                   </div>
                 </div>
               </div>

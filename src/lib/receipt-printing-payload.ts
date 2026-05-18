@@ -69,3 +69,54 @@ export function buildReceiptPrintPayload(args: {
   }
 }
 
+export function buildReceiptPrintPreviewPayload(storeName: string): ReceiptPrintPayload {
+  const orderedAt = new Date().toISOString()
+
+  return {
+    order_id: 'preview-order',
+    order_source: 'store_pos',
+    header: {
+      label: '注文番号',
+      value: '1842-0012',
+    },
+    body: {
+      label: '注文内容',
+      items: [
+        {
+          order_item_id: 'preview-item-1',
+          product_name: '牛すじカレー',
+          quantity: 2,
+          unit_price: 1200,
+          line_total_amount: 2400,
+          options: [
+            {
+              option_group_name: '辛さ',
+              option_choice_name: '中辛',
+              price_delta: 0,
+            },
+            {
+              option_group_name: 'トッピング',
+              option_choice_name: 'チーズ',
+              price_delta: 150,
+            },
+          ],
+        },
+        {
+          order_item_id: 'preview-item-2',
+          product_name: 'マンゴーラッシー',
+          quantity: 1,
+          unit_price: 450,
+          line_total_amount: 450,
+          options: [],
+        },
+      ],
+      item_count: 2,
+      total_quantity: 3,
+    },
+    footer: {
+      store_name: storeName,
+      ordered_at: orderedAt,
+      ordered_at_label: formatReceiptOrderedAt(orderedAt),
+    },
+  }
+}
