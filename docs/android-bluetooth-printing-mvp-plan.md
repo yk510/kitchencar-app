@@ -60,6 +60,20 @@
 完了条件:
 - payload 層は共通、送信層だけ分岐、という構造にする
 
+### Ticket 3 の結論
+
+- `ReceiptPrintPayload` は **そのまま継続利用** する
+- 新しく Bluetooth 専用 payload は作らない
+- `header / body / footer` から、まず **共通の印字ドキュメント表現** を作る
+- Epson はそのドキュメントを XML に変換する
+- Bluetooth 側はそのドキュメントを
+  - プレーンテキスト
+  - ESC/POS 系コマンド
+  - 補助アプリ向け JSON
+  のどれかへ変換する
+
+つまり、**payload は共通 / renderer だけ差し替え** の形で進める。
+
 ## Phase 4: Bluetooth 送信層を追加
 
 目的:

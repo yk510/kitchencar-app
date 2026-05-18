@@ -1,4 +1,5 @@
 import type { ReceiptPrintPayload } from '@/types/api-payloads'
+import { buildReceiptPrintDocument } from '@/lib/receipt-printing/receipt-print-document'
 
 function escapeXml(value: string) {
   return value
@@ -13,44 +14,24 @@ function joinTextLines(lines: string[]) {
   return escapeXml(lines.filter(Boolean).join('\n'))
 }
 
-function buildReceiptBodyLines(payload: ReceiptPrintPayload) {
-  const lines: string[] = [payload.body.label, '']
-
-  for (const item of payload.body.items) {
-    lines.push(`${item.product_name} ×${item.quantity}`)
-    for (const option of item.options) {
-      lines.push(`  ${option.option_group_name}: ${option.option_choice_name}`)
-    }
-    lines.push('')
-  }
-
-  lines.push(`商品数 ${payload.body.item_count} / 点数 ${payload.body.total_quantity}`)
-  return lines
-}
-
 export function buildEpsonReceiptPrintXml(payload: ReceiptPrintPayload) {
-  const bodyLines = buildReceiptBodyLines(payload)
-  const footerLines = [payload.footer.store_name, payload.footer.ordered_at_label]
-  const headerBadgeLines = payload.header.badge_label ? [`【${payload.header.badge_label}】`] : []
+  const document = buildReceiptPrintDocument(payload)
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">`,
-    ...(headerBadgeLines.length > 0
-      ? [
-          `<text align="center">${joinTextLines(headerBadgeLines)}</text>`,
-          `<feed line="1"/>`,
-        ]
-      : []),
-    `<text align="center">${joinTextLines([payload.header.label])}</text>`,
-    `<feed line="1"/>`,
-    `<text align="center" width="2" height="2" em="true">${joinTextLines([payload.header.value])}</text>`,
-    `<feed line="1"/>`,
-    `<text align="left">${joinTextLines(['------------------------------'])}</text>`,
-    `<text align="left">${joinTextLines(bodyLines)}</text>`,
-    `<feed line="1"/>`,
-    `<text align="left">${joinTextLines(['------------------------------'])}</text>`,
-    `<text align="center">${joinTextLines(footerLines)}</text>`,
+    ...document.sections.flatMap((section) => {
+      const attrs = [
+        `align="${section.align}"`,
+        section.widthScale && section.widthScale > 1 ? `width="${section.widthScale}"` : null,
+        section.heightScale && section.heightScale > 1 ? `height="${section.heightScale}"` : null,
+        section.emphasized ? `em="true"` : null,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      return [`<text ${attrs}>${joinTextLines(section.lines)}</text>`, `<feed line="1"/>`]
+    }),
     `<feed line="3"/>`,
     `<cut type="feed"/>`,
     `</epos-print>`,

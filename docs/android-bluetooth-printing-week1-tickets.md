@@ -49,6 +49,11 @@
 成果物:
 - payload 共通方針
 
+結論:
+- `ReceiptPrintPayload` は Epson / Bluetooth で共通利用する
+- 差し替えるのは送信層ではなく、正確には **renderer + transport**
+- 共通の印字ドキュメント表現を 1 段挟み、Epson は XML、Bluetooth は将来の送信形式へ変換する
+
 ## Ticket 4
 
 **Bluetooth 送信層の最小実装**
