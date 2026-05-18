@@ -283,6 +283,30 @@ export default function VendorMobileOrderPageClient({
         {loading && <div className="soft-panel p-6 text-sm text-gray-500">最新情報を更新中...</div>}
         {data ? (
           <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">店舗</p><h2 className="mt-2 text-lg font-semibold text-gray-800">{data.store.store_name}</h2><p className="mt-2 text-sm text-gray-500">店舗コード: <span className="font-semibold text-gray-700">{data.store.store_code}</span></p></section>
+              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">現在の受付</p><p className={`mt-2 text-lg font-semibold ${currentSchedule ? 'text-emerald-700' : 'text-amber-700'}`}>{currentSchedule ? '受付中' : '受付時間外'}</p><p className="mt-2 text-sm text-gray-500">{currentSchedule ? `${formatDateTime(currentSchedule.opens_at)} - ${formatDateTime(currentSchedule.closes_at)}` : '現在有効な営業枠はありません'}</p></section>
+              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">次回営業枠</p><p className="mt-2 text-lg font-semibold text-gray-800">{nextSchedule ? formatDateTime(nextSchedule.opens_at) : '未設定'}</p><p className="mt-2 text-sm text-gray-500">{nextSchedule ? `終了 ${formatDateTime(nextSchedule.closes_at)}` : '営業スケジュールを追加してください'}</p></section>
+              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">{liffOrderUrl ? 'LINE注文URL' : '固定注文URL'}</p><p className="mt-2 text-sm font-medium text-gray-700 break-all">{publicOrderUrl ?? '-'}</p><p className="mt-2 text-xs text-gray-500">{liffOrderUrl ? 'QRコードはLINE入口URLで生成しています。下のWeb注文URLはブラウザ直接確認用です。' : 'このURLをもとに店頭QRコードを発行します。'}</p></section>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+              <section className="soft-panel p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div><h2 className="text-lg font-semibold text-gray-800">営業スケジュール</h2><p className="mt-1 text-sm text-gray-500">営業日と受付時間を設定して、固定QRからの注文受付を制御します。</p></div>
+                  <Link href="/vendor/mobile-order/schedules" className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm">管理画面を開く</Link>
+                </div>
+                <div className="mt-4 rounded-[28px] border border-dashed border-[var(--line-soft)] bg-white px-5 py-5">
+                  {data.schedules.length === 0 ? <p className="text-sm text-gray-500">まだ営業枠がありません。まずは営業スケジュールを追加してください。</p> : <div className="space-y-3">{data.schedules.slice(0, 4).map((schedule) => (<div key={schedule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line-soft)] px-4 py-3"><div><p className="text-sm font-semibold text-gray-800">{formatDateTime(schedule.opens_at)} - {formatDateTime(schedule.closes_at)}</p><p className="mt-1 text-xs text-gray-500">{schedule.business_date} / {schedule.location_id ? data.locations.find((location) => location.id === schedule.location_id)?.name ?? '出店場所未設定' : '出店場所未設定'}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{schedule.status}</span></div>))}</div>}
+                </div>
+              </section>
+              <section className="soft-panel p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div><h2 className="text-lg font-semibold text-gray-800">店頭掲示用QRコード</h2><p className="mt-1 text-sm text-gray-500">このQRコードを画像保存すると、LINE入口URL付きでPOP制作に使えます。</p></div>
+                  <button type="button" onClick={() => void handleCopyUrl()} className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">URLをコピー</button>
+                </div>
+                <div className="mt-5 flex justify-center">{qrImageUrl ? <div className="rounded-[32px] bg-white p-4 shadow-sm ring-1 ring-[var(--line-soft)]"><img src={qrImageUrl} alt="注文ページQRコード" className="h-64 w-64 rounded-2xl object-contain" /></div> : <div className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-white px-6 py-14 text-sm text-gray-500">QRコードを生成できませんでした</div>}</div>
+              </section>
+            </div>
             <section className="soft-panel p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -429,30 +453,6 @@ export default function VendorMobileOrderPageClient({
                 </div>
               </div>
             </section>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">店舗</p><h2 className="mt-2 text-lg font-semibold text-gray-800">{data.store.store_name}</h2><p className="mt-2 text-sm text-gray-500">店舗コード: <span className="font-semibold text-gray-700">{data.store.store_code}</span></p></section>
-              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">現在の受付</p><p className={`mt-2 text-lg font-semibold ${currentSchedule ? 'text-emerald-700' : 'text-amber-700'}`}>{currentSchedule ? '受付中' : '受付時間外'}</p><p className="mt-2 text-sm text-gray-500">{currentSchedule ? `${formatDateTime(currentSchedule.opens_at)} - ${formatDateTime(currentSchedule.closes_at)}` : '現在有効な営業枠はありません'}</p></section>
-              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">次回営業枠</p><p className="mt-2 text-lg font-semibold text-gray-800">{nextSchedule ? formatDateTime(nextSchedule.opens_at) : '未設定'}</p><p className="mt-2 text-sm text-gray-500">{nextSchedule ? `終了 ${formatDateTime(nextSchedule.closes_at)}` : '営業スケジュールを追加してください'}</p></section>
-              <section className="soft-panel p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">{liffOrderUrl ? 'LINE注文URL' : '固定注文URL'}</p><p className="mt-2 text-sm font-medium text-gray-700 break-all">{publicOrderUrl ?? '-'}</p><p className="mt-2 text-xs text-gray-500">{liffOrderUrl ? 'QRコードはLINE入口URLで生成しています。下のWeb注文URLはブラウザ直接確認用です。' : 'このURLをもとに店頭QRコードを発行します。'}</p></section>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
-              <section className="soft-panel p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div><h2 className="text-lg font-semibold text-gray-800">営業スケジュール</h2><p className="mt-1 text-sm text-gray-500">営業日と受付時間を設定して、固定QRからの注文受付を制御します。</p></div>
-                  <Link href="/vendor/mobile-order/schedules" className="rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm">管理画面を開く</Link>
-                </div>
-                <div className="mt-4 rounded-[28px] border border-dashed border-[var(--line-soft)] bg-white px-5 py-5">
-                  {data.schedules.length === 0 ? <p className="text-sm text-gray-500">まだ営業枠がありません。まずは営業スケジュールを追加してください。</p> : <div className="space-y-3">{data.schedules.slice(0, 4).map((schedule) => (<div key={schedule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line-soft)] px-4 py-3"><div><p className="text-sm font-semibold text-gray-800">{formatDateTime(schedule.opens_at)} - {formatDateTime(schedule.closes_at)}</p><p className="mt-1 text-xs text-gray-500">{schedule.business_date} / {schedule.location_id ? data.locations.find((location) => location.id === schedule.location_id)?.name ?? '出店場所未設定' : '出店場所未設定'}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{schedule.status}</span></div>))}</div>}
-                </div>
-              </section>
-              <section className="soft-panel p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div><h2 className="text-lg font-semibold text-gray-800">店頭掲示用QRコード</h2><p className="mt-1 text-sm text-gray-500">このQRコードを画像保存すると、LINE入口URL付きでPOP制作に使えます。</p></div>
-                  <button type="button" onClick={() => void handleCopyUrl()} className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">URLをコピー</button>
-                </div>
-                <div className="mt-5 flex justify-center">{qrImageUrl ? <div className="rounded-[32px] bg-white p-4 shadow-sm ring-1 ring-[var(--line-soft)]"><img src={qrImageUrl} alt="注文ページQRコード" className="h-64 w-64 rounded-2xl object-contain" /></div> : <div className="rounded-[28px] border border-dashed border-[var(--line-soft)] bg-white px-6 py-14 text-sm text-gray-500">QRコードを生成できませんでした</div>}</div>
-              </section>
-            </div>
           </>
         ) : null}
       </div>
