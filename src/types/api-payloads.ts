@@ -458,3 +458,19 @@ export type ReceiptPrintPayload = {
     ordered_at_label: string
   }
 }
+
+export type VendorMobileOrderPrintResultPayload = {
+  order_id: string
+  order_number: string
+  printer_provider: ReceiptPrinterProvider
+  printer_endpoint: string
+  printer_label: string | null
+  print_mode: ReceiptPrintMode | null
+  result: {
+    endpoint: string
+    http_status: number
+    printer_success: boolean
+    printer_code: string | null
+    response_text: string
+  }
+}

@@ -1,4 +1,5 @@
 import { ensureVendorStoreResources } from '@/lib/mobile-order'
+import { resolveReceiptPrintSettings } from '@/lib/receipt-print-settings'
 import {
   fetchVendorOrderCounts,
   fetchVendorOrderDetail,
@@ -8,7 +9,9 @@ import {
 import type {
   MobileOrderNotificationRow,
   MobileOrderRow,
+  StoreOrderPageRow,
   VendorMobileOrderOrderDetailPayload,
+  VendorMobileOrderDashboardOrder,
   VendorMobileOrderOrdersListPayload,
   VendorMobileOrderOrdersPayload,
   VendorMobileOrderOrdersSummaryPayload,
@@ -122,6 +125,34 @@ export async function loadVendorOwnedOrder(
   }
 
   return order as MobileOrderRow
+}
+
+export async function getVendorOrderReceiptPrintContext(
+  supabase: SupabaseClientLike,
+  user: UserLike,
+  orderId: string
+): Promise<{
+  store: VendorStoreRow
+  orderPage: StoreOrderPageRow
+  order: VendorMobileOrderDashboardOrder
+  receiptSettings: ReturnType<typeof resolveReceiptPrintSettings>
+}> {
+  const businessName = await loadVendorBusinessName(supabase, user.id)
+  const { store, orderPage } = await ensureVendorStoreResources(supabase, user, {
+    businessName,
+  })
+
+  const order = await fetchVendorOrderDetail(supabase, store.id, orderId)
+  if (!order) {
+    throw new Error('対象の注文が見つかりません')
+  }
+
+  return {
+    store,
+    orderPage,
+    order,
+    receiptSettings: resolveReceiptPrintSettings(store, orderPage),
+  }
 }
 
 export async function loadVendorOwnedNotification(
