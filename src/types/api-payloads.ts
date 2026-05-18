@@ -425,3 +425,36 @@ export type VendorMobileOrderOrderDetailPayload = {
 }
 
 export type VendorMobileOrderOrderMutationPayload = MobileOrderRow
+
+export type ReceiptPrintLinePayload = {
+  order_item_id: string
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total_amount: number
+  options: Array<{
+    option_group_name: string
+    option_choice_name: string
+    price_delta: number
+  }>
+}
+
+export type ReceiptPrintPayload = {
+  order_id: string
+  order_source: MobileOrderSource
+  header: {
+    label: '注文番号'
+    value: string
+  }
+  body: {
+    label: '注文内容'
+    items: ReceiptPrintLinePayload[]
+    item_count: number
+    total_quantity: number
+  }
+  footer: {
+    store_name: string
+    ordered_at: string
+    ordered_at_label: string
+  }
+}
