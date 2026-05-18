@@ -853,14 +853,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                     key={product.id}
                     type="button"
                     onClick={() => selectProduct(product)}
-                    className={`rounded-[30px] border px-5 py-5 text-left shadow-[0_10px_28px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 ${
+                    className={`flex h-full flex-col rounded-[30px] border px-5 py-5 text-left shadow-[0_10px_28px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 ${
                       active
                         ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]'
                         : 'border-[var(--line-soft)] bg-[#fcfdff] hover:bg-white'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div>
+                      <div className="flex-1">
                         <div className="mb-4 flex h-44 items-end justify-center overflow-hidden rounded-[24px] border border-[var(--line-soft)] bg-[#f8fbff] p-3">
                           {product.image_url ? (
                             <img
@@ -874,30 +874,39 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                             </div>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-xl font-black text-[var(--text-main)]">{product.name}</h3>
-                          {categorizedProducts.find((entry) => entry.product.id === product.id)?.recommended && (
-                            <span className="rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold text-yellow-800">
-                              おすすめ
-                            </span>
-                          )}
-                          {inventoryBadge && (
-                            <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${inventoryBadge.className}`}>
-                              {inventoryBadge.label}
-                            </span>
-                          )}
-                        </div>
-                        {product.description ? (
-                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">{product.description}</p>
-                        ) : (
-                          <p className="mt-2 text-sm leading-6 text-[var(--text-sub)]">店頭POSの簡易注文です</p>
-                        )}
                       </div>
-                      <div className="rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
+                      <div className="shrink-0 rounded-full bg-[var(--accent-blue)]/10 px-3 py-1 text-sm font-semibold text-[var(--accent-blue)]">
                         {formatPublicOrderPrice(product.price)}
                       </div>
                     </div>
-                    <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+
+                    <div className="min-h-[5.25rem]">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="line-clamp-2 min-h-[3.75rem] text-xl font-black leading-[1.85rem] text-[var(--text-main)]">
+                          {product.name}
+                        </h3>
+                        {categorizedProducts.find((entry) => entry.product.id === product.id)?.recommended && (
+                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold text-yellow-800">
+                            おすすめ
+                          </span>
+                        )}
+                        {inventoryBadge && (
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${inventoryBadge.className}`}>
+                            {inventoryBadge.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="min-h-[5.5rem]">
+                      {product.description ? (
+                        <p className="line-clamp-3 text-sm leading-6 text-[var(--text-sub)]">{product.description}</p>
+                      ) : (
+                        <p className="line-clamp-3 text-sm leading-6 text-[var(--text-sub)]">店頭POSの簡易注文です</p>
+                      )}
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between gap-3 pt-4 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-[var(--line-soft)]">
                           {getCategoryLabel(inferProductCategory(product))}
