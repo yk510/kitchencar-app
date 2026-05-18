@@ -84,13 +84,13 @@ MVP では **1機種固定** が前提。
 
 ### Android タブレット
 
-- **Samsung Galaxy Tab A9+（Wi-Fi モデル）**
+- **Redmi Pad SE（Wi-Fi モデル）**
 
 採用理由:
 - 11インチで、店頭POSの 2 カラム UI を確認しやすい
-- 日本国内で比較的入手しやすい
 - Android Chrome での検証端末として無難
-- 価格帯も iPad より抑えやすい
+- 価格帯を抑えやすく、MVP 検証用に導入しやすい
+- 日本国内でも比較的入手しやすい
 
 ### Bluetooth プリンター
 
@@ -104,7 +104,7 @@ MVP では **1機種固定** が前提。
 
 ### 検証時の固定条件
 
-- Android タブレットは `Galaxy Tab A9+`
+- Android タブレットは `Redmi Pad SE`
 - プリンターは `SII MP-B20`
 - ブラウザは Android 版 Chrome
 - まずは 1 台のタブレット、1 台のプリンターで検証

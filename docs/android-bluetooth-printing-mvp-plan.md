@@ -17,7 +17,7 @@
 
 ### Ticket 1 の固定結果
 
-- タブレット: `Samsung Galaxy Tab A9+（Wi-Fi）`
+- タブレット: `Redmi Pad SE（Wi-Fi）`
 - プリンター: `SII MP-B20`
 - ブラウザ: `Android Chrome`
 - 用紙幅: `58mm`

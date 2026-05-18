@@ -16,7 +16,7 @@
 - 対象プリンター決定
 
 決定:
-- Android タブレット: `Samsung Galaxy Tab A9+（Wi-Fi）`
+- Android タブレット: `Redmi Pad SE（Wi-Fi）`
 - Bluetooth プリンター: `SII MP-B20`
 - ブラウザ: `Android Chrome`
 - 印字幅: `58mm`
