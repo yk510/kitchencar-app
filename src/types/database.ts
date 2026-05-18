@@ -401,10 +401,15 @@ export interface VendorStore {
   hero_image_url: string | null
   is_mobile_order_enabled: boolean
   is_store_pos_enabled: boolean
+  is_receipt_print_enabled: boolean
   is_accepting_orders: boolean
   line_official_account_id: string | null
   store_pos_terminal_name: string | null
   store_pos_enabled_payment_methods: StorePosPaymentMethod[]
+  receipt_printer_provider: 'epson_epos' | null
+  receipt_printer_endpoint: string | null
+  receipt_printer_label: string | null
+  receipt_print_mode: 'manual_dashboard' | null
   created_at: string
   updated_at: string
 }

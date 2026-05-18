@@ -5,6 +5,7 @@ import {
   loadScheduleInventoryState,
   resolveActiveSchedule,
 } from '@/lib/mobile-order'
+import { applyReceiptPrintSettingsToStore } from '@/lib/receipt-print-settings'
 import { applyMetadataToSchedule } from '@/lib/store-order-schedule-metadata'
 import { applyStorePosSettingsToStore } from '@/lib/store-pos-settings'
 import type {
@@ -40,7 +41,7 @@ export async function loadVendorMobileOrderSchedulesPayload(
   if (locationsError) throw new Error(locationsError.message)
 
   return {
-    store: applyStorePosSettingsToStore(store, orderPage),
+    store: applyReceiptPrintSettingsToStore(applyStorePosSettingsToStore(store, orderPage), orderPage),
     orderPage,
     schedules: ((schedules ?? []) as any[]).map((schedule) => applyMetadataToSchedule(schedule)),
     locations: (locations ?? []) as any[],

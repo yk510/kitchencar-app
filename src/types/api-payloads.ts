@@ -203,6 +203,12 @@ export type MobileOrderPaymentMethod = NonNullable<
   Database['public']['Tables']['mobile_orders']['Row']['payment_method']
 >
 export type StorePosPaymentMethod = Exclude<MobileOrderPaymentMethod, 'card_online'>
+export type ReceiptPrinterProvider = NonNullable<
+  Database['public']['Tables']['vendor_stores']['Row']['receipt_printer_provider']
+>
+export type ReceiptPrintMode = NonNullable<
+  Database['public']['Tables']['vendor_stores']['Row']['receipt_print_mode']
+>
 
 export type VendorLocationOption = {
   id: string
@@ -225,7 +231,18 @@ export type VendorStorePosSettingsUpdatePayload = {
   store_pos_enabled_payment_methods: StorePosPaymentMethod[]
 }
 
-export type VendorStorePosSettingsPayload = {
+export type VendorReceiptPrintSettingsUpdatePayload = {
+  is_receipt_print_enabled: boolean
+  receipt_printer_provider: ReceiptPrinterProvider | null
+  receipt_printer_endpoint: string | null
+  receipt_printer_label: string | null
+  receipt_print_mode: ReceiptPrintMode | null
+}
+
+export type VendorMobileOrderSettingsUpdatePayload =
+  Partial<VendorStorePosSettingsUpdatePayload & VendorReceiptPrintSettingsUpdatePayload>
+
+export type VendorMobileOrderSettingsPayload = {
   store: VendorStoreRow
   orderPage: StoreOrderPageRow
   persistence: 'hybrid' | 'notes_fallback'
