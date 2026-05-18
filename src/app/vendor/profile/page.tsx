@@ -26,6 +26,7 @@ export default function VendorProfilePage() {
     x_url: '',
     description: '',
   })
+  const [savedProfile, setSavedProfile] = useState<VendorProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const {
     pending: saving,
@@ -35,12 +36,14 @@ export default function VendorProfilePage() {
     start,
     succeed,
     stop,
+    reset,
   } = useSubmissionFeedback()
 
   useEffect(() => {
     async function load() {
       try {
         const data = await fetchApi<VendorProfile | null>('/api/vendor/profile', { cache: 'no-store' })
+        setSavedProfile(data)
 
         if (data && !hasStoredDraft) {
           setForm({
@@ -79,6 +82,18 @@ export default function VendorProfilePage() {
 
       succeed('事業者情報を保存しました')
       clearDraft()
+      setSavedProfile({
+        business_name: form.business_name,
+        owner_name: form.owner_name || null,
+        contact_email: form.contact_email || null,
+        phone: form.phone || null,
+        genre: form.genre || null,
+        main_menu: form.main_menu || null,
+        logo_image_url: form.logo_image_url || null,
+        instagram_url: form.instagram_url || null,
+        x_url: form.x_url || null,
+        description: form.description || null,
+      })
       await refreshProfile()
       notifyProfileUpdated()
       router.refresh()
@@ -121,6 +136,37 @@ export default function VendorProfilePage() {
           <p className="text-sm text-gray-500">読み込み中...</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {hasStoredDraft && (
+              <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4">
+                <p className="text-sm font-semibold text-amber-900">この内容は下書きです。まだ事業者設定には反映されていません。</p>
+                <p className="mt-1 text-sm text-amber-800">保存済みの内容を確認したい場合は、下のボタンで戻せます。</p>
+                {savedProfile && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({
+                        business_name: savedProfile.business_name ?? '',
+                        owner_name: savedProfile.owner_name ?? '',
+                        contact_email: savedProfile.contact_email ?? '',
+                        phone: savedProfile.phone ?? '',
+                        genre: savedProfile.genre ?? '',
+                        main_menu: savedProfile.main_menu ?? '',
+                        logo_image_url: savedProfile.logo_image_url ?? '',
+                        instagram_url: savedProfile.instagram_url ?? '',
+                        x_url: savedProfile.x_url ?? '',
+                        description: savedProfile.description ?? '',
+                      })
+                      clearDraft()
+                      reset()
+                    }}
+                    className="mt-3 rounded-full bg-white px-4 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200"
+                  >
+                    保存済みの内容に戻す
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="rounded-3xl border border-[var(--line-soft)] bg-white p-5">
               <h2 className="text-lg font-semibold text-gray-800">ブランドロゴ</h2>
               <p className="mt-1 text-sm text-gray-500">イベント主催者から見たときに、ひと目で分かる画像を登録できます。</p>
