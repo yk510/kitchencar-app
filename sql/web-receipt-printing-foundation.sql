@@ -4,7 +4,7 @@
 -- 方針:
 -- - レシート印刷設定は vendor_stores に持つ
 -- - MVP では Epson ePOS Print を第一候補とする
--- - お客様向け最小印字内容は「店舗名」「注文番号」
+-- - お客様向け最小印字内容は「店舗名」「注文番号」「注文日時」
 -- - 移行初期は store_order_pages.notes fallback と共存できるようにする
 
 begin;
