@@ -52,6 +52,14 @@
 成果物:
 - bridge contract
 
+固定内容:
+- request は `kind=receipt_print`
+- `bridge_version=1`
+- `intent=auto_print | reprint | probe`
+- `origin=vendor_mobile_order_orders | store_pos | vendor_mobile_order_settings`
+- callback は `kuridas:native-receipt-print` の `CustomEvent`
+- callback status は `accepted | printed | failed | unsupported`
+
 ## Ticket 3
 
 **Web 側に iOS native print dispatcher をつなぐ**
