@@ -87,6 +87,15 @@
 完了条件:
 - テスト印刷ができる
 
+### Ticket 4 の最小実装方針
+
+- `ReceiptPrintPayload` から **共通印字ドキュメント**
+- 共通印字ドキュメントから **ESC/POS 風 byte 列**
+- その byte 列を **BLE の writable characteristic に分割送信**
+
+ここでは、まだ `MP-B20` 固有の service / characteristic UUID は固定しない。  
+まずは **generic な Web Bluetooth transport** を用意して、Ticket 2 の probe で GATT 書き込み可能性が見えた時に接続先 profile を差し込む。
+
 ## Phase 5: 注文管理 / POS の印刷導線に接続
 
 目的:

@@ -65,6 +65,11 @@
 完了条件:
 - 1 回印字できる
 
+最小実装:
+- 共通 payload から ESC/POS 風 byte 列を作る helper
+- BLE writable characteristic へ chunk 送信する generic transport
+- `MP-B20` 固有 UUID の固定は、PoC 結果を見て次段で判断
+
 ## Ticket 5
 
 **受領後の印刷導線に接続**
