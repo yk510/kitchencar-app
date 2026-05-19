@@ -406,10 +406,10 @@ export interface VendorStore {
   line_official_account_id: string | null
   store_pos_terminal_name: string | null
   store_pos_enabled_payment_methods: StorePosPaymentMethod[]
-  receipt_printer_provider: 'epson_epos' | null
+  receipt_printer_provider: 'epson_epos' | 'ios_webview_wrapper' | null
   receipt_printer_endpoint: string | null
   receipt_printer_label: string | null
-  receipt_print_mode: 'manual_dashboard' | null
+  receipt_print_mode: 'manual_dashboard' | 'manual_dashboard_and_reprint' | 'auto_after_payment' | null
   created_at: string
   updated_at: string
 }

@@ -39,17 +39,25 @@ function isMissingStorePosColumnError(error: unknown) {
     message.includes('receipt_printer_endpoint') ||
     message.includes('receipt_printer_label') ||
     message.includes('receipt_print_mode') ||
+    message.includes('chk_vendor_stores_receipt_printer_provider') ||
+    message.includes('chk_vendor_stores_receipt_print_mode') ||
     message.includes('schema cache') ||
     message.includes('column')
   )
 }
 
 function normalizeReceiptPrinterProvider(value: unknown): ReceiptPrinterProvider | null {
-  return value === 'epson_epos' ? 'epson_epos' : null
+  return value === 'epson_epos' || value === 'ios_webview_wrapper'
+    ? value
+    : null
 }
 
 function normalizeReceiptPrintMode(value: unknown): ReceiptPrintMode | null {
-  return value === 'manual_dashboard' ? 'manual_dashboard' : null
+  return value === 'manual_dashboard' ||
+    value === 'manual_dashboard_and_reprint' ||
+    value === 'auto_after_payment'
+    ? value
+    : null
 }
 
 export async function PATCH(req: NextRequest) {
@@ -108,7 +116,7 @@ export async function PATCH(req: NextRequest) {
           ? currentReceiptSettings.receipt_print_mode
           : normalizeReceiptPrintMode(body.receipt_print_mode) ?? 'manual_dashboard'
 
-      if (isReceiptPrintEnabled && !receiptPrinterEndpoint) {
+      if (isReceiptPrintEnabled && receiptPrinterProvider === 'epson_epos' && !receiptPrinterEndpoint) {
         return apiError('レシート印刷を有効にする場合は、プリンター接続先を入力してください', 400)
       }
 

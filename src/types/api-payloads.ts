@@ -209,6 +209,9 @@ export type ReceiptPrinterProvider = NonNullable<
 export type ReceiptPrintMode = NonNullable<
   Database['public']['Tables']['vendor_stores']['Row']['receipt_print_mode']
 >
+export type NativeReceiptBridgeMode = 'ios_helper_app' | 'ios_webview_wrapper'
+export type NativeReceiptPrintIntent = 'auto_print' | 'reprint' | 'probe'
+export type NativeReceiptPrintOrigin = 'vendor_mobile_order_orders' | 'store_pos' | 'vendor_mobile_order_settings'
 
 export type VendorLocationOption = {
   id: string
@@ -465,6 +468,38 @@ export type ReceiptPrintPayload = {
   }
 }
 
+export type NativeReceiptPrintRequest = {
+  kind: 'receipt_print'
+  bridge_version: 1
+  mode: NativeReceiptBridgeMode
+  intent: NativeReceiptPrintIntent
+  origin: NativeReceiptPrintOrigin
+  request_id: string
+  created_at: string
+  payload: ReceiptPrintPayload
+  plain_text: string
+  printer_hint: {
+    vendor: 'sii_mp_b20'
+    connection: 'bluetooth'
+  }
+  callback: {
+    event_name: 'kuridas:native-receipt-print'
+    callback_url: string | null
+  }
+}
+
+export type NativeReceiptBridgeCallbackPayload = {
+  kind: 'receipt_print_result'
+  bridge_version: 1
+  request_id: string
+  status: 'accepted' | 'printed' | 'failed' | 'unsupported'
+  printer_vendor: 'sii_mp_b20'
+  printer_connection: 'bluetooth'
+  error_code: string | null
+  error_message: string | null
+  printed_at: string | null
+}
+
 export type VendorMobileOrderReceiptPrintStatusPayload = {
   attempted: boolean
   printed: boolean
@@ -481,6 +516,7 @@ export type VendorMobileOrderPrintResultPayload = {
   printer_endpoint: string
   printer_label: string | null
   print_mode: ReceiptPrintMode | null
+  delivery: 'server_print'
   result: {
     endpoint: string
     http_status: number
@@ -489,6 +525,22 @@ export type VendorMobileOrderPrintResultPayload = {
     response_text: string
   }
 }
+
+export type VendorMobileOrderNativePrintDispatchPayload = {
+  order_id: string
+  order_number: string
+  is_reprint: boolean
+  printer_provider: 'ios_webview_wrapper'
+  printer_endpoint: string
+  printer_label: string | null
+  print_mode: ReceiptPrintMode | null
+  delivery: 'native_bridge'
+  native_request: NativeReceiptPrintRequest
+}
+
+export type VendorMobileOrderPrintDispatchPayload =
+  | VendorMobileOrderPrintResultPayload
+  | VendorMobileOrderNativePrintDispatchPayload
 
 export type VendorMobileOrderOrderMutationPayload = MobileOrderRow & {
   receipt_print?: VendorMobileOrderReceiptPrintStatusPayload

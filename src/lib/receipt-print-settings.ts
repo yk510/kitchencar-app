@@ -8,8 +8,12 @@ import type {
 const RECEIPT_PRINT_SETTINGS_START = '[kuridas:receipt-print-settings]'
 const RECEIPT_PRINT_SETTINGS_END = '[/kuridas:receipt-print-settings]'
 
-const VALID_RECEIPT_PRINTER_PROVIDERS: ReceiptPrinterProvider[] = ['epson_epos']
-const VALID_RECEIPT_PRINT_MODES: ReceiptPrintMode[] = ['manual_dashboard']
+const VALID_RECEIPT_PRINTER_PROVIDERS: ReceiptPrinterProvider[] = ['epson_epos', 'ios_webview_wrapper']
+const VALID_RECEIPT_PRINT_MODES: ReceiptPrintMode[] = [
+  'manual_dashboard',
+  'manual_dashboard_and_reprint',
+  'auto_after_payment',
+]
 
 type ReceiptPrintSettingsSnapshot = {
   is_receipt_print_enabled: boolean
@@ -136,4 +140,3 @@ export function applyReceiptPrintSettingsToStore<T extends Partial<VendorStoreRo
     ...settings,
   } as T & ReceiptPrintSettingsSnapshot
 }
-

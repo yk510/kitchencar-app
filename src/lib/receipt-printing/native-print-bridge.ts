@@ -1,5 +1,12 @@
 import { buildReceiptPrintPlainText } from '@/lib/receipt-printing/receipt-print-document'
-import type { ReceiptPrintPayload } from '@/types/api-payloads'
+import type {
+  NativeReceiptBridgeCallbackPayload,
+  NativeReceiptBridgeMode,
+  NativeReceiptPrintIntent,
+  NativeReceiptPrintOrigin,
+  NativeReceiptPrintRequest,
+  ReceiptPrintPayload,
+} from '@/types/api-payloads'
 
 declare global {
   interface Window {
@@ -13,10 +20,6 @@ declare global {
   }
 }
 
-export type NativeReceiptBridgeMode = 'ios_helper_app' | 'ios_webview_wrapper'
-export type NativeReceiptPrintIntent = 'auto_print' | 'reprint' | 'probe'
-export type NativeReceiptPrintOrigin = 'vendor_mobile_order_orders' | 'store_pos' | 'vendor_mobile_order_settings'
-
 export const NATIVE_RECEIPT_BRIDGE_VERSION = 1
 export const NATIVE_RECEIPT_BRIDGE_HANDLER_NAME = 'kuridasPrinter'
 export const NATIVE_RECEIPT_BRIDGE_CALLBACK_EVENT = 'kuridas:native-receipt-print'
@@ -26,39 +29,10 @@ type NativeReceiptPrintRequestCallback = {
   callback_url: string | null
 }
 
-export type NativeReceiptPrintRequest = {
-  kind: 'receipt_print'
-  bridge_version: typeof NATIVE_RECEIPT_BRIDGE_VERSION
-  mode: NativeReceiptBridgeMode
-  intent: NativeReceiptPrintIntent
-  origin: NativeReceiptPrintOrigin
-  request_id: string
-  created_at: string
-  payload: ReceiptPrintPayload
-  plain_text: string
-  printer_hint: {
-    vendor: 'sii_mp_b20'
-    connection: 'bluetooth'
-  }
-  callback: NativeReceiptPrintRequestCallback
-}
-
 export type NativeReceiptBridgeDispatchResult = {
   mode: NativeReceiptBridgeMode
   dispatched: boolean
   mechanism: 'webkit_message_handler' | 'custom_url_scheme'
-}
-
-export type NativeReceiptBridgeCallbackPayload = {
-  kind: 'receipt_print_result'
-  bridge_version: typeof NATIVE_RECEIPT_BRIDGE_VERSION
-  request_id: string
-  status: 'accepted' | 'printed' | 'failed' | 'unsupported'
-  printer_vendor: 'sii_mp_b20'
-  printer_connection: 'bluetooth'
-  error_code: string | null
-  error_message: string | null
-  printed_at: string | null
 }
 
 function buildRequestId() {
@@ -78,7 +52,7 @@ export function buildNativeReceiptPrintRequest(args: {
 }): NativeReceiptPrintRequest {
   return {
     kind: 'receipt_print',
-    bridge_version: NATIVE_RECEIPT_BRIDGE_VERSION,
+    bridge_version: 1,
     mode: args.mode,
     intent: args.intent,
     origin: args.origin,
@@ -140,7 +114,7 @@ export function isNativeReceiptBridgeCallbackPayload(value: unknown): value is N
 
   return (
     payload.kind === 'receipt_print_result' &&
-    payload.bridge_version === NATIVE_RECEIPT_BRIDGE_VERSION &&
+    payload.bridge_version === 1 &&
     typeof payload.request_id === 'string' &&
     (payload.status === 'accepted' ||
       payload.status === 'printed' ||

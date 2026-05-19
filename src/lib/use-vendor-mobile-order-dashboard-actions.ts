@@ -2,17 +2,22 @@
 
 import { useCallback, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { dispatchNativeReceiptPrint } from '@/lib/receipt-printing/native-print-bridge'
 import { getNotificationTypeLabel } from '@/lib/vendor-mobile-order-notification-copy'
 import { STATUS_LABELS } from '@/lib/vendor-mobile-order-order-list'
 import type {
   MobileOrderNotificationRow,
-  VendorMobileOrderPrintResultPayload,
+  VendorMobileOrderPrintDispatchPayload,
   VendorMobileOrderDashboardOrder,
   VendorMobileOrderListItem,
   VendorMobileOrderOrderMutationPayload,
 } from '@/types/api-payloads'
 
 function buildReceiptPrintFollowupMessage(errorMessage: string, isReprint: boolean) {
+  if (errorMessage.includes('iPad WebView ラッパー向けの自動印刷')) {
+    return 'iPad WebView ラッパー向けの自動印刷は、次の実装で接続します。現時点では注文管理画面の再印刷から動作確認してください。'
+  }
+
   if (errorMessage.includes('プリンター接続先')) {
     return `${isReprint ? '再印刷' : '自動印刷'}に失敗しました。モバイルオーダー設定でプリンター接続先を確認してください。`
   }
@@ -261,12 +266,26 @@ export function useVendorMobileOrderDashboardActions({
       setMessage(null)
 
       try {
-        await fetchApi<VendorMobileOrderPrintResultPayload>(`/api/vendor/mobile-order/orders/${orderId}/print`, {
+        const response = await fetchApi<VendorMobileOrderPrintDispatchPayload>(`/api/vendor/mobile-order/orders/${orderId}/print`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ is_reprint: true }),
         })
-        setMessage(`注文 ${orderNumber} のレシートを再印刷しました`)
+
+        if (response.delivery === 'native_bridge') {
+          const dispatchResult = dispatchNativeReceiptPrint(response.native_request)
+          if (!dispatchResult.dispatched) {
+            throw new Error('iPad WebView ラッパーへの印刷要求に失敗しました')
+          }
+
+          setMessage(
+            dispatchResult.mechanism === 'webkit_message_handler'
+              ? `注文 ${orderNumber} の再印刷要求を iPad アプリへ送信しました`
+              : `注文 ${orderNumber} の再印刷要求を補助アプリへ送信しました`
+          )
+        } else {
+          setMessage(`注文 ${orderNumber} のレシートを再印刷しました`)
+        }
       } catch (err) {
         const errorMessage = err instanceof ApiClientError ? err.message : 'レシートの再印刷に失敗しました'
         setError(buildReceiptPrintFollowupMessage(errorMessage, true))

@@ -39,6 +39,11 @@ const RECEIPT_PRINTER_PROVIDER_OPTIONS: Array<{
     label: 'Epson ePOS Print',
     hint: 'LAN 接続の Epson プリンターへ Web から送信する方式です。',
   },
+  {
+    value: 'ios_webview_wrapper',
+    label: 'iPad WebView ラッパー',
+    hint: 'iPad ネイティブ bridge に印刷要求を渡し、Bluetooth プリンターへ印刷する方式です。',
+  },
 ]
 
 const RECEIPT_PRINT_MODE_OPTIONS: Array<{
@@ -50,6 +55,16 @@ const RECEIPT_PRINT_MODE_OPTIONS: Array<{
     value: 'manual_dashboard',
     label: '注文管理画面から手動印刷',
     hint: '店員が注文管理画面で必要な注文だけ印刷します。',
+  },
+  {
+    value: 'manual_dashboard_and_reprint',
+    label: '手動印刷 + 再印刷',
+    hint: '注文管理画面からの印刷と再印刷を前提にします。',
+  },
+  {
+    value: 'auto_after_payment',
+    label: '料金受領後に自動印刷',
+    hint: 'POS で料金受領を記録した後、自動印刷を行う運用です。',
   },
 ]
 
@@ -141,6 +156,7 @@ export default function VendorMobileOrderPageClient({
   }, [])
 
   const webBluetoothEnvironment = useMemo(() => getWebBluetoothEnvironmentSummary(), [])
+  const isEpsonReceiptProvider = receiptPrinterProvider === 'epson_epos'
 
   function toggleStorePosPaymentMethod(method: StorePosPaymentMethod) {
     setStorePosPaymentMethods((current) =>
@@ -480,17 +496,26 @@ export default function VendorMobileOrderPageClient({
                         {RECEIPT_PRINTER_PROVIDER_OPTIONS.find((option) => option.value === receiptPrinterProvider)?.hint}
                       </p>
                     </div>
-                    <div>
-                      <label className="text-sm font-semibold text-gray-700">プリンター接続先</label>
-                      <input
-                        type="text"
-                        value={receiptPrinterEndpoint}
-                        onChange={(event) => setReceiptPrinterEndpoint(event.target.value)}
-                        placeholder="http://192.168.0.80/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000"
-                        className="mt-2 w-full rounded-2xl border border-[var(--line-soft)] bg-[#fbfdff] px-4 py-3 text-sm text-gray-700 shadow-inner outline-none focus:border-[var(--accent-blue)]"
-                      />
-                      <p className="mt-2 text-xs text-gray-500">LAN 上の Epson プリンターに送る URL または接続先です。</p>
-                    </div>
+                    {isEpsonReceiptProvider ? (
+                      <div>
+                        <label className="text-sm font-semibold text-gray-700">プリンター接続先</label>
+                        <input
+                          type="text"
+                          value={receiptPrinterEndpoint}
+                          onChange={(event) => setReceiptPrinterEndpoint(event.target.value)}
+                          placeholder="http://192.168.0.80/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000"
+                          className="mt-2 w-full rounded-2xl border border-[var(--line-soft)] bg-[#fbfdff] px-4 py-3 text-sm text-gray-700 shadow-inner outline-none focus:border-[var(--accent-blue)]"
+                        />
+                        <p className="mt-2 text-xs text-gray-500">LAN 上の Epson プリンターに送る URL または接続先です。</p>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 px-4 py-4">
+                        <p className="text-sm font-semibold text-indigo-900">iPad WebView ラッパー経由で印刷します</p>
+                        <p className="mt-1 text-xs leading-5 text-indigo-800">
+                          この方式では LAN 接続先 URL は不要です。再印刷は Web 側から iPad ネイティブ bridge へ要求を渡します。
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="text-sm font-semibold text-gray-700">印刷モード</label>
                       <select
@@ -510,16 +535,22 @@ export default function VendorMobileOrderPageClient({
                     </div>
                   </div>
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-gray-500">注文管理で料金受領したタイミングで自動印刷し、必要時は再印刷します。</p>
+                    <p className="text-xs text-gray-500">
+                      {isEpsonReceiptProvider
+                        ? '注文管理で料金受領したタイミングで自動印刷し、必要時は再印刷します。'
+                        : 'iPad WebView ラッパーでは、まず再印刷導線から native bridge 接続を確認します。'}
+                    </p>
                     <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => void handleTestReceiptPrinter()}
-                        disabled={testingReceiptPrinter || !receiptPrinterEndpoint.trim()}
-                        className="rounded-full border border-sky-200 bg-white px-5 py-2.5 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50 disabled:opacity-50"
-                      >
-                        {testingReceiptPrinter ? 'テスト送信中...' : '接続テスト'}
-                      </button>
+                      {isEpsonReceiptProvider ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleTestReceiptPrinter()}
+                          disabled={testingReceiptPrinter || !receiptPrinterEndpoint.trim()}
+                          className="rounded-full border border-sky-200 bg-white px-5 py-2.5 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50 disabled:opacity-50"
+                        >
+                          {testingReceiptPrinter ? 'テスト送信中...' : '接続テスト'}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void handleSaveReceiptSettings()}
