@@ -113,6 +113,13 @@
 成果物:
 - iOS 実装仕様メモ
 
+固定内容:
+- `WKUserContentController` に `kuridasPrinter` を登録する
+- `WKScriptMessageHandler` で `receipt_print` request を受ける
+- native 側は `Print Request Router -> Bluetooth Print Service -> Web Callback Adapter` の3責務に分ける
+- Web への callback は `evaluateJavaScript` で `kuridas:native-receipt-print` の `CustomEvent` を dispatch する
+- `accepted / printed / failed / unsupported` の4状態を Web に返す
+
 ## Ticket 7
 
 **MVP の実機検証シナリオを作る**

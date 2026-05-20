@@ -59,6 +59,9 @@
 完了条件:
 - iOS 実装着手に必要な仕様が揃う
 
+成果物:
+- [ios-webview-wrapper-native-receiver-spec.md](/Users/yukikuchi/Documents/1.KX/仲町CS/kitchencar-app/docs/ios-webview-wrapper-native-receiver-spec.md)
+
 ## いま先にやる実装
 
 1. Web 側 native print bridge helper
