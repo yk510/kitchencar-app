@@ -91,7 +91,7 @@ export function dispatchNativeReceiptPrint(request: NativeReceiptPrintRequest): 
     }
   }
 
-  if (typeof window !== 'undefined') {
+  if (request.mode === 'ios_helper_app' && typeof window !== 'undefined') {
     window.location.href = buildHelperAppUrl(request)
     return {
       mode: request.mode,

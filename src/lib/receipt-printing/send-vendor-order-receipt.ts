@@ -113,6 +113,8 @@ export async function tryAutoPrintVendorOrderReceipt(args: {
       is_reprint: false,
       error_message: null,
       result: null,
+      delivery: null,
+      native_request: null,
     }
   }
 
@@ -125,11 +127,13 @@ export async function tryAutoPrintVendorOrderReceipt(args: {
 
     if (printResult.delivery === 'native_bridge') {
       return {
-        attempted: false,
+        attempted: true,
         printed: false,
         is_reprint: false,
-        error_message: 'iPad WebView ラッパー向けの自動印刷は、次の Ticket で接続します。',
+        error_message: null,
         result: null,
+        delivery: 'native_bridge',
+        native_request: printResult.native_request,
       }
     }
 
@@ -139,6 +143,8 @@ export async function tryAutoPrintVendorOrderReceipt(args: {
       is_reprint: false,
       error_message: null,
       result: printResult.result,
+      delivery: 'server_print',
+      native_request: null,
     }
   } catch (error) {
     return {
@@ -147,6 +153,8 @@ export async function tryAutoPrintVendorOrderReceipt(args: {
       is_reprint: false,
       error_message: error instanceof Error ? error.message : 'レシート印刷に失敗しました',
       result: null,
+      delivery: null,
+      native_request: null,
     }
   }
 }

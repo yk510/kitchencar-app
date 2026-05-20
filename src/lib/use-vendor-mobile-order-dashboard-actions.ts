@@ -14,8 +14,8 @@ import type {
 } from '@/types/api-payloads'
 
 function buildReceiptPrintFollowupMessage(errorMessage: string, isReprint: boolean) {
-  if (errorMessage.includes('iPad WebView ラッパー向けの自動印刷')) {
-    return 'iPad WebView ラッパー向けの自動印刷は、次の実装で接続します。現時点では注文管理画面の再印刷から動作確認してください。'
+  if (errorMessage.includes('WebView ラッパーアプリ内で開いてください')) {
+    return `${isReprint ? '再印刷' : '自動印刷'}は、iPad の WebView ラッパーアプリ内で実行してください。通常のブラウザでは Bluetooth 印刷できません。`
   }
 
   if (errorMessage.includes('プリンター接続先')) {
@@ -109,6 +109,28 @@ export function useVendorMobileOrderDashboardActions({
       ])
     },
     [dashboardStoreId, loadSelectedOrder, refreshList, refreshSummary, selectedScheduleId]
+  )
+
+  const dispatchNativeReceiptRequest = useCallback(
+    (response: VendorMobileOrderPrintDispatchPayload, orderNumber: string, isReprint: boolean) => {
+      if (response.delivery !== 'native_bridge') {
+        return false
+      }
+
+      const dispatchResult = dispatchNativeReceiptPrint(response.native_request)
+      if (!dispatchResult.dispatched) {
+        throw new Error('iPad WebView ラッパーアプリ内で開いてください')
+      }
+
+      setMessage(
+        isReprint
+          ? `注文 ${orderNumber} の再印刷要求を iPad アプリへ送信しました`
+          : `注文 ${orderNumber} の料金受領を記録し、レシート印刷要求を iPad アプリへ送信しました`
+      )
+
+      return true
+    },
+    [setMessage]
   )
 
   const handleChangeStatus = useCallback(
@@ -224,7 +246,32 @@ export function useVendorMobileOrderDashboardActions({
         })
 
         if (response.receipt_print?.attempted) {
-          if (response.receipt_print.printed) {
+          if (response.receipt_print.delivery === 'native_bridge' && response.receipt_print.native_request) {
+            try {
+              dispatchNativeReceiptRequest(
+                {
+                  order_id: orderId,
+                  order_number: orderNumber,
+                  is_reprint: false,
+                  printer_provider: 'ios_webview_wrapper',
+                  printer_endpoint: '',
+                  printer_label: null,
+                  print_mode: null,
+                  delivery: 'native_bridge',
+                  native_request: response.receipt_print.native_request,
+                },
+                orderNumber,
+                false
+              )
+            } catch (dispatchError) {
+              setMessage(
+                `注文 ${orderNumber} の料金受領を記録しました。${buildReceiptPrintFollowupMessage(
+                  dispatchError instanceof Error ? dispatchError.message : '不明なエラー',
+                  false
+                )}`
+              )
+            }
+          } else if (response.receipt_print.printed) {
             setMessage(`注文 ${orderNumber} の料金受領を記録し、レシートを印刷しました`)
           } else {
             setMessage(
@@ -247,6 +294,7 @@ export function useVendorMobileOrderDashboardActions({
     },
     [
       counts,
+      dispatchNativeReceiptRequest,
       orders,
       refreshOrderSurface,
       selectedOrder,
@@ -272,18 +320,7 @@ export function useVendorMobileOrderDashboardActions({
           body: JSON.stringify({ is_reprint: true }),
         })
 
-        if (response.delivery === 'native_bridge') {
-          const dispatchResult = dispatchNativeReceiptPrint(response.native_request)
-          if (!dispatchResult.dispatched) {
-            throw new Error('iPad WebView ラッパーへの印刷要求に失敗しました')
-          }
-
-          setMessage(
-            dispatchResult.mechanism === 'webkit_message_handler'
-              ? `注文 ${orderNumber} の再印刷要求を iPad アプリへ送信しました`
-              : `注文 ${orderNumber} の再印刷要求を補助アプリへ送信しました`
-          )
-        } else {
+        if (!dispatchNativeReceiptRequest(response, orderNumber, true)) {
           setMessage(`注文 ${orderNumber} のレシートを再印刷しました`)
         }
       } catch (err) {
@@ -293,7 +330,7 @@ export function useVendorMobileOrderDashboardActions({
         setPendingReprintOrderId(null)
       }
     },
-    [setError, setMessage]
+    [dispatchNativeReceiptRequest, setError, setMessage]
   )
 
   return {

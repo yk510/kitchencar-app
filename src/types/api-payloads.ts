@@ -506,6 +506,8 @@ export type VendorMobileOrderReceiptPrintStatusPayload = {
   is_reprint: boolean
   error_message: string | null
   result: VendorMobileOrderPrintResultPayload['result'] | null
+  delivery: 'server_print' | 'native_bridge' | null
+  native_request: NativeReceiptPrintRequest | null
 }
 
 export type VendorMobileOrderPrintResultPayload = {
