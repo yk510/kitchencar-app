@@ -61,6 +61,7 @@
 
 成果物:
 - [ios-webview-wrapper-native-receiver-spec.md](/Users/yukikuchi/Documents/1.KX/仲町CS/kitchencar-app/docs/ios-webview-wrapper-native-receiver-spec.md)
+- [ios-webview-wrapper-mvp-verification-checklist.md](/Users/yukikuchi/Documents/1.KX/仲町CS/kitchencar-app/docs/ios-webview-wrapper-mvp-verification-checklist.md)
 
 ## いま先にやる実装
 

@@ -136,6 +136,9 @@
 成果物:
 - 実機検証チェックリスト
 
+追加成果物:
+- [ios-webview-wrapper-mvp-verification-checklist.md](/Users/yukikuchi/Documents/1.KX/仲町CS/kitchencar-app/docs/ios-webview-wrapper-mvp-verification-checklist.md)
+
 ## おすすめ順
 
 1. Ticket 1
