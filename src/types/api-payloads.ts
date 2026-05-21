@@ -92,6 +92,7 @@ export type CrossAnalyticsDimensionKey =
   | 'location'
   | 'weekday'
   | 'weather'
+  | 'temperature'
   | 'hour'
   | 'product'
 

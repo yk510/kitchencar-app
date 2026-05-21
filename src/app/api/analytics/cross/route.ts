@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRouteSession } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { normalizeAnalyticsDate } from '@/lib/analytics-date'
+import { calculateAverageTemperature, resolveTemperatureBucket } from '@/lib/analytics-temperature'
 import type {
   CrossAnalyticsDimensionKey as DimensionKey,
   CrossAnalyticsMetricKey as MetricKey,
@@ -13,7 +14,7 @@ const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日'] as cons
 function normalizeDimensions(value: unknown): DimensionKey[] {
   if (!Array.isArray(value)) return []
   return value.filter((item): item is DimensionKey =>
-    ['location', 'weekday', 'weather', 'hour', 'product'].includes(String(item))
+    ['location', 'weekday', 'weather', 'temperature', 'hour', 'product'].includes(String(item))
   )
 }
 
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
         (supabase as any).from('product_master').select('product_name, cost_amount'),
         (supabase as any)
           .from('weather_logs')
-          .select('log_date, location_id, weather_type')
+          .select('log_date, location_id, weather_type, temperature_min, temperature_max')
           .gte('log_date', start || '1900-01-01')
           .lte('log_date', end || '2999-12-31'),
         (supabase as any).from('locations').select('id, name'),
@@ -92,9 +93,13 @@ export async function POST(req: NextRequest) {
       locationMap.set(location.id, location.name)
     }
 
-    const weatherMap = new Map<string, string>()
+    const weatherMap = new Map<string, { weather: string; temperature: string }>()
     for (const row of (weatherLogs ?? []) as any[]) {
-      weatherMap.set(`${row.log_date}__${row.location_id ?? 'none'}`, row.weather_type ?? '不明')
+      const avgTemperature = calculateAverageTemperature(row.temperature_min, row.temperature_max)
+      weatherMap.set(`${row.log_date}__${row.location_id ?? 'none'}`, {
+        weather: row.weather_type ?? '不明',
+        temperature: resolveTemperatureBucket(avgTemperature).label,
+      })
     }
 
     const stallLogLocationMap = new Map<string, string | null>()
@@ -121,8 +126,12 @@ export async function POST(req: NextRequest) {
         weekday: getWeekdayLabel(txn.day_of_week),
         hour: formatHourLabel(txn.hour_of_day),
         weather:
-          weatherMap.get(`${txn.txn_date}__${resolvedLocationId ?? 'none'}`) ??
-          weatherMap.get(`${txn.txn_date}__none`) ??
+          weatherMap.get(`${txn.txn_date}__${resolvedLocationId ?? 'none'}`)?.weather ??
+          weatherMap.get(`${txn.txn_date}__none`)?.weather ??
+          '不明',
+        temperature:
+          weatherMap.get(`${txn.txn_date}__${resolvedLocationId ?? 'none'}`)?.temperature ??
+          weatherMap.get(`${txn.txn_date}__none`)?.temperature ??
           '不明',
       })
     }
@@ -156,6 +165,8 @@ export async function POST(req: NextRequest) {
           return txnMeta.weekday
         case 'weather':
           return txnMeta.weather
+        case 'temperature':
+          return txnMeta.temperature
         case 'hour':
           return txnMeta.hour
         case 'product':

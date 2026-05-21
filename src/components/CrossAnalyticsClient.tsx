@@ -20,6 +20,7 @@ const DIMENSIONS: Array<{ key: DimensionKey; label: string }> = [
   { key: 'location', label: '場所' },
   { key: 'weekday', label: '曜日' },
   { key: 'weather', label: '天候' },
+  { key: 'temperature', label: '気温' },
   { key: 'hour', label: '時間帯' },
   { key: 'product', label: '商品' },
 ]

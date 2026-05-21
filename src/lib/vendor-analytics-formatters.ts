@@ -1,6 +1,7 @@
 import type { ProductAnalyticsRow } from '@/lib/vendor-product-analytics'
 import type { HourlyAnalyticsRow } from '@/lib/vendor-hourly-analytics'
 import type { WeekdayAnalyticsRow } from '@/lib/vendor-weekday-analytics'
+import type { TemperatureAnalyticsRow } from '@/lib/vendor-temperature-analytics'
 import type { VendorDailySalesRow } from '@/types/operations'
 
 const DAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
@@ -104,6 +105,23 @@ export function formatVendorWeekdayAnalyticsPayload(rows: WeekdayAnalyticsRow[])
     total_cost: row.total_cost,
     gross_profit: row.gross_profit,
     txn_count: row.txn_count,
+    avg_sales_per_txn: row.avg_sales_per_txn,
+    performance: row.performance,
+  }))
+}
+
+export function formatVendorTemperatureAnalyticsPayload(rows: TemperatureAnalyticsRow[]) {
+  return rows.map((row) => ({
+    bucket_key: row.bucket_key,
+    label: row.label,
+    avg_temperature: row.avg_temperature,
+    avg_temperature_label: row.avg_temperature_label,
+    total_sales: row.total_sales,
+    total_cost: row.total_cost,
+    gross_profit: row.gross_profit,
+    avg_sales: row.avg_sales,
+    txn_count: row.txn_count,
+    day_count: row.day_count,
     avg_sales_per_txn: row.avg_sales_per_txn,
     performance: row.performance,
   }))

@@ -57,6 +57,7 @@ const vendorNavGroups: NavGroup[] = [
       { href: '/analytics/daily', label: '日別売上' },
       { href: '/reports/weekly', label: '週報' },
       { href: '/analytics/locations', label: '場所分析' },
+      { href: '/analytics/temperature', label: '気温分析' },
       { href: '/analytics/weekday', label: '曜日分析' },
       { href: '/analytics/hourly', label: '時間帯分析' },
       { href: '/analytics/products', label: '商品分析' },

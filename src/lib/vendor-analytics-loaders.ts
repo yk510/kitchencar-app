@@ -1,6 +1,7 @@
-import { formatVendorHourlyAnalyticsPayload, formatVendorProductAnalyticsPayload, formatVendorWeekdayAnalyticsPayload } from '@/lib/vendor-analytics-formatters'
+import { formatVendorHourlyAnalyticsPayload, formatVendorProductAnalyticsPayload, formatVendorTemperatureAnalyticsPayload, formatVendorWeekdayAnalyticsPayload } from '@/lib/vendor-analytics-formatters'
 import { getVendorHourlyAnalytics } from '@/lib/vendor-hourly-analytics'
 import { getVendorProductAnalytics } from '@/lib/vendor-product-analytics'
+import { getVendorTemperatureAnalytics } from '@/lib/vendor-temperature-analytics'
 import { getVendorWeekdayAnalytics } from '@/lib/vendor-weekday-analytics'
 
 export async function loadVendorProductAnalyticsPayload(
@@ -34,4 +35,15 @@ export async function loadVendorWeekdayAnalyticsPayload(
 ) {
   const rows = await getVendorWeekdayAnalytics(supabase, userId, scope, start, end)
   return formatVendorWeekdayAnalyticsPayload(rows)
+}
+
+export async function loadVendorTemperatureAnalyticsPayload(
+  supabase: any,
+  userId: string,
+  scope: Parameters<typeof getVendorTemperatureAnalytics>[2],
+  start?: string,
+  end?: string
+) {
+  const rows = await getVendorTemperatureAnalytics(supabase, userId, scope, start, end)
+  return formatVendorTemperatureAnalyticsPayload(rows)
 }
