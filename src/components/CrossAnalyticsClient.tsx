@@ -16,6 +16,9 @@ type Preset = {
   metrics: MetricKey[]
 }
 
+type SortKey = 'dimension_1' | 'dimension_2' | MetricKey
+type SortDirection = 'asc' | 'desc'
+
 const DIMENSIONS: Array<{ key: DimensionKey; label: string }> = [
   { key: 'location', label: '場所' },
   { key: 'weekday', label: '曜日' },
@@ -45,6 +48,8 @@ export default function CrossAnalyticsClient() {
   const [end, setEnd] = useState('')
   const [draggingDimension, setDraggingDimension] = useState<DimensionKey | null>(null)
   const [rows, setRows] = useState<CrossAnalyticsRow[]>([])
+  const [sortKey, setSortKey] = useState<SortKey>('sales')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [presetName, setPresetName] = useState('')
@@ -153,10 +158,44 @@ export default function CrossAnalyticsClient() {
     fetchAnalytics(preset.dimensions, preset.metrics)
   }
 
+  function toggleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+      return
+    }
+
+    setSortKey(nextKey)
+    setSortDirection(nextKey.startsWith('dimension_') ? 'asc' : 'desc')
+  }
+
+  function getSortIndicator(key: SortKey) {
+    if (sortKey !== key) return '↕'
+    return sortDirection === 'desc' ? '↓' : '↑'
+  }
+
   const dimensionLabels = useMemo(
     () => new Map(DIMENSIONS.map((dimension) => [dimension.key, dimension.label])),
     []
   )
+
+  const sortedRows = useMemo(() => {
+    const cloned = [...rows]
+    cloned.sort((a, b) => {
+      const directionFactor = sortDirection === 'asc' ? 1 : -1
+
+      if (sortKey === 'dimension_1' || sortKey === 'dimension_2') {
+        const aValue = String(a[sortKey] ?? '')
+        const bValue = String(b[sortKey] ?? '')
+        return aValue.localeCompare(bValue, 'ja') * directionFactor
+      }
+
+      const aValue = Number(a[sortKey] ?? 0)
+      const bValue = Number(b[sortKey] ?? 0)
+      if (aValue === bValue) return 0
+      return (aValue > bValue ? 1 : -1) * directionFactor
+    })
+    return cloned
+  }, [rows, sortDirection, sortKey])
 
   return (
     <div className="space-y-6">
@@ -307,16 +346,37 @@ export default function CrossAnalyticsClient() {
           <thead>
             <tr className="text-left text-gray-500">
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">
-                {dimensionLabels.get(dimensions[0]) ?? '軸1'}
+                <button
+                  type="button"
+                  onClick={() => toggleSort('dimension_1')}
+                  className="inline-flex items-center gap-1 text-left text-gray-700 hover:text-blue-700"
+                >
+                  <span>{dimensionLabels.get(dimensions[0]) ?? '軸1'}</span>
+                  <span className="text-xs text-gray-400">{getSortIndicator('dimension_1')}</span>
+                </button>
               </th>
               {dimensions[1] && (
                 <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">
-                  {dimensionLabels.get(dimensions[1])}
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('dimension_2')}
+                    className="inline-flex items-center gap-1 text-left text-gray-700 hover:text-blue-700"
+                  >
+                    <span>{dimensionLabels.get(dimensions[1])}</span>
+                    <span className="text-xs text-gray-400">{getSortIndicator('dimension_2')}</span>
+                  </button>
                 </th>
               )}
               {metrics.map((metric) => (
                 <th key={metric} className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-medium">
-                  {METRICS.find((item) => item.key === metric)?.label}
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(metric)}
+                    className="inline-flex items-center gap-1 text-left text-gray-700 hover:text-blue-700"
+                  >
+                    <span>{METRICS.find((item) => item.key === metric)?.label}</span>
+                    <span className="text-xs text-gray-400">{getSortIndicator(metric)}</span>
+                  </button>
                 </th>
               ))}
             </tr>
@@ -341,7 +401,7 @@ export default function CrossAnalyticsClient() {
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
+              sortedRows.map((row, index) => (
                 <tr key={`${row.dimension_1}-${row.dimension_2 ?? 'none'}-${index}`}>
                   <td className="border-b border-gray-100 px-4 py-3 font-medium text-gray-800">
                     {row.dimension_1}
