@@ -5,6 +5,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { buildReceiptPrintPreviewPayload } from '@/lib/receipt-printing-payload'
 import {
+  buildNativePrinterSettingsOpenRequest,
+  canUseIosWebkitPrinterBridge,
+  dispatchNativePrinterSettingsOpen,
+} from '@/lib/receipt-printing/native-print-bridge'
+import {
   getWebBluetoothEnvironmentSummary,
   runMpB20WebBluetoothProbe,
   type WebBluetoothProbeResult,
@@ -157,6 +162,7 @@ export default function VendorMobileOrderPageClient({
 
   const webBluetoothEnvironment = useMemo(() => getWebBluetoothEnvironmentSummary(), [])
   const isEpsonReceiptProvider = receiptPrinterProvider === 'epson_epos'
+  const isIosWrapperReceiptProvider = receiptPrinterProvider === 'ios_webview_wrapper'
 
   function toggleStorePosPaymentMethod(method: StorePosPaymentMethod) {
     setStorePosPaymentMethods((current) =>
@@ -212,7 +218,7 @@ export default function VendorMobileOrderPageClient({
   }
 
   async function handleSaveReceiptSettings() {
-    if (receiptPrintEnabled && !receiptPrinterEndpoint.trim()) {
+    if (receiptPrintEnabled && isEpsonReceiptProvider && !receiptPrinterEndpoint.trim()) {
       setReceiptSettingsMessage('レシート印刷を有効にする場合は、プリンター接続先を入力してください')
       return
     }
@@ -227,7 +233,7 @@ export default function VendorMobileOrderPageClient({
         body: JSON.stringify({
           is_receipt_print_enabled: receiptPrintEnabled,
           receipt_printer_provider: receiptPrinterProvider,
-          receipt_printer_endpoint: receiptPrinterEndpoint.trim() || null,
+          receipt_printer_endpoint: isEpsonReceiptProvider ? receiptPrinterEndpoint.trim() || null : null,
           receipt_printer_label: receiptPrinterLabel.trim() || null,
           receipt_print_mode: receiptPrintMode,
         }),
@@ -304,6 +310,30 @@ export default function VendorMobileOrderPageClient({
     } finally {
       setProbingWebBluetooth(false)
     }
+  }
+
+  function handleOpenIosPrinterSettings() {
+    setReceiptSettingsMessage(null)
+
+    if (!isIosWrapperReceiptProvider) {
+      setReceiptSettingsMessage('この操作は iPad WebView ラッパー方式を選んでいるときだけ使えます。')
+      return
+    }
+
+    if (!canUseIosWebkitPrinterBridge()) {
+      setReceiptSettingsMessage(
+        'このボタンは iPad アプリで開いたときだけ使えます。PCブラウザや通常のSafariでは開けません。'
+      )
+      return
+    }
+
+    const dispatchResult = dispatchNativePrinterSettingsOpen(buildNativePrinterSettingsOpenRequest())
+
+    setReceiptSettingsMessage(
+      dispatchResult.dispatched
+        ? 'iPad アプリのプリンター設定を開いています。設定後は「閉じる」でこの画面に戻ってください。'
+        : 'iPad アプリでのみプリンター設定を開けます。'
+    )
   }
 
   const currentSchedule = useMemo(() => (data ? getCurrentSchedule(data.schedules) : null), [data])
@@ -447,8 +477,9 @@ export default function VendorMobileOrderPageClient({
                 <p className="font-semibold">現場で止まりにくくするための確認ポイント</p>
                 <ul className="mt-2 space-y-1 text-xs leading-5 text-sky-800">
                   <li>1. 印刷設定を保存したあと、先に「接続テスト」で疎通確認してください。</li>
-                  <li>2. 自動印刷に失敗しても、会計記録は残ります。注文管理の「レシートを再印刷」から再試行できます。</li>
-                  <li>3. 接続失敗時は、プリンター電源・同一ネットワーク・接続先URLの順で確認すると切り分けやすいです。</li>
+                  <li>2. 自動印刷に失敗しても、会計記録は残ります。必要に応じて「レシートを再印刷」から再試行できます。</li>
+                  <li>3. iPad WebView ラッパー方式では、再印刷も POS用iPad のアプリ内で実行してください。</li>
+                  <li>4. 接続失敗時は、プリンター電源・同一ネットワーク・接続先URLの順で確認すると切り分けやすいです。</li>
                 </ul>
               </div>
               <div className="mt-5 grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
@@ -509,11 +540,30 @@ export default function VendorMobileOrderPageClient({
                         <p className="mt-2 text-xs text-gray-500">LAN 上の Epson プリンターに送る URL または接続先です。</p>
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 px-4 py-4">
-                        <p className="text-sm font-semibold text-indigo-900">iPad WebView ラッパー経由で印刷します</p>
-                        <p className="mt-1 text-xs leading-5 text-indigo-800">
-                          この方式では LAN 接続先 URL は不要です。再印刷は Web 側から iPad ネイティブ bridge へ要求を渡します。
-                        </p>
+                      <div className="rounded-[24px] border border-[var(--accent-blue-soft)] bg-[rgba(240,247,255,0.96)] px-4 py-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--accent-blue)]">iPad アプリから Bluetooth プリンターを使います</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">
+                              この方式では LAN 接続先 URL は不要です。プリンターの接続確認やテストは、iPad アプリの設定画面で行います。
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-[var(--accent-blue)] ring-1 ring-[var(--accent-blue-soft)]">
+                            iPadアプリ専用
+                          </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={handleOpenIosPrinterSettings}
+                            className="rounded-full bg-[var(--accent-blue)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+                          >
+                            iPadアプリでプリンター設定を開く
+                          </button>
+                          <p className="text-xs leading-5 text-slate-500">
+                            このボタンは iPad アプリで開いたときだけ動きます。PCブラウザでは開けません。
+                          </p>
+                        </div>
                       </div>
                     )}
                     <div>
@@ -538,7 +588,7 @@ export default function VendorMobileOrderPageClient({
                     <p className="text-xs text-gray-500">
                       {isEpsonReceiptProvider
                         ? '注文管理で料金受領したタイミングで自動印刷し、必要時は再印刷します。'
-                        : 'iPad WebView ラッパーでは、まず再印刷導線から native bridge 接続を確認します。'}
+                        : 'iPad WebView ラッパーでは、まず iPad アプリ内のプリンター設定から接続確認をしてください。'}
                     </p>
                     <div className="flex flex-wrap gap-3">
                       {isEpsonReceiptProvider ? (
