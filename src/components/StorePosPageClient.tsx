@@ -80,6 +80,7 @@ const primaryButtonClassName =
   'inline-flex items-center justify-center rounded-[28px] bg-[var(--accent-blue)] px-6 py-4 text-base font-semibold text-white shadow-[0_14px_32px_rgba(37,99,235,0.28)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButtonClassName =
   'inline-flex items-center justify-center rounded-[28px] bg-white px-6 py-4 text-base font-semibold text-slate-700 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50'
+const STORE_POS_RECEIPT_DEBUG_VERSION = '2026-05-22-pos-auto-print-debug-2'
 
 function normalizeText(value: string | null | undefined) {
   return String(value ?? '').toLowerCase()
@@ -228,6 +229,22 @@ function getUnavailableMessage(product: PublicMobileOrderProduct) {
 function logStorePosReceiptDebug(message: string, details?: Record<string, unknown>) {
   if (typeof window === 'undefined') return
 
+  ;(
+    window as Window & {
+      __KURIDAS_STORE_POS_RECEIPT_DEBUG_VERSION?: string
+      __KURIDAS_STORE_POS_RECEIPT_LAST_EVENT?: Record<string, unknown>
+    }
+  ).__KURIDAS_STORE_POS_RECEIPT_DEBUG_VERSION = STORE_POS_RECEIPT_DEBUG_VERSION
+  ;(
+    window as Window & {
+      __KURIDAS_STORE_POS_RECEIPT_LAST_EVENT?: Record<string, unknown>
+    }
+  ).__KURIDAS_STORE_POS_RECEIPT_LAST_EVENT = {
+    message,
+    details: details ?? null,
+    logged_at: new Date().toISOString(),
+  }
+
   if (details) {
     console.info(`[StorePosReceipt] ${message}`, details)
     return
@@ -290,6 +307,18 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     }
     return categorizedProducts.filter((entry) => entry.category === activeFilter).map((entry) => entry.product)
   }, [activeFilter, categorizedProducts])
+
+  useEffect(() => {
+    ;(
+      window as Window & {
+        __KURIDAS_STORE_POS_RECEIPT_DEBUG_VERSION?: string
+      }
+    ).__KURIDAS_STORE_POS_RECEIPT_DEBUG_VERSION = STORE_POS_RECEIPT_DEBUG_VERSION
+    logStorePosReceiptDebug('store pos receipt debug instrumentation active', {
+      version: STORE_POS_RECEIPT_DEBUG_VERSION,
+      href: typeof window !== 'undefined' ? window.location.href : null,
+    })
+  }, [])
 
   useEffect(() => {
     if (!paymentMethods.includes(selectedPaymentMethod)) {
