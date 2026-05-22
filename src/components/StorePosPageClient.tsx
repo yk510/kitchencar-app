@@ -32,6 +32,7 @@ import {
 import {
   addNativeReceiptPrintCallbackListener,
   buildNativeReceiptPrintRequest,
+  canUseIosWebkitPrinterBridge,
   dispatchNativeReceiptPrint,
 } from '@/lib/receipt-printing/native-print-bridge'
 import { buildStorePosReceiptPrintPayload } from '@/lib/receipt-printing/store-pos-payload'
@@ -224,6 +225,17 @@ function getUnavailableMessage(product: PublicMobileOrderProduct) {
   return 'この商品は現在売り切れのため、カートに追加できません。'
 }
 
+function logStorePosReceiptDebug(message: string, details?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+
+  if (details) {
+    console.info(`[StorePosReceipt] ${message}`, details)
+    return
+  }
+
+  console.info(`[StorePosReceipt] ${message}`)
+}
+
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
   const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const router = useRouter()
@@ -369,6 +381,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
   useEffect(() => {
     const removeListener = addNativeReceiptPrintCallbackListener((payload: NativeReceiptBridgeCallbackPayload) => {
+      logStorePosReceiptDebug('native callback received', {
+        request_id: payload.request_id,
+        status: payload.status,
+        error_code: payload.error_code,
+        error_message: payload.error_message,
+      })
+
       const orderId = requestToOrderIdRef.current.get(payload.request_id)
       if (!orderId) return
       if (!submittedOrder || submittedOrder.order_id !== orderId) return
@@ -443,6 +462,10 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         )
 
         if (response.status === 'cancelled') {
+          logStorePosReceiptDebug('settlement polling detected cancellation', {
+            order_id: response.order_id,
+            status: response.status,
+          })
           setSettlementMessage('店員が注文をキャンセルしました。10秒後に次の注文画面へ戻ります。')
           setWaitingSettlement(false)
           setIsPrintingReceipt(false)
@@ -451,6 +474,11 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
         }
 
         if (response.payment_status === 'paid') {
+          logStorePosReceiptDebug('settlement polling detected payment completion', {
+            order_id: response.order_id,
+            payment_status: response.payment_status,
+            status: response.status,
+          })
           setSettlementMessage('店員が料金受領を記録しました。レシート印刷を確認しています。')
           setWaitingSettlement(false)
         }
@@ -660,8 +688,19 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   async function dispatchCustomerReceiptPrint(order: SubmittedStorePosOrder) {
-    if (printedOrderIdsRef.current.has(order.order_id)) return
-    if (pendingPrintOrderIdsRef.current.has(order.order_id)) return
+    if (printedOrderIdsRef.current.has(order.order_id)) {
+      logStorePosReceiptDebug('skip receipt print because order is already printed', {
+        order_id: order.order_id,
+      })
+      return
+    }
+
+    if (pendingPrintOrderIdsRef.current.has(order.order_id)) {
+      logStorePosReceiptDebug('skip receipt print because order is already pending', {
+        order_id: order.order_id,
+      })
+      return
+    }
 
     const payload = buildStorePosReceiptPrintPayload({
       storeName: pageData.store.store_name,
@@ -694,15 +733,34 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       origin: 'store_pos',
     })
 
+    logStorePosReceiptDebug('dispatching native receipt print', {
+      order_id: order.order_id,
+      request_id: request.request_id,
+      payment_status: order.payment_status,
+      status: order.status,
+      has_webkit_bridge: canUseIosWebkitPrinterBridge(),
+      item_count: payload.body.item_count,
+    })
+
     pendingPrintOrderIdsRef.current.add(order.order_id)
     requestToOrderIdRef.current.set(request.request_id, order.order_id)
     const dispatchResult = dispatchNativeReceiptPrint(request)
+
+    logStorePosReceiptDebug('native receipt print dispatch result', {
+      order_id: order.order_id,
+      request_id: request.request_id,
+      dispatched: dispatchResult.dispatched,
+      mechanism: dispatchResult.mechanism,
+      mode: dispatchResult.mode,
+    })
 
     if (!dispatchResult.dispatched) {
       pendingPrintOrderIdsRef.current.delete(order.order_id)
       requestToOrderIdRef.current.delete(request.request_id)
       setIsPrintingReceipt(false)
-      setSettlementMessage('支払いは完了しましたが、この端末ではレシート印刷できません。10秒後に次の注文画面へ戻ります。')
+      setSettlementMessage(
+        '支払いは完了しましたが、この画面ではレシート印刷できません。iPad の POS ラッパーアプリで開いているか確認してください。10秒後に次の注文画面へ戻ります。'
+      )
       setIsSettlementComplete(true)
       return
     }
@@ -714,11 +772,37 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   useEffect(() => {
     if (!submittedOrder) return
     if (submittedOrder.status === 'cancelled') return
-    if (submittedOrder.payment_status !== 'paid') return
-    if (printedOrderIdsRef.current.has(submittedOrder.order_id)) return
-    if (pendingPrintOrderIdsRef.current.has(submittedOrder.order_id)) return
-    if (isSettlementComplete) return
+    if (submittedOrder.payment_status !== 'paid') {
+      logStorePosReceiptDebug('skip auto print because payment is not completed yet', {
+        order_id: submittedOrder.order_id,
+        payment_status: submittedOrder.payment_status,
+      })
+      return
+    }
+    if (printedOrderIdsRef.current.has(submittedOrder.order_id)) {
+      logStorePosReceiptDebug('skip auto print because order is already marked printed', {
+        order_id: submittedOrder.order_id,
+      })
+      return
+    }
+    if (pendingPrintOrderIdsRef.current.has(submittedOrder.order_id)) {
+      logStorePosReceiptDebug('skip auto print because print is already pending', {
+        order_id: submittedOrder.order_id,
+      })
+      return
+    }
+    if (isSettlementComplete) {
+      logStorePosReceiptDebug('skip auto print because settlement is already marked complete', {
+        order_id: submittedOrder.order_id,
+      })
+      return
+    }
 
+    logStorePosReceiptDebug('auto print effect triggered after paid detection', {
+      order_id: submittedOrder.order_id,
+      order_number: submittedOrder.order_number,
+      has_webkit_bridge: canUseIosWebkitPrinterBridge(),
+    })
     void dispatchCustomerReceiptPrint(submittedOrder)
   }, [cartItems, isSettlementComplete, pageData.store.store_name, submittedOrder])
 
