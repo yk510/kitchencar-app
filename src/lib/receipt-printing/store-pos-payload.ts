@@ -55,7 +55,7 @@ export function buildStorePosReceiptPrintPayload(args: {
   const items = args.items.map(buildStorePosReceiptLinePayload)
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
 
-  return {
+  const payload = {
     order_id: args.orderId,
     order_source: 'store_pos',
     header: {
@@ -80,4 +80,6 @@ export function buildStorePosReceiptPrintPayload(args: {
       ordered_at_label: formatReceiptOrderedAt(args.orderedAt),
     },
   }
+
+  return payload as ReceiptPrintPayload
 }
