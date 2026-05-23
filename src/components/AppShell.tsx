@@ -113,7 +113,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Suspense fallback={null}>
           <ScrollToTopOnNavigation />
         </Suspense>
-        <main>{children}</main>
+        <main className="safe-area-viewport">{children}</main>
       </>
     )
   }

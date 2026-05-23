@@ -57,6 +57,7 @@ export function isPublicEntryPath(pathname: string) {
     normalizedPathname === '/lp' ||
     normalizedPathname === '/lp/vendor' ||
     normalizedPathname === '/lp/organizer' ||
+    normalizedPathname === '/privacy' ||
     normalizedPathname === '/login' ||
     normalizedPathname === '/auth/confirmed' ||
     normalizedPathname.startsWith('/auth/confirmed/') ||

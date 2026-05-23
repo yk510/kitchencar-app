@@ -225,6 +225,11 @@ function getUnavailableMessage(product: PublicMobileOrderProduct) {
   return 'この商品は現在売り切れのため、カートに追加できません。'
 }
 
+function buildReceiptPrintFailureMessage(errorMessage?: string | null) {
+  const detail = errorMessage ? ` 詳細: ${errorMessage}` : ''
+  return `お支払いは完了しましたが、プリンターに接続できません。店員の方はプリンターの電源とBluetooth接続を確認してください。印刷に失敗しました。必要に応じて注文管理画面から再印刷してください。${detail} 10秒後に次の注文画面へ戻ります。`
+}
+
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
   const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const router = useRouter()
@@ -393,11 +398,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       }
 
       if (payload.status === 'failed') {
-        setSettlementMessage(
-          payload.error_message
-            ? `お支払いは完了しましたが、レシート印刷に失敗しました。${payload.error_message} 必要であれば店員へお声がけください。10秒後に次の注文画面へ戻ります。`
-            : 'お支払いは完了しましたが、レシート印刷に失敗しました。必要であれば店員へお声がけください。10秒後に次の注文画面へ戻ります。'
-        )
+        setSettlementMessage(buildReceiptPrintFailureMessage(payload.error_message))
         setWaitingSettlement(false)
         setIsSettlementComplete(true)
         return
@@ -405,7 +406,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
       if (payload.status === 'unsupported') {
         setSettlementMessage(
-          'お支払いは完了しましたが、この端末では自動でレシート印刷できません。必要に応じて店員が再印刷します。10秒後に次の注文画面へ戻ります。'
+          'お支払いは完了しましたが、この端末では自動印刷に対応していません。店員の方はPOS用iPadアプリで開いているか確認してください。必要に応じて注文管理画面から再印刷してください。10秒後に次の注文画面へ戻ります。'
         )
         setWaitingSettlement(false)
         setIsSettlementComplete(true)
@@ -711,7 +712,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       requestToOrderIdRef.current.delete(request.request_id)
       setIsPrintingReceipt(false)
       setSettlementMessage(
-        'お支払いは完了しましたが、この画面では自動でレシート印刷できません。必要であれば店員へお声がけください。10秒後に次の注文画面へ戻ります。'
+        'お支払いは完了しましたが、この画面では自動でレシート印刷できません。店員の方はPOS用iPadアプリで開いているか確認してください。必要に応じて注文管理画面から再印刷してください。10秒後に次の注文画面へ戻ります。'
       )
       setIsSettlementComplete(true)
       return
