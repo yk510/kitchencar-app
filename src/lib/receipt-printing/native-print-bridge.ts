@@ -2,6 +2,7 @@ import { buildReceiptPrintPlainText } from '@/lib/receipt-printing/receipt-print
 import type {
   NativeReceiptBridgeCallbackPayload,
   NativeReceiptBridgeMode,
+  NativePrinterSettingsOpenRequest,
   NativeReceiptPrintIntent,
   NativeReceiptPrintOrigin,
   NativeReceiptPrintRequest,
@@ -34,6 +35,8 @@ export type NativeReceiptBridgeDispatchResult = {
   dispatched: boolean
   mechanism: 'webkit_message_handler' | 'custom_url_scheme'
 }
+
+type NativeBridgeDispatchableRequest = NativeReceiptPrintRequest | NativePrinterSettingsOpenRequest
 
 function buildRequestId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -71,6 +74,17 @@ export function buildNativeReceiptPrintRequest(args: {
   }
 }
 
+export function buildNativePrinterSettingsOpenRequest(): NativePrinterSettingsOpenRequest {
+  return {
+    kind: 'open_printer_settings',
+    bridge_version: 1,
+    mode: 'ios_webview_wrapper',
+    origin: 'vendor_mobile_order_settings',
+    request_id: buildRequestId(),
+    created_at: new Date().toISOString(),
+  }
+}
+
 export function canUseIosWebkitPrinterBridge() {
   if (typeof window === 'undefined') return false
   return typeof window.webkit?.messageHandlers?.[NATIVE_RECEIPT_BRIDGE_HANDLER_NAME]?.postMessage === 'function'
@@ -81,7 +95,7 @@ function buildHelperAppUrl(request: NativeReceiptPrintRequest) {
   return `kuridas-printer://print?payload=${encoded}`
 }
 
-export function dispatchNativeReceiptPrint(request: NativeReceiptPrintRequest): NativeReceiptBridgeDispatchResult {
+function dispatchNativeBridgeRequest(request: NativeBridgeDispatchableRequest): NativeReceiptBridgeDispatchResult {
   if (canUseIosWebkitPrinterBridge()) {
     window.webkit!.messageHandlers![NATIVE_RECEIPT_BRIDGE_HANDLER_NAME]!.postMessage(request)
     return {
@@ -91,7 +105,7 @@ export function dispatchNativeReceiptPrint(request: NativeReceiptPrintRequest): 
     }
   }
 
-  if (request.mode === 'ios_helper_app' && typeof window !== 'undefined') {
+  if (request.kind === 'receipt_print' && request.mode === 'ios_helper_app' && typeof window !== 'undefined') {
     window.location.href = buildHelperAppUrl(request)
     return {
       mode: request.mode,
@@ -105,6 +119,16 @@ export function dispatchNativeReceiptPrint(request: NativeReceiptPrintRequest): 
     dispatched: false,
     mechanism: 'custom_url_scheme',
   }
+}
+
+export function dispatchNativeReceiptPrint(request: NativeReceiptPrintRequest): NativeReceiptBridgeDispatchResult {
+  return dispatchNativeBridgeRequest(request)
+}
+
+export function dispatchNativePrinterSettingsOpen(
+  request: NativePrinterSettingsOpenRequest,
+): NativeReceiptBridgeDispatchResult {
+  return dispatchNativeBridgeRequest(request)
 }
 
 export function isNativeReceiptBridgeCallbackPayload(value: unknown): value is NativeReceiptBridgeCallbackPayload {
