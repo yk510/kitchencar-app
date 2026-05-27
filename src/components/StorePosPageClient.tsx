@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import LoadingLine from '@/components/LoadingLine'
-import PublicOrderItemsPanel from '@/components/PublicOrderItemsPanel'
+import StorePosConfirmView from '@/components/store-pos/StorePosConfirmView'
+import StorePosSubmittedView from '@/components/store-pos/StorePosSubmittedView'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import {
   buildInitialProductSelection,
@@ -13,10 +14,8 @@ import {
   getPublicOrderCartLineTotal,
   getPublicOrderChoicePriceLabel,
   getPublicOrderInventoryBadge,
-  getPublicOrderProductUnavailableState,
   isPublicOrderProductUnavailable,
   type PublicOrderProductSelection,
-  type PublicOrderSelectedOptionGroup,
   validatePublicOrderSelection,
 } from '@/lib/public-order-cart'
 import {
@@ -27,15 +26,29 @@ import {
 import {
   formatPublicOrderCartSummary,
   formatPublicOrderPrice,
-  formatStorePosPaymentMethodLabel,
 } from '@/lib/public-order-display'
 import {
   addNativeReceiptPrintCallbackListener,
   buildNativeReceiptPrintRequest,
-  canUseIosWebkitPrinterBridge,
   dispatchNativeReceiptPrint,
 } from '@/lib/receipt-printing/native-print-bridge'
 import { buildStorePosReceiptPrintPayload } from '@/lib/receipt-printing/store-pos-payload'
+import {
+  buildDefaultStorePosPaymentMethods,
+  buildStorePosReceiptPrintFailureMessage,
+  getDefaultStorePosProductFilter,
+  getInitialStorePosSelectedProduct,
+  getStorePosCategoryLabel,
+  getStorePosUnavailableMessage,
+  inferStorePosProductCategory,
+  isStorePosRecommendedProduct,
+  primaryButtonClassName,
+  secondaryButtonClassName,
+  type ProductFilterKey,
+  type StorePosCartItem,
+  type StorePosCreateResponse,
+  type SubmittedStorePosOrder,
+} from '@/lib/store-pos-ui'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import type {
   NativeReceiptBridgeCallbackPayload,
@@ -47,195 +60,12 @@ import type {
   StorePosPaymentMethod,
 } from '@/types/api-payloads'
 
-type CartItem = {
-  id: string
-  product_id: string
-  product_name: string
-  unit_price: number
-  quantity: number
-  line_total: number
-  selected_option_choice_ids: string[]
-  selected_options: PublicOrderSelectedOptionGroup[]
-}
-
-type StorePosCreateResponse = {
-  order_id: string
-  order_number: string
-  payment_status: 'pending' | 'paid'
-  payment_method: StorePosPaymentMethod
-  total_amount: number
-}
-
-type SubmittedStorePosOrder = StorePosCreateResponse & {
-  status: 'placed' | 'cancelled'
-  paid_at: string | null
-  cancelled_at: string | null
-  ordered_at: string
-}
-
-type ProductDisplayCategory = 'main' | 'side' | 'drink' | 'other'
-type ProductFilterKey = 'all' | 'recommended' | ProductDisplayCategory
-
-const primaryButtonClassName =
-  'inline-flex items-center justify-center rounded-[28px] bg-[var(--accent-blue)] px-6 py-4 text-base font-semibold text-white shadow-[0_14px_32px_rgba(37,99,235,0.28)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50'
-const secondaryButtonClassName =
-  'inline-flex items-center justify-center rounded-[28px] bg-white px-6 py-4 text-base font-semibold text-slate-700 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50'
-
-function normalizeText(value: string | null | undefined) {
-  return String(value ?? '').toLowerCase()
-}
-
-function inferProductCategory(product: PublicMobileOrderProduct): ProductDisplayCategory {
-  if (
-    product.display_category === 'main' ||
-    product.display_category === 'side' ||
-    product.display_category === 'drink' ||
-    product.display_category === 'other'
-  ) {
-    return product.display_category
-  }
-
-  const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
-
-  if (
-    source.includes('ラッシー') ||
-    source.includes('コーヒー') ||
-    source.includes('ドリンク') ||
-    source.includes('ジュース') ||
-    source.includes('ティー') ||
-    source.includes('ソーダ') ||
-    source.includes('drink')
-  ) {
-    return 'drink'
-  }
-
-  if (
-    source.includes('ポテト') ||
-    source.includes('サイド') ||
-    source.includes('トッピング') ||
-    source.includes('副菜') ||
-    source.includes('セット') ||
-    source.includes('side')
-  ) {
-    return 'side'
-  }
-
-  if (
-    source.includes('カレー') ||
-    source.includes('丼') ||
-    source.includes('メイン') ||
-    source.includes('プレート') ||
-    source.includes('main') ||
-    source.includes('スペシャル')
-  ) {
-    return 'main'
-  }
-
-  return 'other'
-}
-
-function isRecommendedProduct(product: PublicMobileOrderProduct, index: number) {
-  if (typeof product.is_recommended === 'boolean') {
-    return product.is_recommended
-  }
-
-  const source = `${normalizeText(product.name)} ${normalizeText(product.description)}`
-  return (
-    source.includes('おすすめ') ||
-    source.includes('人気') ||
-    source.includes('定番') ||
-    source.includes('スペシャル') ||
-    index < 2
-  )
-}
-
-function getCategoryLabel(category: ProductFilterKey) {
-  switch (category) {
-    case 'all':
-      return 'すべて'
-    case 'recommended':
-      return 'おすすめ'
-    case 'main':
-      return 'メイン'
-    case 'side':
-      return 'サイド'
-    case 'drink':
-      return 'ドリンク'
-    default:
-      return 'その他'
-  }
-}
-
-function getDefaultProductFilter(products: PublicMobileOrderProduct[]): ProductFilterKey {
-  const categorizedProducts = products.map((product, index) => ({
-    category: inferProductCategory(product),
-    recommended: isRecommendedProduct(product, index),
-  }))
-
-  if (categorizedProducts.some((entry) => entry.recommended)) {
-    return 'recommended'
-  }
-
-  if (categorizedProducts.some((entry) => entry.category === 'main')) {
-    return 'main'
-  }
-
-  return 'all'
-}
-
-function getInitialSelectedProduct(
-  products: PublicMobileOrderProduct[],
-  filter: ProductFilterKey
-): PublicMobileOrderProduct | null {
-  const categorizedProducts = products.map((product, index) => ({
-    product,
-    category: inferProductCategory(product),
-    recommended: isRecommendedProduct(product, index),
-  }))
-
-  const filteredProducts =
-    filter === 'all'
-      ? categorizedProducts
-      : filter === 'recommended'
-        ? categorizedProducts.filter((entry) => entry.recommended)
-        : categorizedProducts.filter((entry) => entry.category === filter)
-
-  return filteredProducts[0]?.product ?? products[0] ?? null
-}
-
-function buildDefaultPaymentMethods(
-  store: PublicMobileOrderPagePayload['store']
-): StorePosPaymentMethod[] {
-  const values = Array.isArray(store.store_pos_enabled_payment_methods)
-    ? store.store_pos_enabled_payment_methods
-    : ['cash', 'paypay']
-  return values.filter((value): value is StorePosPaymentMethod =>
-    ['cash', 'paypay', 'other'].includes(value)
-  )
-}
-
-function getUnavailableMessage(product: PublicMobileOrderProduct) {
-  const unavailableState = getPublicOrderProductUnavailableState(product)
-  if (unavailableState === 'loading') {
-    return 'この商品の在庫を確認しているため、カートに追加できません。'
-  }
-  if (unavailableState === 'not_set') {
-    return 'この商品は現在在庫準備中のため、カートに追加できません。'
-  }
-  return 'この商品は現在売り切れのため、カートに追加できません。'
-}
-
-function buildReceiptPrintFailureMessage(errorMessage?: string | null) {
-  const detail = errorMessage ? ` 詳細: ${errorMessage}` : ''
-  return `お支払いは完了しましたが、プリンターに接続できません。店員の方はプリンターの電源とBluetooth接続を確認してください。印刷に失敗しました。必要に応じて注文管理画面から再印刷してください。${detail} 10秒後に次の注文画面へ戻ります。`
-}
-
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
   const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartItems, setCartItems] = useState<StorePosCartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -248,14 +78,14 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [isPrintingReceipt, setIsPrintingReceipt] = useState(false)
   const [isSettlementComplete, setIsSettlementComplete] = useState(false)
   const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
-  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultProductFilter(data.products))
+  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultStorePosProductFilter(data.products))
   const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(() => {
-    const defaultFilter = getDefaultProductFilter(data.products)
-    return getInitialSelectedProduct(data.products, defaultFilter)
+    const defaultFilter = getDefaultStorePosProductFilter(data.products)
+    return getInitialStorePosSelectedProduct(data.products, defaultFilter)
   })
   const [selection, setSelection] = useState<PublicOrderProductSelection | null>(() => {
-    const defaultFilter = getDefaultProductFilter(pageData.products)
-    const initialProduct = getInitialSelectedProduct(pageData.products, defaultFilter)
+    const defaultFilter = getDefaultStorePosProductFilter(pageData.products)
+    const initialProduct = getInitialStorePosSelectedProduct(pageData.products, defaultFilter)
     return initialProduct ? buildInitialProductSelection(initialProduct) : null
   })
   const [selectionError, setSelectionError] = useState<string | null>(null)
@@ -264,7 +94,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const pendingPrintOrderIdsRef = useRef<Set<string>>(new Set())
   const requestToOrderIdRef = useRef<Map<string, string>>(new Map())
 
-  const paymentMethods = useMemo(() => buildDefaultPaymentMethods(pageData.store), [pageData.store])
+  const paymentMethods = useMemo(() => buildDefaultStorePosPaymentMethods(pageData.store), [pageData.store])
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
   const cartSummary = useMemo(() => formatPublicOrderCartSummary(cartItems), [cartItems])
@@ -272,8 +102,8 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     () =>
       pageData.products.map((product, index) => ({
         product,
-        category: inferProductCategory(product),
-        recommended: isRecommendedProduct(product, index),
+        category: inferStorePosProductCategory(product),
+        recommended: isStorePosRecommendedProduct(product, index),
       })),
     [pageData.products]
   )
@@ -398,7 +228,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       }
 
       if (payload.status === 'failed') {
-        setSettlementMessage(buildReceiptPrintFailureMessage(payload.error_message))
+        setSettlementMessage(buildStorePosReceiptPrintFailureMessage(payload.error_message))
         setWaitingSettlement(false)
         setIsSettlementComplete(true)
         return
@@ -550,16 +380,16 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       return
     }
 
-    const defaultFilter = getDefaultProductFilter(pageData.products)
+    const defaultFilter = getDefaultStorePosProductFilter(pageData.products)
     const nextState = buildResolvedSelectionState(
       pageData.products,
       null,
       pageData.products.filter((product, index) => {
         if (defaultFilter === 'all') return true
         if (defaultFilter === 'recommended') {
-          return isRecommendedProduct(product, index)
+          return isStorePosRecommendedProduct(product, index)
         }
-        return inferProductCategory(product) === defaultFilter
+        return inferStorePosProductCategory(product) === defaultFilter
       })
     )
     setSubmittedOrder(null)
@@ -733,188 +563,36 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }, [cartItems, isSettlementComplete, pageData.store.store_name, submittedOrder])
 
   if (submittedOrder) {
-    const isCancelled = submittedOrder.status === 'cancelled'
-    const isSettled = isSettlementComplete || isCancelled
-
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-5 py-8">
-        <div className="mx-auto max-w-5xl">
-          <section className="rounded-[40px] border border-[var(--line-soft)] bg-white px-8 py-10 shadow-[0_28px_70px_rgba(15,23,42,0.08)]">
-            <div
-              className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${
-                isCancelled ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-              }`}
-            >
-              {isCancelled ? 'ORDER CANCELLED' : isSettled ? 'PAYMENT CONFIRMED' : 'WAITING FOR CASHIER'}
-            </div>
-            <h1 className="mt-5 text-4xl font-black tracking-tight text-[var(--text-main)]">
-              {isCancelled ? 'この注文はキャンセルされました' : isSettled ? 'お支払い確認が完了しました' : 'ご注文を受け付けました'}
-            </h1>
-            <p className="mt-4 text-lg leading-8 text-[var(--text-sub)]">
-              {isCancelled
-                ? '内容の見直しが必要な場合は、店員にお声がけください。'
-                : isSettled
-                  ? '次のお客様のために、まもなく商品一覧へ戻ります。'
-                  : '店員へお支払いください。店員が会計確認を行うまで、この画面でお待ちください。'}
-            </p>
-
-            <div className="mt-8 grid gap-5 md:grid-cols-3">
-              <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
-                <p className="text-sm font-semibold text-gray-500">受付番号</p>
-                <p className="mt-3 text-3xl font-black tracking-[0.08em] text-[var(--accent-blue)]">
-                  {submittedOrder.order_number}
-                </p>
-              </div>
-              <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
-                <p className="text-sm font-semibold text-gray-500">支払方法</p>
-                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">
-                  {formatStorePosPaymentMethodLabel(submittedOrder.payment_method)}
-                </p>
-              </div>
-              <div className="rounded-[28px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]">
-                <p className="text-sm font-semibold text-gray-500">合計金額</p>
-                <p className="mt-3 text-2xl font-black text-[var(--text-main)]">{formatPublicOrderPrice(submittedOrder.total_amount)}</p>
-              </div>
-            </div>
-
-            <PublicOrderItemsPanel
-              title="ご注文内容"
-              description="店員と一緒に、商品と金額をご確認ください。"
-              items={cartItems}
-              itemKeyPrefix="submitted"
-              totalItems={totalItems}
-              panelClassName="mt-8 rounded-[32px] bg-[#f8fbff] px-6 py-6 ring-1 ring-[var(--line-soft)]"
-            />
-
-            <div
-              className={`mt-8 rounded-[28px] border border-dashed px-5 py-4 text-sm ${
-                isCancelled
-                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                  : isSettled
-                    ? 'border-[var(--line-soft)] bg-[#fffdf7] text-amber-700'
-                    : 'border-sky-200 bg-sky-50 text-sky-700'
-              }`}
-            >
-              {settlementMessage}
-              {isSettled ? ` あと ${countdownSeconds} 秒` : isPrintingReceipt ? ' レシート印刷中です。' : waitingSettlement ? ' 店員側の処理を確認中です。' : ''}
-            </div>
-
-            {resettingToMenu ? (
-              <div className="mt-4 rounded-[24px] bg-[var(--accent-blue-soft)] px-4 py-4">
-                <LoadingLine label="次の注文画面へ戻っています..." />
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button type="button" onClick={handleResetForNextCustomer} className={primaryButtonClassName}>
-                次の注文を始める
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
+      <StorePosSubmittedView
+        submittedOrder={submittedOrder}
+        cartItems={cartItems}
+        totalItems={totalItems}
+        countdownSeconds={countdownSeconds}
+        settlementMessage={settlementMessage}
+        isPrintingReceipt={isPrintingReceipt}
+        isSettlementComplete={isSettlementComplete}
+        waitingSettlement={waitingSettlement}
+        resettingToMenu={resettingToMenu}
+        onResetForNextCustomer={handleResetForNextCustomer}
+      />
     )
   }
 
   if (isConfirmStep) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] px-4 py-4 md:px-5 md:py-6">
-        {submitting ? (
-          <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-4 pt-3 md:px-6">
-            <div className="mx-auto max-w-5xl rounded-full bg-white/95 px-4 py-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)] backdrop-blur">
-              <LoadingLine label="注文を送信しています..." />
-            </div>
-          </div>
-        ) : null}
-        <div className="mx-auto max-w-5xl space-y-6 pb-24">
-          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
-            <div className="inline-flex rounded-full bg-[var(--accent-blue-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
-              Final check
-            </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight text-[var(--text-main)]">ご注文内容をご確認ください</h1>
-            <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
-              ご注文内容をご確認いただき、支払方法を選択の上、注文を確定してください。
-            </p>
-          </section>
-
-          <PublicOrderItemsPanel
-            title="ご注文内容"
-            description="商品名、数量、トッピング、金額に間違いがないかご確認ください。"
-            items={cartItems}
-            itemKeyPrefix="confirm-page"
-            totalItems={totalItems}
-            panelClassName="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8"
-          />
-
-          <section className="rounded-[36px] border border-[var(--line-soft)] bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:px-8">
-            <h2 className="text-2xl font-black text-[var(--text-main)]">お支払い方法</h2>
-            <p className="mt-1 text-sm text-[var(--text-sub)]">店員へお支払いいただく方法をお選びください。</p>
-            <div className="mt-5 grid gap-3">
-              {paymentMethods.map((method) => {
-                const label = method === 'cash' ? '現金' : method === 'paypay' ? 'PayPay' : 'その他'
-                const active = selectedPaymentMethod === method
-                return (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => setSelectedPaymentMethod(method)}
-                    className={`rounded-[26px] px-5 py-4 text-left text-lg font-bold transition ${
-                      active
-                        ? 'bg-[var(--accent-blue)] text-white shadow-[0_14px_32px_rgba(37,99,235,0.26)]'
-                        : 'bg-[#fbfdff] text-[var(--text-main)] ring-1 ring-[var(--line-soft)] hover:bg-white'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="mt-5 grid gap-3 rounded-[28px] bg-[#fffdf7] px-5 py-5 ring-1 ring-[var(--line-soft)] md:grid-cols-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">お支払い方法</p>
-                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">
-                  {formatStorePosPaymentMethodLabel(selectedPaymentMethod)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">合計金額</p>
-                <p className="mt-2 text-2xl font-black text-[var(--text-main)]">{formatPublicOrderPrice(cartTotal)}</p>
-              </div>
-            </div>
-
-            {submitError && (
-              <div className="mt-5 rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                {submitError}
-              </div>
-            )}
-
-            {submitting ? (
-              <div className="mt-5 rounded-[24px] bg-[var(--accent-blue-soft)] px-4 py-4">
-                <LoadingLine label="ご注文内容を送信しています。しばらくお待ちください。" />
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={returnToProductSelection}
-                className="inline-flex items-center justify-center rounded-[24px] bg-white px-5 py-4 text-base font-semibold text-slate-600 ring-1 ring-[var(--line-soft)] transition hover:bg-slate-50"
-              >
-                商品選択に戻る
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitOrder}
-                disabled={submitting || cartItems.length === 0}
-                className="inline-flex min-w-[220px] items-center justify-center rounded-[24px] bg-[var(--accent-blue)] px-6 py-4 text-lg font-bold text-white shadow-[0_18px_40px_rgba(37,99,235,0.3)] transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? '注文を作成中...' : '注文を確定する'}
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
+      <StorePosConfirmView
+        cartItems={cartItems}
+        totalItems={totalItems}
+        cartTotal={cartTotal}
+        paymentMethods={paymentMethods}
+        selectedPaymentMethod={selectedPaymentMethod}
+        submitError={submitError}
+        submitting={submitting}
+        onPaymentMethodChange={setSelectedPaymentMethod}
+        onReturnToProductSelection={returnToProductSelection}
+        onSubmitOrder={handleSubmitOrder}
+      />
     )
   }
 
@@ -976,7 +654,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                         : 'bg-white text-slate-600 ring-1 ring-[var(--line-soft)] hover:bg-slate-50'
                     }`}
                   >
-                    {getCategoryLabel(filterKey)}
+                    {getStorePosCategoryLabel(filterKey)}
                   </button>
                 )
               })}
@@ -1049,7 +727,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
                     <div className="mt-auto flex items-center justify-between gap-3 pt-4 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-[var(--line-soft)]">
-                          {getCategoryLabel(inferProductCategory(product))}
+                          {getStorePosCategoryLabel(inferStorePosProductCategory(product))}
                         </span>
                         <span className="text-[var(--text-sub)]">
                           {product.option_groups.length > 0 ? `${product.option_groups.length}個のオプション` : 'オプションなし'}
@@ -1118,7 +796,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
 
                     {isPublicOrderProductUnavailable(selectedProduct) && (
                       <div className="rounded-[24px] bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                        {getUnavailableMessage(selectedProduct)}
+                        {getStorePosUnavailableMessage(selectedProduct)}
                       </div>
                     )}
 
