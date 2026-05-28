@@ -4,26 +4,23 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import PublicMobileOrderCartView from '@/components/public-mobile-order/PublicMobileOrderCartView'
 import PublicMobileOrderCompleteView from '@/components/public-mobile-order/PublicMobileOrderCompleteView'
+import PublicMobileOrderHeader from '@/components/public-mobile-order/PublicMobileOrderHeader'
+import PublicMobileOrderMiniCart from '@/components/public-mobile-order/PublicMobileOrderMiniCart'
+import PublicMobileOrderProductCustomizer from '@/components/public-mobile-order/PublicMobileOrderProductCustomizer'
+import PublicMobileOrderProductList from '@/components/public-mobile-order/PublicMobileOrderProductList'
 import PublicMobileOrderReviewView from '@/components/public-mobile-order/PublicMobileOrderReviewView'
 import PublicMobileOrderVerifyingView from '@/components/public-mobile-order/PublicMobileOrderVerifyingView'
 import { ApiClientError, fetchApi } from '@/lib/api-client'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
-import {
-  getPublicOrderCartLineTotal,
-  getPublicOrderChoicePriceLabel,
-  getPublicOrderInventoryBadge,
-  isPublicOrderProductUnavailable,
-} from '@/lib/public-order-cart'
+import { isPublicOrderProductUnavailable } from '@/lib/public-order-cart'
 import {
   buildPublicOrderStepUrl,
   buildResolvedSelectionState,
   resolveSelectedProduct,
 } from '@/lib/public-order-flow'
-import { formatPublicOrderPrice } from '@/lib/public-order-display'
 import {
   formatPublicMobileOrderDateTime,
   getPublicMobileOrderUnavailableMessage,
-  publicOrderPrimaryCtaClassName,
 } from '@/lib/public-mobile-order-ui'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
@@ -431,49 +428,11 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 lg:px-6">
-      <section className="soft-panel rounded-[36px] px-6 py-7 lg:px-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="badge-soft badge-blue">MOBILE ORDER</span>
-          <span
-            className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.12em] ${
-              pageData.activeSchedule ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-            }`}
-          >
-            {pageData.activeSchedule ? 'OPEN' : 'CLOSED'}
-          </span>
-        </div>
-
-        <h1 className="mt-4 text-3xl font-black tracking-tight text-[var(--text-main)] lg:text-4xl">
-          {pageData.store.store_name}
-        </h1>
-
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-sub)]">
-          {pageData.store.description || '店頭のQRコードから、モバイルオーダーで事前注文できます。'}
-        </p>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">受付状態</p>
-            <p className={`mt-2 text-lg font-semibold ${pageData.activeSchedule ? 'text-emerald-700' : 'text-amber-700'}`}>
-              {pageData.activeSchedule ? '受付中' : '受付時間外'}
-            </p>
-          </div>
-          <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">現在の受付時間</p>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              {pageData.activeSchedule
-                ? `${formatPublicMobileOrderDateTime(pageData.activeSchedule.opens_at)} - ${formatPublicMobileOrderDateTime(pageData.activeSchedule.closes_at)}`
-                : '現在有効な営業枠はありません'}
-            </p>
-          </div>
-          <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">次回受付予定</p>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              {pageData.nextSchedule ? formatPublicMobileOrderDateTime(pageData.nextSchedule.opens_at) : '未定'}
-            </p>
-          </div>
-        </div>
-      </section>
+      <PublicMobileOrderHeader
+        store={pageData.store}
+        activeSchedule={pageData.activeSchedule}
+        nextSchedule={pageData.nextSchedule}
+      />
 
       {!pageData.activeSchedule ? (
         <section className="soft-panel rounded-[32px] p-6">
@@ -486,276 +445,29 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
         </section>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-          <section className="space-y-4">
-            {inventoryRefreshing ? (
-              <div className="rounded-3xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700">
-                在庫を確認しています。売り切れや残りわずかの表示をまもなく更新します。
-              </div>
-            ) : null}
-            {pageData.products.length === 0 ? (
-              <div className="soft-panel rounded-[32px] p-6 text-sm text-gray-500">
-                公開中の商品はまだありません。しばらくしてからもう一度ご確認ください。
-              </div>
-            ) : (
-              pageData.products.map((product) => (
-                (() => {
-                  const inventoryBadge = getPublicOrderInventoryBadge(product)
-                  const unavailable = isPublicOrderProductUnavailable(product)
-                  const selected = selectedProduct?.id === product.id
-
-                  return (
-                <button
-                  key={product.id}
-                  type="button"
-                  disabled={unavailable}
-                  onClick={() => handleSelectProduct(product)}
-                  aria-pressed={selected}
-                  className={`soft-panel w-full rounded-[32px] p-5 text-left transition ${
-                    selected
-                      ? 'border-[var(--accent-blue)] bg-[var(--accent-blue-soft)]/40 ring-2 ring-[var(--accent-blue)] shadow-[0_18px_45px_rgba(37,99,235,0.18)]'
-                      : unavailable
-                        ? 'opacity-70'
-                        : 'hover:translate-y-[-1px] hover:border-[var(--accent-blue-soft)] hover:shadow-md'
-                  } disabled:cursor-not-allowed`}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl border bg-[#f8fafc] ${
-                        selected ? 'border-[var(--accent-blue)]' : 'border-[var(--line-soft)]'
-                      }`}
-                    >
-                      {product.image_url ? (
-                        <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="text-xs text-gray-400">画像なし</span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-gray-800">{product.name}</h2>
-                        {selected && (
-                          <span className="rounded-full bg-[var(--accent-blue)] px-3 py-1 text-[11px] font-semibold text-white">
-                            選択中
-                          </span>
-                        )}
-                        {inventoryBadge && (
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${inventoryBadge.className}`}>
-                            {inventoryBadge.label}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-2 text-sm leading-7 text-gray-500">
-                        {product.description || '商品の説明は準備中です。'}
-                      </p>
-                      {selected && (
-                        <p className="mt-3 text-sm font-semibold text-[var(--accent-blue)]">
-                          右側でオプションと数量を調整できます
-                        </p>
-                      )}
-                      <div className="mt-4 flex items-center justify-between gap-4">
-                        <p className="text-base font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(product.price)}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {unavailable && (
-                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                              現在注文できません
-                            </span>
-                          )}
-                          {product.current_inventory_status === 'low_stock' && (
-                            <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
-                              売り切れ間近
-                            </span>
-                          )}
-                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-[var(--line-soft)]">
-                            {product.option_groups.length > 0 ? `${product.option_groups.length}個のオプション` : 'オプションなし'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-                  )
-                })()
-              ))
-            )}
-          </section>
+          <PublicMobileOrderProductList
+            products={pageData.products}
+            selectedProductId={selectedProduct?.id ?? null}
+            inventoryRefreshing={inventoryRefreshing}
+            onSelectProduct={handleSelectProduct}
+          />
 
           <aside className="space-y-6">
-            <section className="soft-panel rounded-[32px] p-6">
-              {selectedProduct && selection ? (
-                <div className="space-y-5">
-                  <div>
-                    <div className="mb-3 inline-flex rounded-full bg-[var(--accent-blue-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--accent-blue)]">
-                      選択中の商品
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-xl font-bold text-[var(--text-main)]">{selectedProduct.name}</h2>
-                      {getPublicOrderInventoryBadge(selectedProduct) && (
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${getPublicOrderInventoryBadge(selectedProduct)?.className}`}>
-                          {getPublicOrderInventoryBadge(selectedProduct)?.label}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm leading-7 text-[var(--text-sub)]">
-                      {selectedProduct.description || '商品の説明は準備中です。'}
-                    </p>
-                      <p className="mt-4 text-lg font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(selectedProduct.price)}</p>
-                  </div>
+            <PublicMobileOrderProductCustomizer
+              selectedProduct={selectedProduct}
+              selection={selection}
+              selectionError={selectionError}
+              onToggleChoice={toggleChoice}
+              onUpdateQuantity={updateQuantity}
+              onAddToCart={handleAddToCart}
+            />
 
-                  {isPublicOrderProductUnavailable(selectedProduct) && (
-                    <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-800">
-                      {getPublicMobileOrderUnavailableMessage(selectedProduct)}ため、カートに追加できません。
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {selectedProduct.option_groups.length === 0 ? (
-                      <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
-                        この商品にはオプションがありません。
-                      </div>
-                    ) : (
-                      selectedProduct.option_groups.map((group) => {
-                        const selectedIds = selection.selectedChoiceIdsByGroup[group.id] ?? []
-
-                        return (
-                          <div key={group.id} className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-semibold text-gray-800">{group.name}</h3>
-                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                                {group.selection_type === 'single' ? '単一選択' : '複数選択'}
-                              </span>
-                              {group.is_required && (
-                                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
-                                  必須
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-3 space-y-2">
-                              {group.choices.map((choice) => {
-                                const selected = selectedIds.includes(choice.id)
-
-                                return (
-                                  <button
-                                    key={choice.id}
-                                    type="button"
-                                    disabled={!choice.is_active}
-                                    onClick={() => toggleChoice(group, choice.id)}
-                                    className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-sm transition ${
-                                      selected
-                                        ? 'bg-[var(--accent-blue-soft)] text-[var(--accent-blue)] ring-1 ring-[var(--accent-blue)]'
-                                        : 'bg-[#f8fafc] text-gray-700'
-                                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                                  >
-                                    <span className={choice.is_active ? '' : 'line-through'}>{choice.name}</span>
-                                    <span className="font-medium">{getPublicOrderChoicePriceLabel(choice)}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">数量</span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(selection.quantity - 1)}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg font-semibold text-slate-700"
-                        >
-                          -
-                        </button>
-                        <span className="min-w-8 text-center text-sm font-semibold text-gray-800">{selection.quantity}</span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(selection.quantity + 1)}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg font-semibold text-slate-700"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectionError && (
-                    <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{selectionError}</p>
-                  )}
-
-                  <div className="rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">この商品の合計</span>
-                      <span className="text-base font-bold text-[var(--accent-blue)]">
-                        {formatPublicOrderPrice(getPublicOrderCartLineTotal(selectedProduct, selection))}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    disabled={isPublicOrderProductUnavailable(selectedProduct)}
-                    className={`w-full ${publicOrderPrimaryCtaClassName}`}
-                  >
-                    {isPublicOrderProductUnavailable(selectedProduct) ? '売り切れ中です' : 'カートに追加'}
-                  </button>
-                </div>
-              ) : (
-                <div className="rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-5 py-10 text-center text-sm text-gray-500">
-                  左の商品を選ぶと、オプション内容を確認できます。
-                </div>
-              )}
-            </section>
-
-            <section className="soft-panel rounded-[32px] p-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-[var(--text-main)]">カート</h2>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {cartItems.length} 件
-                </span>
-              </div>
-
-              <div className="mt-4 rounded-3xl border border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-600">
-                {cartItems.length === 0 ? (
-                  <p>まだ商品が入っていません。商品を選んでカートに追加してください。</p>
-                ) : (
-                  <>
-                    <p className="font-semibold text-gray-800">
-                      {cartItems[0].product_name}
-                      {cartItems.length > 1 ? ` ほか ${cartItems.length - 1} 件` : ''}
-                    </p>
-                    <p className="mt-2 text-xs text-gray-500">カートページで商品内容、受け取り名、合計金額を確認できます。</p>
-                  </>
-                )}
-              </div>
-
-              <div className="mt-5 rounded-3xl border border-[var(--line-soft)] bg-[#f8fafc] px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">カート合計</span>
-                  <span className="text-lg font-bold text-[var(--accent-blue)]">{formatPublicOrderPrice(cartTotal)}</span>
-                </div>
-              </div>
-
-              {checkoutError && (
-                <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{checkoutError}</p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleGoToCart}
-                disabled={cartItems.length === 0}
-                className={`mt-5 w-full ${publicOrderPrimaryCtaClassName}`}
-              >
-                カートを見る
-              </button>
-
-              <div className="mt-4 rounded-3xl border border-dashed border-[var(--line-soft)] bg-white px-4 py-4 text-sm text-gray-500">
-                カートページで注文内容を確認したあと、クレジットカード決済ページへ進みます。
-              </div>
-            </section>
+            <PublicMobileOrderMiniCart
+              cartItems={cartItems}
+              cartTotal={cartTotal}
+              checkoutError={checkoutError}
+              onGoToCart={handleGoToCart}
+            />
           </aside>
         </div>
       )}
