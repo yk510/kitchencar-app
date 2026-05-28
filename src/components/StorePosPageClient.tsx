@@ -13,12 +13,6 @@ import StorePosProductGrid from '@/components/store-pos/StorePosProductGrid'
 import StorePosSubmittedView from '@/components/store-pos/StorePosSubmittedView'
 import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import {
-  buildInitialProductSelection,
-  buildPublicOrderCartItemCore,
-  type PublicOrderProductSelection,
-  validatePublicOrderSelection,
-} from '@/lib/public-order-cart'
-import {
   buildPublicOrderStepUrl,
   buildResolvedSelectionState,
   resolveSelectedProduct,
@@ -33,11 +27,11 @@ import {
   inferStorePosProductCategory,
   isStorePosRecommendedProduct,
   type ProductFilterKey,
-  type StorePosCartItem,
   type StorePosCreateResponse,
   type SubmittedStorePosOrder,
 } from '@/lib/store-pos-ui'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
+import { usePublicOrderCart } from '@/lib/use-public-order-cart'
 import { useStorePosSettlement } from '@/lib/use-store-pos-settlement'
 import type {
   PublicMobileOrderInventorySnapshot,
@@ -52,7 +46,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [cartItems, setCartItems] = useState<StorePosCartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -61,16 +54,28 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [resettingToMenu, setResettingToMenu] = useState(false)
   const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
   const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultStorePosProductFilter(data.products))
-  const [selectedProduct, setSelectedProduct] = useState<PublicMobileOrderProduct | null>(() => {
-    const defaultFilter = getDefaultStorePosProductFilter(data.products)
-    return getInitialStorePosSelectedProduct(data.products, defaultFilter)
+  const defaultProductFilter = getDefaultStorePosProductFilter(data.products)
+  const initialSelectedProduct = getInitialStorePosSelectedProduct(data.products, defaultProductFilter)
+  const {
+    cartItems,
+    setCartItems,
+    selectedProduct,
+    setSelectedProduct,
+    selection,
+    setSelection,
+    selectionError,
+    setSelectionError,
+    selectProduct,
+    toggleChoice,
+    updateSelectionQuantity,
+    addSelectedProductToCart,
+    updateCartQuantity,
+    clearCart,
+  } = usePublicOrderCart({
+    initialSelectedProduct,
+    getUnavailableMessage: () => 'この商品は現在売り切れのため、カートに追加できません。',
+    onUnavailableProduct: (message) => setSubmitError(message),
   })
-  const [selection, setSelection] = useState<PublicOrderProductSelection | null>(() => {
-    const defaultFilter = getDefaultStorePosProductFilter(pageData.products)
-    const initialProduct = getInitialStorePosSelectedProduct(pageData.products, defaultFilter)
-    return initialProduct ? buildInitialProductSelection(initialProduct) : null
-  })
-  const [selectionError, setSelectionError] = useState<string | null>(null)
   const isConfirmStep = searchParams.get('step') === 'confirm'
 
   const paymentMethods = useMemo(() => buildDefaultStorePosPaymentMethods(pageData.store), [pageData.store])
@@ -175,83 +180,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     },
   })
 
-  function selectProduct(product: PublicMobileOrderProduct) {
-    setSelectedProduct(product)
-    setSelection(buildInitialProductSelection(product))
-    setSelectionError(null)
-  }
-
-  function toggleChoice(group: PublicMobileOrderProduct['option_groups'][number], choiceId: string) {
-    if (!selection) return
-
-    setSelection((current) => {
-      if (!current) return current
-      const selectedIds = current.selectedChoiceIdsByGroup[group.id] ?? []
-      const isSelected = selectedIds.includes(choiceId)
-      let nextSelectedIds: string[]
-
-      if (group.selection_type === 'single') {
-        nextSelectedIds = isSelected ? [] : [choiceId]
-      } else {
-        nextSelectedIds = isSelected
-          ? selectedIds.filter((id) => id !== choiceId)
-          : [...selectedIds, choiceId]
-      }
-
-      return {
-        ...current,
-        selectedChoiceIdsByGroup: {
-          ...current.selectedChoiceIdsByGroup,
-          [group.id]: nextSelectedIds,
-        },
-      }
-    })
-    setSelectionError(null)
-  }
-
   function updateQuantity(nextQuantity: number) {
-    setSelection((current) => (current ? { ...current, quantity: Math.max(1, nextQuantity) } : current))
-    setSelectionError(null)
+    updateSelectionQuantity(nextQuantity)
   }
 
   function handleAddSelectedProduct() {
-    if (!selectedProduct || !selection) return
-
-    const validationError = validatePublicOrderSelection(selectedProduct, selection)
-    if (validationError) {
-      setSelectionError(validationError)
-      return
-    }
-
-    setCartItems((current) => [
-      ...current,
-      {
-        id: `${selectedProduct.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ...buildPublicOrderCartItemCore(selectedProduct, selection),
-      },
-    ])
-    setSelection(buildInitialProductSelection(selectedProduct))
-    setSelectionError(null)
-    setSubmitError(null)
-  }
-
-  function updateCartQuantity(itemId: string, nextQuantity: number) {
-    if (nextQuantity <= 0) {
-      setCartItems((current) => current.filter((item) => item.id !== itemId))
-      return
-    }
-
-    setCartItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              quantity: nextQuantity,
-              line_total: item.unit_price * nextQuantity,
-            }
-          : item
-      )
-    )
+    addSelectedProductToCart({ onSuccess: () => setSubmitError(null) })
   }
 
   function handleResetForNextCustomer() {
@@ -287,7 +221,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }
 
   function handleClearCart() {
-    setCartItems([])
+    clearCart()
     setSubmitError(null)
 
     if (isConfirmStep) {
@@ -442,7 +376,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
             activeFilter={activeFilter}
             inventoryRefreshing={inventoryRefreshing}
             onFilterChange={setActiveFilter}
-            onSelectProduct={selectProduct}
+            onSelectProduct={(product) => selectProduct(product, { allowUnavailable: true })}
           />
 
           <div className="space-y-6">
