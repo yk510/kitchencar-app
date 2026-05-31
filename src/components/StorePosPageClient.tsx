@@ -11,7 +11,6 @@ import StorePosConfirmView from '@/components/store-pos/StorePosConfirmView'
 import StorePosProductCustomizer from '@/components/store-pos/StorePosProductCustomizer'
 import StorePosProductGrid from '@/components/store-pos/StorePosProductGrid'
 import StorePosSubmittedView from '@/components/store-pos/StorePosSubmittedView'
-import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import {
   buildPublicOrderStepUrl,
   buildResolvedSelectionState,
@@ -30,19 +29,16 @@ import {
   type StorePosCreateResponse,
   type SubmittedStorePosOrder,
 } from '@/lib/store-pos-ui'
-import { useLiveRefresh } from '@/lib/use-live-refresh'
+import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
 import { useStorePosSettlement } from '@/lib/use-store-pos-settlement'
 import type {
-  PublicMobileOrderInventorySnapshot,
   PublicMobileOrderPagePayload,
-  PublicMobileOrderProduct,
   StorePosCreatePayload,
   StorePosPaymentMethod,
 } from '@/types/api-payloads'
 
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
-  const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -52,7 +48,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedStorePosOrder | null>(null)
   const [confirmingPage, setConfirmingPage] = useState(false)
   const [resettingToMenu, setResettingToMenu] = useState(false)
-  const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
+  const {
+    pageData,
+    inventoryRefreshing,
+  } = usePublicOrderInventoryRefresh({
+    data,
+    enabled: !submittedOrder,
+  })
   const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultStorePosProductFilter(data.products))
   const defaultProductFilter = getDefaultStorePosProductFilter(data.products)
   const initialSelectedProduct = getInitialStorePosSelectedProduct(data.products, defaultProductFilter)
@@ -126,11 +128,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   }, [paymentMethods, selectedPaymentMethod])
 
   useEffect(() => {
-    setPageData(data)
-    setInventoryRefreshing(!data.inventoryHydrated)
-  }, [data])
-
-  useEffect(() => {
     if (!selectedProduct && pageData.products[0]) {
       const nextState = buildResolvedSelectionState(pageData.products, null)
       setSelectedProduct(nextState.product)
@@ -151,34 +148,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setSelectedProduct(nextState.product)
     setSelection(nextState.selection)
   }, [pageData.products, filteredProducts, selectedProduct])
-
-  async function refreshInventory() {
-    try {
-      const snapshot = await fetchApi<PublicMobileOrderInventorySnapshot>(
-        `/api/public/mobile-order/${pageData.orderPage.public_token}/inventory`,
-        { cache: 'no-store' }
-      )
-      setPageData((current) => applyInventorySnapshotToPayload(current, snapshot))
-    } catch {
-      // Keep current snapshot if inventory refresh fails.
-    } finally {
-      setInventoryRefreshing(false)
-    }
-  }
-
-  useEffect(() => {
-    if (pageData.inventoryHydrated) return
-    setInventoryRefreshing(true)
-    void refreshInventory()
-  }, [pageData.inventoryHydrated])
-
-  useLiveRefresh({
-    enabled: !submittedOrder,
-    intervalMs: 15000,
-    run: async () => {
-      await refreshInventory()
-    },
-  })
 
   function updateQuantity(nextQuantity: number) {
     updateSelectionQuantity(nextQuantity)

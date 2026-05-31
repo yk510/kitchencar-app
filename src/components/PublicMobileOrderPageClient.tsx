@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import PublicMobileOrderCartView from '@/components/public-mobile-order/PublicMobileOrderCartView'
 import PublicMobileOrderCompleteView from '@/components/public-mobile-order/PublicMobileOrderCompleteView'
 import PublicMobileOrderHeader from '@/components/public-mobile-order/PublicMobileOrderHeader'
@@ -9,8 +9,6 @@ import PublicMobileOrderProductCustomizer from '@/components/public-mobile-order
 import PublicMobileOrderProductList from '@/components/public-mobile-order/PublicMobileOrderProductList'
 import PublicMobileOrderReviewView from '@/components/public-mobile-order/PublicMobileOrderReviewView'
 import PublicMobileOrderVerifyingView from '@/components/public-mobile-order/PublicMobileOrderVerifyingView'
-import { fetchApi } from '@/lib/api-client'
-import { applyInventorySnapshotToPayload } from '@/lib/public-mobile-order-data'
 import { isPublicOrderProductUnavailable } from '@/lib/public-order-cart'
 import {
   buildResolvedSelectionState,
@@ -20,19 +18,21 @@ import {
   formatPublicMobileOrderDateTime,
   getPublicMobileOrderUnavailableMessage,
 } from '@/lib/public-mobile-order-ui'
-import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { usePublicMobileOrderCheckout } from '@/lib/use-public-mobile-order-checkout'
+import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
 import type {
-  PublicMobileOrderInventorySnapshot,
   PublicMobileOrderPagePayload,
   PublicMobileOrderProduct,
 } from '@/types/api-payloads'
 
 export default function PublicMobileOrderPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
-  const [pageData, setPageData] = useState<PublicMobileOrderPagePayload>(data)
   const [pickupNickname, setPickupNickname] = useState('')
-  const [inventoryRefreshing, setInventoryRefreshing] = useState(!data.inventoryHydrated)
+  const {
+    pageData,
+    inventoryRefreshing,
+    refreshInventory,
+  } = usePublicOrderInventoryRefresh({ data })
 
   const availableProducts = useMemo(
     () => pageData.products.filter((product) => product.is_published && !isPublicOrderProductUnavailable(product)),
@@ -56,25 +56,6 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     getUnavailableMessage: getPublicMobileOrderUnavailableMessage,
     onUnavailableProduct: (message) => setCheckoutError(message),
   })
-
-  useEffect(() => {
-    setPageData(data)
-    setInventoryRefreshing(!data.inventoryHydrated)
-  }, [data])
-
-  const refreshInventory = useCallback(async () => {
-    try {
-      const snapshot = await fetchApi<PublicMobileOrderInventorySnapshot>(
-        `/api/public/mobile-order/${pageData.orderPage.public_token}/inventory`,
-        { cache: 'no-store' }
-      )
-      setPageData((current) => applyInventorySnapshotToPayload(current, snapshot))
-    } catch {
-      // Keep current snapshot if inventory refresh fails.
-    } finally {
-      setInventoryRefreshing(false)
-    }
-  }, [pageData.orderPage.public_token])
 
   const {
     checkoutError,
@@ -100,20 +81,6 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     setPickupNickname,
     setSelectionError,
     onRefreshInventory: refreshInventory,
-  })
-
-  useEffect(() => {
-    if (pageData.inventoryHydrated) return
-    setInventoryRefreshing(true)
-    void refreshInventory()
-  }, [pageData.inventoryHydrated, refreshInventory])
-
-  useLiveRefresh({
-    enabled: true,
-    intervalMs: 15000,
-    run: async () => {
-      await refreshInventory()
-    },
   })
 
   useEffect(() => {
