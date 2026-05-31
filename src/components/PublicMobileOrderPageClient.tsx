@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import PublicMobileOrderCartView from '@/components/public-mobile-order/PublicMobileOrderCartView'
 import PublicMobileOrderCompleteView from '@/components/public-mobile-order/PublicMobileOrderCompleteView'
 import PublicMobileOrderHeader from '@/components/public-mobile-order/PublicMobileOrderHeader'
@@ -11,16 +11,13 @@ import PublicMobileOrderReviewView from '@/components/public-mobile-order/Public
 import PublicMobileOrderVerifyingView from '@/components/public-mobile-order/PublicMobileOrderVerifyingView'
 import { isPublicOrderProductUnavailable } from '@/lib/public-order-cart'
 import {
-  buildResolvedSelectionState,
-  resolveSelectedProduct,
-} from '@/lib/public-order-flow'
-import {
   formatPublicMobileOrderDateTime,
   getPublicMobileOrderUnavailableMessage,
 } from '@/lib/public-mobile-order-ui'
 import { usePublicMobileOrderCheckout } from '@/lib/use-public-mobile-order-checkout'
 import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
+import { usePublicOrderProductSelectionSync } from '@/lib/use-public-order-product-selection-sync'
 import type {
   PublicMobileOrderPagePayload,
   PublicMobileOrderProduct,
@@ -83,26 +80,13 @@ export default function PublicMobileOrderPageClient({ data }: { data: PublicMobi
     onRefreshInventory: refreshInventory,
   })
 
-  useEffect(() => {
-    if (!selectedProduct) return
-
-    const nextSelected = resolveSelectedProduct(pageData.products, selectedProduct.id)
-    if (!nextSelected) {
-      setSelectedProduct(null)
-      setSelection(null)
-      return
-    }
-
-    setSelectedProduct(nextSelected)
-  }, [pageData.products, selectedProduct])
-
-  useEffect(() => {
-    if (!selectedProduct && availableProducts[0]) {
-      const nextState = buildResolvedSelectionState(pageData.products, null, availableProducts)
-      setSelectedProduct(nextState.product)
-      setSelection(nextState.selection)
-    }
-  }, [availableProducts, pageData.products, selectedProduct])
+  usePublicOrderProductSelectionSync({
+    products: pageData.products,
+    selectedProduct,
+    setSelectedProduct,
+    setSelection,
+    initialPreferredProducts: availableProducts,
+  })
 
   function handleSelectProduct(product: PublicMobileOrderProduct) {
     const selected = selectProduct(product)

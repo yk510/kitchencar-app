@@ -10,10 +10,7 @@ import StorePosConfirmView from '@/components/store-pos/StorePosConfirmView'
 import StorePosProductCustomizer from '@/components/store-pos/StorePosProductCustomizer'
 import StorePosProductGrid from '@/components/store-pos/StorePosProductGrid'
 import StorePosSubmittedView from '@/components/store-pos/StorePosSubmittedView'
-import {
-  buildResolvedSelectionState,
-  resolveSelectedProduct,
-} from '@/lib/public-order-flow'
+import { buildResolvedSelectionState } from '@/lib/public-order-flow'
 import {
   formatPublicOrderCartSummary,
 } from '@/lib/public-order-display'
@@ -27,6 +24,7 @@ import {
 } from '@/lib/store-pos-ui'
 import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
+import { usePublicOrderProductSelectionSync } from '@/lib/use-public-order-product-selection-sync'
 import { useStorePosOrderFlow } from '@/lib/use-store-pos-order-flow'
 import { useStorePosSettlement } from '@/lib/use-store-pos-settlement'
 import type {
@@ -128,21 +126,13 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     onResetForNextCustomer: handleResetForNextCustomer,
   })
 
-  useEffect(() => {
-    if (!selectedProduct && pageData.products[0]) {
-      const nextState = buildResolvedSelectionState(pageData.products, null)
-      setSelectedProduct(nextState.product)
-      setSelection(nextState.selection)
-    }
-  }, [pageData.products, selectedProduct])
-
-  useEffect(() => {
-    if (!selectedProduct) return
-    if (filteredProducts.some((product) => product.id === selectedProduct.id)) return
-    const nextState = buildResolvedSelectionState(pageData.products, selectedProduct.id, filteredProducts)
-    setSelectedProduct(nextState.product)
-    setSelection(nextState.selection)
-  }, [pageData.products, filteredProducts, selectedProduct])
+  usePublicOrderProductSelectionSync({
+    products: pageData.products,
+    selectedProduct,
+    setSelectedProduct,
+    setSelection,
+    activePreferredProducts: filteredProducts,
+  })
 
   function updateQuantity(nextQuantity: number) {
     updateSelectionQuantity(nextQuantity)
