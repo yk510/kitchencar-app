@@ -17,15 +17,13 @@ import {
 import {
   getDefaultStorePosProductFilter,
   getInitialStorePosSelectedProduct,
-  inferStorePosProductCategory,
-  isStorePosRecommendedProduct,
-  type ProductFilterKey,
   type SubmittedStorePosOrder,
 } from '@/lib/store-pos-ui'
 import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
 import { usePublicOrderProductSelectionSync } from '@/lib/use-public-order-product-selection-sync'
 import { useStorePosOrderFlow } from '@/lib/use-store-pos-order-flow'
+import { useStorePosProductFilters } from '@/lib/use-store-pos-product-filters'
 import { useStorePosSettlement } from '@/lib/use-store-pos-settlement'
 import type {
   PublicMobileOrderPagePayload,
@@ -43,7 +41,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     data,
     enabled: !submittedOrder,
   })
-  const [activeFilter, setActiveFilter] = useState<ProductFilterKey>(() => getDefaultStorePosProductFilter(data.products))
   const defaultProductFilter = getDefaultStorePosProductFilter(data.products)
   const initialSelectedProduct = getInitialStorePosSelectedProduct(data.products, defaultProductFilter)
   const {
@@ -90,26 +87,18 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
   const cartSummary = useMemo(() => formatPublicOrderCartSummary(cartItems), [cartItems])
-  const categorizedProducts = useMemo(
-    () =>
-      pageData.products.map((product, index) => ({
-        product,
-        category: inferStorePosProductCategory(product),
-        recommended: isStorePosRecommendedProduct(product, index),
-      })),
-    [pageData.products]
-  )
-  const filteredProducts = useMemo(() => {
-    if (activeFilter === 'all') return categorizedProducts.map((entry) => entry.product)
-    if (activeFilter === 'recommended') {
-      return categorizedProducts.filter((entry) => entry.recommended).map((entry) => entry.product)
-    }
-    return categorizedProducts.filter((entry) => entry.category === activeFilter).map((entry) => entry.product)
-  }, [activeFilter, categorizedProducts])
-  const selectedProductIsRecommended = useMemo(
-    () => categorizedProducts.some((entry) => entry.product.id === selectedProduct?.id && entry.recommended),
-    [categorizedProducts, selectedProduct?.id]
-  )
+  const {
+    activeFilter,
+    setActiveFilter,
+    categorizedProducts,
+    filteredProducts,
+    selectedProductIsRecommended,
+    getProductsForFilter,
+  } = useStorePosProductFilters({
+    products: pageData.products,
+    initialProducts: data.products,
+    selectedProductId: selectedProduct?.id,
+  })
   const {
     countdownSeconds,
     waitingSettlement,
@@ -153,13 +142,7 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     const nextState = buildResolvedSelectionState(
       pageData.products,
       null,
-      pageData.products.filter((product, index) => {
-        if (defaultFilter === 'all') return true
-        if (defaultFilter === 'recommended') {
-          return isStorePosRecommendedProduct(product, index)
-        }
-        return inferStorePosProductCategory(product) === defaultFilter
-      })
+      getProductsForFilter(defaultFilter)
     )
     setSubmittedOrder(null)
     setCartItems([])
