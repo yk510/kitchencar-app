@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ApiClientError, fetchApi } from '@/lib/api-client'
+import { usePathname } from 'next/navigation'
 import LoadingLine from '@/components/LoadingLine'
 import StorePosBottomBar from '@/components/store-pos/StorePosBottomBar'
 import StorePosCartPanel from '@/components/store-pos/StorePosCartPanel'
@@ -12,7 +11,6 @@ import StorePosProductCustomizer from '@/components/store-pos/StorePosProductCus
 import StorePosProductGrid from '@/components/store-pos/StorePosProductGrid'
 import StorePosSubmittedView from '@/components/store-pos/StorePosSubmittedView'
 import {
-  buildPublicOrderStepUrl,
   buildResolvedSelectionState,
   resolveSelectedProduct,
 } from '@/lib/public-order-flow'
@@ -20,33 +18,25 @@ import {
   formatPublicOrderCartSummary,
 } from '@/lib/public-order-display'
 import {
-  buildDefaultStorePosPaymentMethods,
   getDefaultStorePosProductFilter,
   getInitialStorePosSelectedProduct,
   inferStorePosProductCategory,
   isStorePosRecommendedProduct,
   type ProductFilterKey,
-  type StorePosCreateResponse,
   type SubmittedStorePosOrder,
 } from '@/lib/store-pos-ui'
 import { usePublicOrderInventoryRefresh } from '@/lib/use-public-order-inventory-refresh'
 import { usePublicOrderCart } from '@/lib/use-public-order-cart'
+import { useStorePosOrderFlow } from '@/lib/use-store-pos-order-flow'
 import { useStorePosSettlement } from '@/lib/use-store-pos-settlement'
 import type {
   PublicMobileOrderPagePayload,
-  StorePosCreatePayload,
-  StorePosPaymentMethod,
 } from '@/types/api-payloads'
 
 export default function StorePosPageClient({ data }: { data: PublicMobileOrderPagePayload }) {
-  const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<StorePosPaymentMethod>('cash')
-  const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedStorePosOrder | null>(null)
-  const [confirmingPage, setConfirmingPage] = useState(false)
   const [resettingToMenu, setResettingToMenu] = useState(false)
   const {
     pageData,
@@ -78,9 +68,27 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     getUnavailableMessage: () => 'この商品は現在売り切れのため、カートに追加できません。',
     onUnavailableProduct: (message) => setSubmitError(message),
   })
-  const isConfirmStep = searchParams.get('step') === 'confirm'
 
-  const paymentMethods = useMemo(() => buildDefaultStorePosPaymentMethods(pageData.store), [pageData.store])
+  const {
+    selectedPaymentMethod,
+    setSelectedPaymentMethod,
+    submitting,
+    confirmingPage,
+    setConfirmingPage,
+    isConfirmStep,
+    paymentMethods,
+    handleClearCart,
+    openConfirmPage,
+    returnToProductSelection,
+    handleSubmitOrder,
+  } = useStorePosOrderFlow({
+    pageData,
+    cartItems,
+    clearCart,
+    setSubmitError,
+    setSubmittedOrder,
+  })
+
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.line_total, 0), [cartItems])
   const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
   const cartSummary = useMemo(() => formatPublicOrderCartSummary(cartItems), [cartItems])
@@ -110,7 +118,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     settlementMessage,
     isPrintingReceipt,
     isSettlementComplete,
-    beginWaitingSettlement,
     resetSettlement,
   } = useStorePosSettlement({
     submittedOrder,
@@ -122,24 +129,12 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
   })
 
   useEffect(() => {
-    if (!paymentMethods.includes(selectedPaymentMethod)) {
-      setSelectedPaymentMethod(paymentMethods[0] ?? 'cash')
-    }
-  }, [paymentMethods, selectedPaymentMethod])
-
-  useEffect(() => {
     if (!selectedProduct && pageData.products[0]) {
       const nextState = buildResolvedSelectionState(pageData.products, null)
       setSelectedProduct(nextState.product)
       setSelection(nextState.selection)
     }
   }, [pageData.products, selectedProduct])
-
-  useEffect(() => {
-    if (isConfirmStep) {
-      setConfirmingPage(false)
-    }
-  }, [isConfirmStep])
 
   useEffect(() => {
     if (!selectedProduct) return
@@ -189,15 +184,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
     setResettingToMenu(false)
   }
 
-  function handleClearCart() {
-    clearCart()
-    setSubmitError(null)
-
-    if (isConfirmStep) {
-      router.replace(pathname, { scroll: true })
-    }
-  }
-
   function handleBackToPreviousPage() {
     if (typeof window === 'undefined') return
     if (window.history.length > 1) {
@@ -205,69 +191,6 @@ export default function StorePosPageClient({ data }: { data: PublicMobileOrderPa
       return
     }
     window.location.href = '/vendor/mobile-order'
-  }
-
-  function openConfirmPage() {
-    if (cartItems.length === 0) {
-      setSubmitError('商品を1件以上追加してください')
-      return
-    }
-    setSubmitError(null)
-    setConfirmingPage(true)
-    router.push(buildPublicOrderStepUrl(pathname, searchParams.toString(), 'confirm'), { scroll: true })
-  }
-
-  function returnToProductSelection() {
-    setConfirmingPage(false)
-    router.push(buildPublicOrderStepUrl(pathname, searchParams.toString(), 'menu'), { scroll: true })
-  }
-
-  async function handleSubmitOrder() {
-    if (!pageData.activeSchedule) {
-      setSubmitError('現在は注文受付時間外です')
-      return
-    }
-
-    if (cartItems.length === 0) {
-      setSubmitError('商品を1件以上追加してください')
-      return
-    }
-
-    setSubmitting(true)
-    setSubmitError(null)
-
-    try {
-      const payload: StorePosCreatePayload = {
-        public_token: pageData.orderPage.public_token,
-        pickup_nickname: '店頭POS',
-        payment_method: selectedPaymentMethod,
-        pos_device_label: pageData.store.store_pos_terminal_name ?? 'front-tablet',
-        items: cartItems.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          selected_option_choice_ids: item.selected_option_choice_ids,
-        })),
-      }
-
-      const response = await fetchApi<StorePosCreateResponse>('/api/public/store-pos/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      setSubmittedOrder({
-        ...response,
-        status: 'placed',
-        paid_at: null,
-        cancelled_at: null,
-        ordered_at: new Date().toISOString(),
-      })
-      beginWaitingSettlement()
-    } catch (error) {
-      setSubmitError(error instanceof ApiClientError ? error.message : '注文の作成に失敗しました')
-    } finally {
-      setSubmitting(false)
-    }
   }
 
   if (submittedOrder) {

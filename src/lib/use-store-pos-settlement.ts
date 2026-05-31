@@ -61,13 +61,6 @@ export function useStorePosSettlement({
     requestToOrderIdRef.current.clear()
   }, [])
 
-  const beginWaitingSettlement = useCallback(() => {
-    setWaitingSettlement(true)
-    setIsPrintingReceipt(false)
-    setIsSettlementComplete(false)
-    setSettlementMessage('店員が会計確認を行っています。料金受領またはキャンセル後に自動で次の注文へ進みます。')
-  }, [])
-
   const dispatchCustomerReceiptPrint = useCallback(
     (order: SubmittedStorePosOrder) => {
       if (printedOrderIdsRef.current.has(order.order_id)) {
@@ -153,6 +146,9 @@ export function useStorePosSettlement({
     if (!submittedOrder) return
     if (submittedOrder.payment_status === 'paid' || submittedOrder.status === 'cancelled') return
     setWaitingSettlement(true)
+    setIsPrintingReceipt(false)
+    setIsSettlementComplete(false)
+    setSettlementMessage('店員が会計確認を行っています。料金受領またはキャンセル後に自動で次の注文へ進みます。')
   }, [submittedOrder])
 
   useEffect(() => {
@@ -262,7 +258,6 @@ export function useStorePosSettlement({
     settlementMessage,
     isPrintingReceipt,
     isSettlementComplete,
-    beginWaitingSettlement,
     resetSettlement,
   }
 }
