@@ -63,7 +63,15 @@ export default function VendorMobileOrderSchedulesPageClient({
 
   const groupedSchedules = useMemo(() => {
     if (!data) return []
-    return [...data.schedules].sort((a, b) => new Date(a.opens_at).getTime() - new Date(b.opens_at).getTime())
+    return [...data.schedules].sort((a, b) => {
+      const opensDiff = new Date(b.opens_at).getTime() - new Date(a.opens_at).getTime()
+      if (opensDiff !== 0) return opensDiff
+
+      const closesDiff = new Date(b.closes_at).getTime() - new Date(a.closes_at).getTime()
+      if (closesDiff !== 0) return closesDiff
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
   }, [data])
 
   async function handleCreate(event: React.FormEvent) {
