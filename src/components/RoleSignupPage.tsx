@@ -42,28 +42,28 @@ type SignupStep = {
   reason: string
 }
 
-type MinimalVendorProfilePayload = {
+type VendorProfilePayload = {
   business_name: string
   owner_name: string | null
   contact_email: string
   phone: string | null
   genre: string | null
-  main_menu: null
-  logo_image_url: null
-  instagram_url: null
-  x_url: null
-  description: null
+  main_menu: string | null
+  logo_image_url: string | null
+  instagram_url: string | null
+  x_url: string | null
+  description: string | null
 }
 
-type MinimalOrganizerProfilePayload = {
+type OrganizerProfilePayload = {
   organizer_name: string
   contact_name: string | null
   contact_email: string
   phone: string | null
-  logo_image_url: null
-  instagram_url: null
-  x_url: null
-  description: null
+  logo_image_url: string | null
+  instagram_url: string | null
+  x_url: string | null
+  description: string | null
 }
 
 const INITIAL_FORM: SignupForm = {
@@ -84,34 +84,34 @@ const INITIAL_FORM: SignupForm = {
   description_note: '',
 }
 
-function buildMinimalVendorProfilePayload(form: SignupForm, email: string): MinimalVendorProfilePayload {
+function buildVendorProfilePayload(form: SignupForm, email: string): VendorProfilePayload {
   return {
     business_name: form.business_name.trim(),
     owner_name: form.owner_name.trim() || null,
     contact_email: form.contact_email.trim() || email,
     phone: form.phone.trim() || null,
     genre: form.genre || null,
-    main_menu: null,
-    logo_image_url: null,
-    instagram_url: null,
-    x_url: null,
-    description: null,
+    main_menu: form.main_menu.trim() || null,
+    logo_image_url: form.logo_image_url || null,
+    instagram_url: form.instagram_url.trim() || null,
+    x_url: form.x_url.trim() || null,
+    description: form.description.trim() || null,
   }
 }
 
-function buildMinimalOrganizerProfilePayload(
+function buildOrganizerProfilePayload(
   form: SignupForm,
   email: string
-): MinimalOrganizerProfilePayload {
+): OrganizerProfilePayload {
   return {
     organizer_name: form.organizer_name.trim(),
     contact_name: form.contact_name.trim() || null,
     contact_email: form.contact_email.trim() || email,
     phone: form.phone.trim() || null,
-    logo_image_url: null,
-    instagram_url: null,
-    x_url: null,
-    description: null,
+    logo_image_url: form.logo_image_url || null,
+    instagram_url: form.instagram_url.trim() || null,
+    x_url: form.x_url.trim() || null,
+    description: form.description.trim() || null,
   }
 }
 
@@ -483,7 +483,7 @@ export default function RoleSignupPage({
     if (isVendor) {
       const { error: vendorError } = await (supabase as any)
         .from('vendor_profiles')
-        .upsert([{ user_id: confirmedUser.id, ...buildMinimalVendorProfilePayload(form, email) }], {
+        .upsert([{ user_id: confirmedUser.id, ...buildVendorProfilePayload(form, email) }], {
           onConflict: 'user_id',
         })
 
@@ -493,7 +493,7 @@ export default function RoleSignupPage({
     } else {
       const { error: organizerError } = await (supabase as any)
         .from('organizer_profiles')
-        .upsert([{ user_id: confirmedUser.id, ...buildMinimalOrganizerProfilePayload(form, email) }], {
+        .upsert([{ user_id: confirmedUser.id, ...buildOrganizerProfilePayload(form, email) }], {
           onConflict: 'user_id',
         })
 
